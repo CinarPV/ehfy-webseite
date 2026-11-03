@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Absage & Abmeldung – Erste Hilfe for you</title>
+  <meta name="description" content="Absagebedingungen und Online-Abmeldung vom Erste-Hilfe-Kurs.">
+  <link rel="canonical" href="https://www.ehfy.de/absage.html">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Erste Hilfe for you">
+  <meta property="og:title" content="Absage & Abmeldung – Erste Hilfe for you">
+  <meta property="og:description" content="Absagebedingungen und Online-Abmeldung vom Erste-Hilfe-Kurs.">
+  <meta property="og:image" content="https://www.ehfy.de/assets/share.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="absage">
+  <header id="site-header"></header>
+
+  <main>
+    <section class="page-head">
+      <div class="container">
+        <h1>Absage & Abmeldung</h1>
+        <p class="lead">Du kannst nicht kommen? Kein Problem – sag uns bitte rechtzeitig Bescheid, damit jemand anderes deinen Platz bekommt.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container grid grid-2" style="align-items:start">
+        <div class="prose">
+          <h2 style="margin-top:0">Absagebedingungen</h2>
+          <ul class="checklist">
+            <li>Eine Abmeldung ist <strong>bis 48 Stunden vor Kursbeginn kostenfrei</strong>.</li>
+            <li>Bei <strong>Nichtteilnahme ohne Abmeldung</strong> oder einer Abmeldung weniger als 48 Stunden vor Kursbeginn wird die <strong>Kursgebühr in Rechnung gestellt</strong>.</li>
+            <li>Muss ein Kurs von unserer Seite abgesagt werden (z. B. wegen Krankheit), informieren wir dich so schnell wie möglich – dir entstehen dann natürlich keine Kosten.</li>
+          </ul>
+
+          <h2>So meldest du dich ab</h2>
+          <p><strong>Online:</strong> Über den persönlichen Abmelde-Link, den du bei der Anmeldung erhalten hast – oder gib deinen Abmelde-Code hier rechts ein.</p>
+          <p><strong>Persönlich:</strong> Telefonisch oder per WhatsApp unter <a href="tel:+491751567473">0175 1567473</a> oder per E-Mail an <a href="mailto:ehfy@web.de">ehfy@web.de</a>.</p>
+        </div>
+
+        <div class="card" id="cancel-card">
+          <h2 style="margin-top:0">Online abmelden</h2>
+          <div id="lookup">
+            <form id="code-form">
+              <div class="field" style="margin-bottom:14px">
+                <label for="code">Abmelde-Code oder Abmelde-Link</label>
+                <input id="code" placeholder="z. B. 3f1c…" autocomplete="off">
+              </div>
+              <button class="btn" type="submit">Anmeldung suchen</button>
+            </form>
+          </div>
+          <div id="details" class="hidden"></div>
+          <p class="form-error" id="error" role="alert"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="site-footer"></footer>
+  <script src="assets/config.js"></script>
+  <script src="assets/layout.js"></script>
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/db.js"></script>
+  <script>
+  (() => {
+    const cfg = EHFY_CONFIG;
+    const err = document.getElementById("error");
+    const details = document.getElementById("details");
+    const lookup = document.getElementById("lookup");
+    const uuidRe = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+    async function show(token) {
+      err.textContent = "";
+      try {
+        const r = await EHFY_DB.getRegistration(token);
+        const hours = (new Date(r.starts_at) - Date.now()) / 36e5;
+        const pkg = (cfg.packages.find(p => p.key === r.package) || { label: r.package }).label;
+        let action = "";
+        if (r.status === "storniert") {
+          action = '<div class="notice notice-ok"><p>Diese Anmeldung ist bereits <strong>storniert</strong>.</p></div>';
+        } else if (r.course_status === "abgesagt") {
+          action = '<div class="notice notice-warn"><p>Dieser Kurs wurde von uns <strong>abgesagt</strong>. Es entstehen dir keine Kosten.</p></div>';
+        } else if (hours <= 0) {
+          action = '<div class="notice notice-warn"><p>Der Kurs hat bereits begonnen. Bitte melde dich telefonisch bei uns.</p></div>';
+        } else {
+          action = (hours < cfg.cancelHours
+            ? `<div class="notice notice-danger"><p><strong>Achtung:</strong> Bis zum Kursbeginn sind es weniger als 48 Stunden. Gemäß unseren Absagebedingungen wird die Kursgebühr in Rechnung gestellt.</p></div>`
+            : `<div class="notice notice-ok"><p>Die Abmeldung ist noch <strong>kostenfrei</strong> möglich.</p></div>`) +
+            '<button class="btn btn-danger" id="do-cancel">Jetzt verbindlich abmelden</button>';
+        }
+        details.innerHTML = `
+          <p><strong>${EHFY.esc(r.first_name)} ${EHFY.esc(r.last_name || "")}</strong><br>
+          ${EHFY.fmtDate(r.starts_at)}<br>${EHFY.fmtRange(r.starts_at, r.ends_at)} · ${EHFY.esc(r.location)}<br>
+          Paket: ${pkg}</p>${action}`;
+        lookup.classList.add("hidden");
+        details.classList.remove("hidden");
+        const btn = document.getElementById("do-cancel");
+        if (btn) btn.onclick = async () => {
+          if (!confirm("Möchtest du dich wirklich von diesem Kurs abmelden?")) return;
+          btn.disabled = true;
+          try {
+            const res = await EHFY_DB.cancelRegistration(token);
+            details.innerHTML = `<div class="notice notice-ok"><p><strong>Du wurdest erfolgreich abgemeldet.</strong></p>
+              ${res.late ? "<p>Da die Abmeldung weniger als 48 Stunden vor Kursbeginn erfolgte, wird die Kursgebühr in Rechnung gestellt.</p>" : "<p>Es entstehen dir keine Kosten.</p>"}</div>
+              <a class="btn btn-outline" href="anmelden.html">Neuen Termin buchen</a>`;
+          } catch (e) { err.textContent = e.message; btn.disabled = false; }
+        };
+      } catch (e) {
+        err.textContent = e.message.includes("nicht gefunden") ? e.message : "Anmeldung nicht gefunden. Bitte prüfe deinen Code oder melde dich telefonisch.";
+      }
+    }
+
+    document.getElementById("code-form").addEventListener("submit", ev => {
+      ev.preventDefault();
+      const m = document.getElementById("code").value.match(uuidRe);
+      if (!m) { err.textContent = "Bitte gib einen gültigen Abmelde-Code oder -Link ein."; return; }
+      show(m[0].toLowerCase());
+    });
+
+    const fromUrl = (new URLSearchParams(location.search).get("code") || "").match(uuidRe);
+    if (fromUrl) show(fromUrl[0].toLowerCase());
+  })();
+  </script>
+</body>
+</html>

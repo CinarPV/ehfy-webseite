@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Verwaltung – Erste Hilfe for you</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <!-- Als App installierbar (iPhone: Teilen → Zum Home-Bildschirm, Mac: Ablage → Zum Dock hinzufügen) -->
+  <link rel="manifest" href="admin.webmanifest">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="EHfy Admin">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="admin">
+  <header id="site-header"></header>
+
+  <main>
+    <section class="section">
+      <div class="container">
+
+        <!-- Login -->
+        <div id="login-view" class="hidden" style="max-width:420px;margin:0 auto">
+          <div class="card">
+            <h1 style="font-size:1.6rem">Verwaltung</h1>
+            <p class="muted">Bitte melde dich mit deinem Verwaltungs-Konto an.</p>
+            <form id="login-form">
+              <div class="field" style="margin-bottom:14px"><label for="l-email">E-Mail</label><input id="l-email" type="email" autocomplete="username" required></div>
+              <div class="field" style="margin-bottom:14px"><label for="l-pass">Passwort</label><input id="l-pass" type="password" autocomplete="current-password" required></div>
+              <p class="form-error" id="login-error" role="alert"></p>
+              <button class="btn" type="submit" style="width:100%">Anmelden</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Übersicht -->
+        <div id="app-view" class="hidden">
+          <div class="admin-bar no-print">
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung</h1>
+            <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
+          </div>
+          <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
+            <button data-view="termine" class="active">Termine</button>
+            <button data-view="rechnungen">Rechnungen</button>
+            <button data-view="vorlagen">Vorlagen &amp; Bank</button>
+          </div>
+
+          <div id="courses-view" data-section="termine">
+            <div class="admin-bar no-print" style="margin-bottom:16px">
+              <h2 style="margin:0;font-size:1.4rem">Termine</h2>
+              <button class="btn btn-teal" id="new-course">+ Termine eintragen</button>
+            </div>
+            <div class="stat-row" id="stats"></div>
+            <div class="tabs no-print" id="filter">
+              <button data-f="upcoming" class="active">Kommende</button>
+              <button data-f="past">Vergangene</button>
+              <button data-f="all">Alle</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Datum</th><th>Uhrzeit</th><th>Ort</th><th>Belegung</th><th>Status</th><th></th></tr></thead>
+                <tbody id="course-rows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="participants-view" class="hidden" data-section="termine">
+            <div class="admin-bar">
+              <div>
+                <button class="btn btn-sm btn-outline no-print" id="back">← Zurück zu den Terminen</button>
+                <h2 style="margin:14px 0 4px" id="p-title"></h2>
+                <p class="muted" style="margin:0" id="p-sub"></p>
+              </div>
+              <div class="btn-row no-print">
+                <button class="btn btn-sm btn-teal" id="p-add">+ Teilnehmer eintragen</button>
+                <button class="btn btn-sm btn-outline" id="p-print">Liste drucken</button>
+                <button class="btn btn-sm btn-outline" id="p-csv">Excel/CSV</button>
+                <a class="btn btn-sm btn-outline" id="p-mail" href="#">E-Mail an alle</a>
+              </div>
+            </div>
+            <div class="card no-print" style="margin-bottom:20px;padding:18px 20px">
+              <div class="btn-row" style="justify-content:space-between">
+                <div><strong>Dokumente zum Drucken</strong><br><span class="muted small">Für alle angemeldeten Teilnehmer, alphabetisch – fertig ausgefüllt als PDF.<br>Einzelne Personen: „Drucken …“ in ihrer Zeile.</span></div>
+                <div class="btn-row">
+                  <button class="btn btn-sm btn-teal" data-doc="alles" title="Pro Teilnehmer: Datenblatt, Bescheinigung, Quittung">Alles mit einem Klick</button>
+                  <button class="btn btn-sm" data-doc="datenblatt">Datenblätter</button>
+                  <button class="btn btn-sm" data-doc="bescheinigung">Bescheinigungen</button>
+                  <button class="btn btn-sm" data-doc="quittung">Quittungen</button>
+                  <button class="btn btn-sm btn-ghost" data-doc="rechnung">Rechnungen</button>
+                </div>
+              </div>
+              <p class="form-error" id="doc-error" style="margin:10px 0 0"></p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Name</th><th>Geburtsdatum</th><th>Paket</th><th>Anschrift / Kontakt</th><th>Nachricht</th><th>Status</th><th class="no-print">Drucken</th><th class="no-print"></th></tr></thead>
+                <tbody id="p-rows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Rechnungen -->
+          <div id="invoices-view" class="hidden" data-section="rechnungen">
+            <div class="admin-bar no-print" style="margin-bottom:16px">
+              <h2 style="margin:0;font-size:1.4rem">Rechnungen &amp; Quittungen</h2>
+              <div class="btn-row">
+                <select id="inv-year" class="chip-btn" aria-label="Jahr"></select>
+                <button class="btn btn-teal" id="inv-new">+ Neue Rechnung</button>
+              </div>
+            </div>
+            <div class="stat-row" id="inv-stats"></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Nr.</th><th>Datum</th><th>Art</th><th>Empfänger</th><th>Betrag</th><th>Status</th><th></th></tr></thead>
+                <tbody id="inv-rows"></tbody>
+              </table>
+            </div>
+            <p class="muted small" style="margin-top:14px">Nummern werden fortlaufend und lückenlos vergeben. Rechnungen lassen sich nicht löschen, nur stornieren – so bleibt deine Buchhaltung sauber.</p>
+          </div>
+
+          <!-- Vorlagen -->
+          <div id="templates-view" class="hidden" data-section="vorlagen">
+            <h2 style="font-size:1.4rem">Vorlagen</h2>
+            <p class="lead" style="margin-bottom:24px">Lade hier deine leeren PDF-Vorlagen hoch. Sie werden geschützt gespeichert – nur du kannst sie sehen, sie sind nicht öffentlich auf der Webseite.</p>
+            <div class="grid grid-2" id="tpl-cards"></div>
+            <div class="card" style="margin-top:20px">
+              <h3>Bankverbindung und Steuernummer</h3>
+              <p class="muted small">Erscheinen auf deinen Rechnungen. Sie werden geschützt gespeichert und stehen nicht in den öffentlichen Webseiten-Dateien.</p>
+              <form id="bank-form">
+                <div class="form-grid">
+                  <div class="field"><label for="st-bank">Bank</label><input id="st-bank"></div>
+                  <div class="field"><label for="st-holder">Kontoinhaber</label><input id="st-holder"></div>
+                  <div class="field"><label for="st-iban">IBAN</label><input id="st-iban"></div>
+                  <div class="field"><label for="st-bic">BIC</label><input id="st-bic"></div>
+                  <div class="field full"><label for="st-tax">Steuernummer</label><input id="st-tax"></div>
+                </div>
+                <div class="btn-row" style="margin-top:14px"><button class="btn btn-sm" type="submit">Speichern</button><span class="small muted" id="st-status"></span></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Rechnungs-Dialog -->
+  <dialog id="inv-dialog" class="wide">
+    <form method="dialog" class="dialog-body" id="inv-form">
+      <h2 style="margin-top:0">Neue Rechnung</h2>
+      <div class="form-grid">
+        <div class="field full"><label for="iv-name">Empfänger (Name oder Firma) *</label><input id="iv-name" required></div>
+        <div class="field full"><label for="iv-street">Straße und Hausnummer</label><input id="iv-street"></div>
+        <div class="field"><label for="iv-zip">PLZ</label><input id="iv-zip" inputmode="numeric" maxlength="5"></div>
+        <div class="field"><label for="iv-city">Ort</label><input id="iv-city"></div>
+        <div class="field full"><label for="iv-email">E-Mail des Empfängers <span class="muted">(für den Versand)</span></label><input id="iv-email" type="email" inputmode="email"></div>
+        <div class="field"><label for="iv-date">Rechnungsdatum *</label><input id="iv-date" type="date" required></div>
+        <div class="field"><label for="iv-service">Leistungsdatum</label><input id="iv-service" type="date"></div>
+        <label class="check full"><input type="checkbox" id="iv-cash"><span>Betrag wurde bereits <strong>in bar erhalten</strong> – die Rechnung gilt dann als bezahlt. Ohne Haken: normale Rechnung mit Zahlungsziel, Bankverbindung und PayPal.</span></label>
+      </div>
+      <h3 style="margin:22px 0 10px">Positionen</h3>
+      <div id="iv-items"></div>
+      <button type="button" class="btn btn-sm btn-ghost" id="iv-add">+ Position</button>
+      <p style="text-align:right;font-size:1.2rem;margin:14px 0 0">Summe: <strong id="iv-sum">0,00 €</strong></p>
+      <p class="form-error" id="iv-error"></p>
+      <div class="btn-row">
+        <button class="btn" value="save">Rechnung erstellen</button>
+        <button class="btn btn-outline" value="cancel" formnovalidate>Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Termin-Dialog -->
+  <dialog id="course-dialog">
+    <form method="dialog" class="dialog-body" id="course-form">
+      <h2 id="cd-title" style="margin-top:0">Neuer Termin</h2>
+      <div class="form-grid">
+        <div class="field"><label for="cd-date">Datum *</label><input id="cd-date" type="date" required></div>
+        <div class="field"><label for="cd-cap">Max. Teilnehmer *</label><input id="cd-cap" type="number" min="1" max="99" required></div>
+        <div class="field"><label for="cd-start">Beginn *</label><input id="cd-start" type="time" required></div>
+        <div class="field"><label for="cd-end">Ende</label><input id="cd-end" type="time"></div>
+        <div class="field"><label for="cd-loc">Ort (öffentlich sichtbar) *</label><input id="cd-loc" list="loc-list" required></div>
+        <div class="field"><label for="cd-status">Status</label>
+          <select id="cd-status"><option value="offen">offen</option><option value="abgesagt">abgesagt</option></select></div>
+        <div class="field full"><label for="cd-addr">Genaue Adresse (erst nach Anmeldung sichtbar) *</label><input id="cd-addr" required></div>
+        <div class="field full"><label for="cd-note">Hinweis (öffentlich sichtbar)</label><input id="cd-note" placeholder="z. B. Anmeldung nur telefonisch"></div>
+        <label class="check full"><input type="checkbox" id="cd-online"><span>Online-Anmeldung möglich (sonst nur telefonisch / WhatsApp / E-Mail)</span></label>
+      </div>
+      <p class="form-error" id="cd-error"></p>
+      <div class="btn-row">
+        <button class="btn" value="save" id="cd-save">Speichern</button>
+        <button class="btn btn-outline" value="cancel" formnovalidate>Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <datalist id="loc-list"></datalist>
+
+  <!-- Schnell-Eingabe: mehrere Termine auf einmal -->
+  <dialog id="quick-dialog" class="wide">
+    <form method="dialog" class="dialog-body" id="quick-form">
+      <h2 style="margin-top:0">Termine eintragen</h2>
+      <p class="muted small" style="margin-top:-6px">Ort wählen, dann im Kalender alle gewünschten Tage antippen – fertig. Wochenenden sind hervorgehoben, bestehende Termine markiert.</p>
+      <div class="chips" id="q-locs" role="group" aria-label="Kursort"></div>
+      <div class="quick-grid">
+        <div>
+          <div id="q-cal"></div>
+          <p class="sel-list" id="q-sel" style="margin-top:10px"></p>
+        </div>
+        <div>
+          <div class="form-grid">
+            <div class="field"><label for="q-start">Beginn</label><input id="q-start" type="time" required></div>
+            <div class="field"><label for="q-end">Ende</label><input id="q-end" type="time"></div>
+            <div class="field"><label for="q-cap">Max. Teilnehmer</label><input id="q-cap" type="number" min="1" max="99" required></div>
+            <div class="field"><label for="q-loc">Ort (öffentlich)</label><input id="q-loc" list="loc-list" required></div>
+            <div class="field full"><label for="q-addr">Genaue Adresse (nach Anmeldung sichtbar)</label><input id="q-addr" required></div>
+            <div class="field full"><label for="q-note">Hinweis (optional, öffentlich)</label><input id="q-note"></div>
+            <label class="check full"><input type="checkbox" id="q-online" checked><span>Online-Anmeldung möglich</span></label>
+          </div>
+        </div>
+      </div>
+      <p class="form-error" id="q-error"></p>
+      <div class="btn-row">
+        <button class="btn" value="save" id="q-save" disabled>Termine anlegen</button>
+        <button class="btn btn-outline" value="cancel" formnovalidate>Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Fertige PDF: teilen, öffnen, per E-Mail senden -->
+  <dialog id="pdf-dialog">
+    <div class="dialog-body">
+      <h2 id="pd-title" style="margin-top:0">PDF ist fertig</h2>
+      <p class="muted" id="pd-name" style="word-break:break-all"></p>
+      <form id="pd-mail" class="hidden" style="margin-bottom:18px">
+        <div class="form-grid">
+          <div class="field full"><label for="pd-to">An</label><input id="pd-to" type="email" inputmode="email" required></div>
+          <div class="field full"><label for="pd-subject">Betreff</label><input id="pd-subject" required></div>
+          <div class="field full"><label for="pd-text">Nachricht</label><textarea id="pd-text" rows="8"></textarea></div>
+        </div>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn" id="pd-send" type="submit">Jetzt senden</button>
+          <span class="small muted" id="pd-from"></span>
+        </div>
+        <p class="form-error" id="pd-status" role="status" style="margin:10px 0 0"></p>
+        <p class="small muted" style="margin:8px 0 0">Oder anders verschicken:</p>
+      </form>
+      <div class="btn-row">
+        <button class="btn" id="pd-share" type="button">Teilen</button>
+        <a class="btn btn-ghost" id="pd-open" target="_blank" rel="noopener">PDF öffnen / drucken</a>
+        <a class="btn btn-ghost" id="pd-download">Herunterladen</a>
+        <a class="btn btn-ghost hidden" id="pd-mailto">Mail-Programm ohne Anhang</a>
+      </div>
+      <p class="small muted" id="pd-hint" style="margin:14px 0 0"></p>
+      <div class="btn-row" style="margin-top:18px"><button class="btn btn-outline btn-sm" id="pd-close" type="button">Schließen</button></div>
+    </div>
+  </dialog>
+
+  <!-- Teilnehmer-Dialog -->
+  <dialog id="reg-dialog">
+    <form method="dialog" class="dialog-body" id="reg-form">
+      <h2 style="margin-top:0">Teilnehmer eintragen</h2>
+      <p class="muted small">Für telefonische Anmeldungen oder Teilnehmer ohne Voranmeldung.</p>
+      <div class="form-grid">
+        <div class="field"><label for="rd-first">Vorname *</label><input id="rd-first" required></div>
+        <div class="field"><label for="rd-last">Nachname *</label><input id="rd-last" required></div>
+        <div class="field"><label for="rd-birth">Geburtsdatum</label><input id="rd-birth" type="date"></div>
+        <div class="field"><label for="rd-pkg">Buchung</label><select id="rd-pkg"><option value="kurs">Erste-Hilfe-Kurs</option><option value="komplett">Erste-Hilfe-Kurs + Sehtest</option></select></div>
+        <div class="field"><label for="rd-email">E-Mail</label><input id="rd-email" type="email"></div>
+        <div class="field"><label for="rd-phone">Telefon</label><input id="rd-phone"></div>
+        <div class="field full"><label for="rd-street">Straße und Hausnummer</label><input id="rd-street"></div>
+        <div class="field"><label for="rd-zip">PLZ</label><input id="rd-zip" inputmode="numeric" maxlength="5"></div>
+        <div class="field"><label for="rd-city">Ort</label><input id="rd-city"></div>
+      </div>
+      <p class="form-error" id="rd-error"></p>
+      <div class="btn-row">
+        <button class="btn" value="save">Eintragen</button>
+        <button class="btn btn-outline" value="cancel" formnovalidate>Abbrechen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer id="site-footer"></footer>
+  <script src="assets/config.js"></script>
+  <script src="assets/layout.js"></script>
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/db.js"></script>
+  <script src="assets/calendar.js"></script>
+  <script src="assets/admin.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  </script>
+</body>
+</html>

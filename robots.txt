@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /admin.html
+Disallow: /entwuerfe/
+
+Sitemap: https://www.ehfy.de/sitemap.xml

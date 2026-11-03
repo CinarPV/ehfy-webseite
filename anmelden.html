@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Termine & Anmeldung – Erste Hilfe for you</title>
+  <meta name="description" content="Freie Termine für den Erste-Hilfe-Kurs in Siegen, Burbach, Netphen und Wilnsdorf im Kalender ansehen und direkt online anmelden.">
+  <link rel="canonical" href="https://www.ehfy.de/anmelden.html">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Erste Hilfe for you">
+  <meta property="og:title" content="Termine & Anmeldung – Erste Hilfe for you">
+  <meta property="og:description" content="Freie Termine für den Erste-Hilfe-Kurs in Siegen, Burbach, Netphen und Wilnsdorf im Kalender ansehen und direkt online anmelden.">
+  <meta property="og:image" content="https://www.ehfy.de/assets/share.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="anmelden">
+  <header id="site-header"></header>
+
+  <main>
+    <section class="page-head">
+      <div class="container">
+        <h1>Termine & Anmeldung</h1>
+        <p class="lead">Tag im Kalender antippen, Daten eintragen, fertig.</p>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:40px">
+      <div class="container" style="max-width:1000px">
+        <div id="booking">
+          <h2 style="font-size:1.35rem;display:flex;align-items:center;gap:12px"><span class="num">1</span>Termin wählen</h2>
+          <div class="chips" id="loc-filter" role="group" aria-label="Kursort filtern"></div>
+          <div class="booking-grid">
+            <div>
+              <div id="calendar"><div class="cal"><p class="muted" style="margin:0">Termine werden geladen …</p></div></div>
+              <div class="cal-legend">
+                <span><i style="background:var(--aid-light)"></i>freie Plätze</span>
+                <span><i style="background:var(--signal-light)"></i>fast voll</span>
+                <span><i style="background:var(--soft)"></i>ausgebucht</span>
+              </div>
+            </div>
+            <div>
+              <div class="course-list" id="courses" style="margin-bottom:0"></div>
+            </div>
+          </div>
+
+          <form id="form" novalidate style="max-width:720px;margin-top:44px">
+            <h2><span class="num">2</span>Deine Daten</h2>
+
+            <div class="picked hidden" id="picked">
+              <div><small>Dein Termin</small><strong id="picked-text"></strong></div>
+              <button type="button" id="change">ändern</button>
+            </div>
+
+            <div class="field" style="margin-bottom:18px">
+              <label>Was möchtest du buchen? *</label>
+              <div class="pkg-toggle pkg-list" id="pkg-options"></div>
+            </div>
+
+            <div class="id-notice" role="note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#c77700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2.5"/><path d="M14 10h5M14 14h3"/></svg>
+              <div>
+                <strong>Name bitte genau wie im Personalausweis!</strong>
+                <p>Deine Bescheinigung wird <b>vorab ausgestellt</b>. Schreib Vor- und Nachnamen deshalb exakt so, wie sie in deinem Ausweis stehen – mit allen Vornamen, Umlauten, Akzenten und Bindestrichen. Keine Spitznamen, keine Abkürzungen.</p>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field"><label for="first_name">Vorname(n) laut Ausweis *</label><input id="first_name" name="first_name" autocomplete="given-name" required maxlength="80" placeholder="z. B. Anna-Lena Marie"></div>
+              <div class="field"><label for="last_name">Nachname laut Ausweis *</label><input id="last_name" name="last_name" autocomplete="family-name" required maxlength="80" placeholder="z. B. Müller"></div>
+              <div class="field"><label for="birth_date">Geburtsdatum *</label><input id="birth_date" name="birth_date" type="date" autocomplete="bday" required></div>
+              <div class="field"><label for="email">E-Mail *</label><input id="email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="120"></div>
+              <div class="field full"><label for="street">Straße und Hausnummer *</label><input id="street" name="street" autocomplete="street-address" required maxlength="120"></div>
+              <div class="field"><label for="zip">PLZ *</label><input id="zip" name="zip" inputmode="numeric" autocomplete="postal-code" required pattern="[0-9]{5}" maxlength="5"></div>
+              <div class="field"><label for="city">Ort *</label><input id="city" name="city" autocomplete="address-level2" required maxlength="80"></div>
+              <div class="field full"><label for="phone">Handynummer <span class="muted">(optional, für kurzfristige Infos)</span></label><input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="40"></div>
+              <div class="hp" aria-hidden="true"><label>Bitte leer lassen <input name="website" tabindex="-1" autocomplete="off"></label></div>
+
+              <label class="check full"><input type="checkbox" name="agree_name" required><span><strong>Ich habe meinen Namen genau wie im Personalausweis eingetragen.</strong> *</span></label>
+              <label class="check full"><input type="checkbox" name="agree_terms" required><span>Ich akzeptiere die <a href="absage.html" target="_blank">Absagebedingungen</a> (kostenfreie Abmeldung bis 48 Std. vor Kursbeginn, danach wird die Kursgebühr fällig) und die <a href="datenschutz.html" target="_blank">Datenschutzerklärung</a>. *</span></label>
+
+              <div class="full sticky-submit">
+                <p class="form-error" id="error" role="alert"></p>
+                <button class="btn" type="submit" id="submit">Verbindlich anmelden</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div id="success" class="hidden" style="max-width:720px">
+          <div class="notice notice-ok">
+            <h2 style="margin-bottom:8px">Danke, <span id="s-name"></span>!</h2>
+            <p>Deine Anmeldung ist bei uns eingegangen. Wir freuen uns auf dich!</p>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <h3>Dein Termin</h3>
+            <p style="margin:0"><strong id="s-date"></strong><br><span id="s-time"></span><br><span id="s-address"></span><br>Paket: <span id="s-package"></span></p>
+          </div>
+          <div class="card" style="margin-bottom:20px">
+            <h3>Name auf der Bescheinigung</h3>
+            <p style="margin:0"><strong id="s-cert" style="font-size:1.2rem"></strong><br><span class="muted small">Stimmt etwas nicht? Melde dich bitte umgehend telefonisch oder per WhatsApp unter 0175 1567473.</span></p>
+          </div>
+          <div class="card">
+            <h3>Dein persönlicher Abmelde-Link</h3>
+            <p>Falls du nicht kommen kannst, melde dich bitte <strong>mindestens 48 Stunden vor Kursbeginn</strong> über diesen Link ab. <strong>Speichere ihn dir am besten jetzt</strong> (Screenshot, Lesezeichen oder kopieren).</p>
+            <div class="code-box"><span id="s-link"></span></div>
+            <div class="btn-row" style="margin-top:14px">
+              <button class="btn btn-sm" id="copy">Link kopieren</button>
+              <a class="btn btn-sm btn-outline" id="s-mail" href="#">Per E-Mail an mich senden</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="site-footer"></footer>
+  <script src="assets/config.js"></script>
+  <script src="assets/layout.js"></script>
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/db.js"></script>
+  <script src="assets/calendar.js"></script>
+  <script>
+  (async () => {
+    const cfg = EHFY_CONFIG;
+    const $ = id => document.getElementById(id);
+    const form = $("form"), list = $("courses"), err = $("error");
+    // Buchungsoptionen aus config.js
+    const wanted = new URLSearchParams(location.search).get("paket");
+    $("pkg-options").innerHTML = cfg.packages.map((p, i) => `
+      <label><input type="radio" name="package" value="${p.key}" ${(wanted ? p.key === wanted : i === 0) ? "checked" : ""}>
+        <b>${p.price != null ? p.price + " €" : "&nbsp;"}</b>${EHFY.esc(p.label)}<small>${EHFY.esc(p.detail)}</small></label>`).join("");
+    if (!form.querySelector('input[name="package"]:checked')) form.querySelector('input[name="package"]').checked = true;
+    const pkgText = key => { const p = cfg.packages.find(x => x.key === key); return p ? p.label + (p.price != null ? ` (${p.price} €)` : "") : key; };
+
+    let courses = [], filter = "Alle", selectedId = null, cal;
+    const dayKey = c => EHFYKey(new Date(c.starts_at));
+    const bookable = c => c.online_booking && c.booked < c.capacity;
+    const visible = () => courses.filter(c => filter === "Alle" || c.location === filter);
+    const short = loc => loc.slice(0, 2).toUpperCase();
+
+    function marks() {
+      const m = {};
+      for (const c of visible()) {
+        const k = dayKey(c), free = c.capacity - c.booked;
+        const cls = !bookable(c) ? "has-full" : free <= 3 ? "has-few" : "has-free";
+        // Bei mehreren Kursen am Tag gewinnt der mit freien Plätzen
+        if (!m[k] || m[k].cls === "has-full") m[k] = { cls, label: short(c.location), title: c.location };
+      }
+      return m;
+    }
+
+    function renderList() {
+      const mo = cal.getMonth();
+      const inMonth = visible().filter(c => {
+        const d = new Date(c.starts_at);
+        return d.getFullYear() === mo.getFullYear() && d.getMonth() === mo.getMonth();
+      });
+      if (!courses.length) {
+        list.innerHTML = `<div class="notice notice-warn"><p>Aktuell sind keine Termine online buchbar. Ruf uns gern an unter <a href="tel:${cfg.phoneIntl}">${cfg.phone}</a> oder schreib per <a href="https://wa.me/${cfg.whatsapp}">WhatsApp</a>.</p></div>`;
+        return;
+      }
+      list.innerHTML = inMonth.length ? inMonth.map(c => {
+        const status = !c.online_booking ? '<span class="pill pill-muted">nur telefonisch</span>' : EHFY.seatsPill(c);
+        return `
+          <div class="course-option">
+            <input type="radio" name="course" id="c-${c.id}" value="${c.id}" ${bookable(c) ? "" : "disabled"} ${c.id === selectedId ? "checked" : ""}>
+            <label for="c-${c.id}">
+              <span>
+                <span class="course-date">${EHFY.fmtDate(c.starts_at)}</span><br>
+                <span class="course-meta">${EHFY.esc(c.location)} · ${EHFY.fmtRange(c.starts_at, c.ends_at)}${c.note ? " · " + EHFY.esc(c.note) : ""}</span>
+              </span>
+              ${status}
+            </label>
+          </div>`;
+      }).join("") : '<p class="muted">In diesem Monat gibt es hier keine Termine – blättere im Kalender weiter.</p>';
+    }
+
+    function select(id, scroll) {
+      const c = courses.find(x => x.id === id);
+      if (!c || !bookable(c)) return;
+      selectedId = id;
+      cal.setSelected(new Set([dayKey(c)]));
+      renderList();
+      $("picked").classList.remove("hidden");
+      $("picked-text").textContent = `${EHFY.fmtDate(c.starts_at)} · ${c.location} · ${EHFY.fmtRange(c.starts_at, c.ends_at)}`;
+      if (scroll) $("form").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    try {
+      courses = await EHFY_DB.getOpenCourses();
+    } catch (e) {
+      $("calendar").innerHTML = '<div class="notice notice-danger"><p>Die Termine konnten nicht geladen werden. Bitte versuche es später erneut oder melde dich telefonisch.</p></div>';
+      return;
+    }
+
+    // Ort-Filter nur mit Orten, an denen es Termine gibt
+    const used = new Set(courses.map(c => c.location));
+    const locs = ["Alle", ...new Set([...cfg.locations.map(l => l.name).filter(n => used.has(n)), ...used])];
+    $("loc-filter").innerHTML = locs.length > 2 ? locs.map(l => `<button type="button" class="chip-btn ${l === "Alle" ? "active" : ""}" data-loc="${EHFY.esc(l)}">${EHFY.esc(l)}</button>`).join("") : "";
+    $("loc-filter").addEventListener("click", ev => {
+      const b = ev.target.closest("[data-loc]");
+      if (!b) return;
+      filter = b.dataset.loc;
+      [...$("loc-filter").children].forEach(x => x.classList.toggle("active", x === b));
+      const first = visible().find(bookable) || visible()[0];
+      if (first) cal.setMonth(new Date(first.starts_at));
+      cal.setMarks(marks());
+      renderList();
+    });
+
+    const first = courses.find(bookable) || courses[0];
+    cal = EHFYCalendar($("calendar"), {
+      month: first ? new Date(first.starts_at) : new Date(),
+      marks: marks(),
+      isPickable: key => visible().some(c => dayKey(c) === key && bookable(c)),
+      onPick: key => { const c = visible().find(x => dayKey(x) === key && bookable(x)); if (c) select(c.id, matchMedia("(max-width: 860px)").matches); },
+      onMonth: renderList
+    });
+    renderList();
+    if (first && bookable(first)) select(first.id, false);
+
+    list.addEventListener("change", ev => { if (ev.target.name === "course") select(ev.target.value, matchMedia("(max-width: 860px)").matches); });
+    $("change").onclick = () => $("booking").scrollIntoView({ behavior: "smooth" });
+
+    form.addEventListener("submit", async ev => {
+      ev.preventDefault();
+      err.textContent = "";
+      const f = form.elements;
+      if (f.website.value) return; // Spam-Schutz
+      if (!selectedId) { err.textContent = "Bitte wähle zuerst einen Termin im Kalender aus."; $("booking").scrollIntoView({ behavior: "smooth" }); return; }
+      for (const name of ["first_name", "last_name", "birth_date", "email", "street", "zip", "city"]) {
+        if (!f[name].value.trim() || !f[name].checkValidity()) { err.textContent = "Bitte fülle alle Pflichtfelder (*) korrekt aus."; f[name].focus(); return; }
+      }
+      if (!f.agree_name.checked) { err.textContent = "Bitte bestätige, dass dein Name genau wie im Personalausweis eingetragen ist."; f.agree_name.focus(); return; }
+      if (!f.agree_terms.checked) { err.textContent = "Bitte akzeptiere die Absagebedingungen und die Datenschutzerklärung."; f.agree_terms.focus(); return; }
+
+      const btn = $("submit");
+      btn.disabled = true; btn.textContent = "Wird gesendet …";
+      const data = {
+        course_id: selectedId,
+        first_name: f.first_name.value.trim().replace(/\s+/g, " "), last_name: f.last_name.value.trim().replace(/\s+/g, " "),
+        birth_date: f.birth_date.value, email: f.email.value.trim(), phone: f.phone.value.trim(),
+        street: f.street.value.trim(), zip: f.zip.value.trim(), city: f.city.value.trim(),
+        package: f.package.value, message: ""
+      };
+      try {
+        const res = await EHFY_DB.register(data);
+        const link = new URL(`absage.html?code=${res.cancel_token}`, location.href).href;
+        const pkg = pkgText(data.package);
+        $("s-name").textContent = data.first_name.split(" ")[0];
+        $("s-date").textContent = EHFY.fmtDate(res.starts_at);
+        $("s-time").textContent = EHFY.fmtRange(res.starts_at, res.ends_at);
+        $("s-address").textContent = res.address || res.location;
+        $("s-package").textContent = pkg;
+        $("s-cert").textContent = `${data.first_name} ${data.last_name}`;
+        $("s-link").textContent = link;
+        const body = `Hallo ${data.first_name},\n\ndein Erste-Hilfe-Kurs:\n${EHFY.fmtDate(res.starts_at)}, ${EHFY.fmtRange(res.starts_at, res.ends_at)}\n${res.address || res.location}\nPaket: ${pkg}\nName auf der Bescheinigung: ${data.first_name} ${data.last_name}\n\nAbmelde-Link (bis 48 Std. vorher):\n${link}`;
+        $("s-mail").href = `mailto:${data.email}?subject=${encodeURIComponent("Meine Anmeldung – Erste Hilfe for you")}&body=${encodeURIComponent(body)}`;
+        $("copy").onclick = async e => {
+          try { await navigator.clipboard.writeText(link); e.target.textContent = "Kopiert ✓"; } catch (x) { e.target.textContent = "Bitte manuell kopieren"; }
+        };
+        $("booking").classList.add("hidden");
+        $("success").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false; btn.textContent = "Verbindlich anmelden";
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

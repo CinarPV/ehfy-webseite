@@ -1,0 +1,7 @@
+# Design-Entwürfe bleiben nur lokal
+entwuerfe/
+# macOS und Editor
+.DS_Store
+.claude/
+# Niemals hochladen: PDF-Vorlagen und Belege (gehören in den geschützten Supabase-Speicher)
+*.pdf
