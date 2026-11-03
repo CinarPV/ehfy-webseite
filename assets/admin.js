@@ -378,15 +378,18 @@
 
   // Teilnehmer manuell eintragen
   const rdlg = $("reg-dialog");
+  EHFY.birthField($("rd-birth"));
   $("p-add").onclick = () => { $("reg-form").reset(); $("rd-error").textContent = ""; rdlg.showModal(); };
   $("reg-form").addEventListener("submit", async ev => {
     if (ev.submitter?.value !== "save") return;
     ev.preventDefault();
+    const birth = EHFY.parseBirth($("rd-birth").value);
+    if ($("rd-birth").value.trim() && !birth) { $("rd-error").textContent = "Bitte das Geburtsdatum so eingeben: TT.MM.JJJJ."; return; }
     try {
       await db.addRegistration({
         course_id: current.id,
         first_name: $("rd-first").value.trim(), last_name: $("rd-last").value.trim(),
-        birth_date: $("rd-birth").value || null, package: $("rd-pkg").value,
+        birth_date: birth, package: $("rd-pkg").value,
         email: $("rd-email").value.trim() || null, phone: $("rd-phone").value.trim() || null,
         street: $("rd-street").value.trim() || null, zip: $("rd-zip").value.trim() || null, city: $("rd-city").value.trim() || null,
         message: "manuell eingetragen"

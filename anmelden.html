@@ -74,7 +74,7 @@
             <div class="form-grid">
               <div class="field"><label for="first_name">Vorname(n) laut Ausweis *</label><input id="first_name" name="first_name" autocomplete="given-name" required maxlength="80" placeholder="z. B. Anna-Lena Marie"></div>
               <div class="field"><label for="last_name">Nachname laut Ausweis *</label><input id="last_name" name="last_name" autocomplete="family-name" required maxlength="80" placeholder="z. B. Müller"></div>
-              <div class="field"><label for="birth_date">Geburtsdatum *</label><input id="birth_date" name="birth_date" type="date" autocomplete="bday" required></div>
+              <div class="field"><label for="birth_date">Geburtsdatum *</label><input id="birth_date" name="birth_date" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" autocomplete="bday" maxlength="10" required></div>
               <div class="field"><label for="email">E-Mail *</label><input id="email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="120"></div>
               <div class="field full"><label for="street">Straße und Hausnummer *</label><input id="street" name="street" autocomplete="street-address" required maxlength="120"></div>
               <div class="field"><label for="zip">PLZ *</label><input id="zip" name="zip" inputmode="numeric" autocomplete="postal-code" required pattern="[0-9]{5}" maxlength="5"></div>
@@ -229,13 +229,17 @@
     list.addEventListener("change", ev => { if (ev.target.name === "course") select(ev.target.value, matchMedia("(max-width: 860px)").matches); });
     $("change").onclick = () => $("booking").scrollIntoView({ behavior: "smooth" });
 
+    EHFY.birthField(form.birth_date);
+
     form.addEventListener("submit", async ev => {
       ev.preventDefault();
       err.textContent = "";
       const f = form.elements;
       if (f.website.value) return; // Spam-Schutz
       if (!selectedId) { err.textContent = "Bitte wähle zuerst einen Termin im Kalender aus."; $("booking").scrollIntoView({ behavior: "smooth" }); return; }
-      for (const name of ["first_name", "last_name", "birth_date", "email", "street", "zip", "city"]) {
+      const birth = EHFY.parseBirth(f.birth_date.value);
+      if (!birth) { err.textContent = "Bitte gib dein Geburtsdatum so ein: TT.MM.JJJJ, zum Beispiel 01.02.2008."; f.birth_date.focus(); return; }
+      for (const name of ["first_name", "last_name", "email", "street", "zip", "city"]) {
         if (!f[name].value.trim() || !f[name].checkValidity()) { err.textContent = "Bitte fülle alle Pflichtfelder (*) korrekt aus."; f[name].focus(); return; }
       }
       if (!f.agree_name.checked) { err.textContent = "Bitte bestätige, dass dein Name genau wie im Personalausweis eingetragen ist."; f.agree_name.focus(); return; }
@@ -246,7 +250,7 @@
       const data = {
         course_id: selectedId,
         first_name: f.first_name.value.trim().replace(/\s+/g, " "), last_name: f.last_name.value.trim().replace(/\s+/g, " "),
-        birth_date: f.birth_date.value, email: f.email.value.trim(), phone: f.phone.value.trim(),
+        birth_date: birth, email: f.email.value.trim(), phone: f.phone.value.trim(),
         street: f.street.value.trim(), zip: f.zip.value.trim(), city: f.city.value.trim(),
         package: f.package.value, message: ""
       };

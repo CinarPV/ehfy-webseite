@@ -5,7 +5,7 @@
   const TZ = "Europe/Berlin";
   const C = {
     ink: [0.039, 0.145, 0.251], muted: [0.373, 0.443, 0.502], line: [0.89, 0.918, 0.933],
-    aid: [0.078, 0.639, 0.545], blue: [0.016, 0.404, 0.604], teal: [0.161, 0.706, 0.714], soft: [0.957, 0.973, 0.976]
+    aid: [0.043, 0.482, 0.498], blue: [0.016, 0.404, 0.604], teal: [0.161, 0.706, 0.714], soft: [0.957, 0.973, 0.976]
   };
   const rgb = a => root.PDFLib.rgb(a[0], a[1], a[2]);
 
@@ -98,7 +98,7 @@
   function stripes(page, h = 9) {
     // Rettungsstreifen am oberen Rand
     for (let x = -h * 2; x < A4[0] + h; x += h * 2) {
-      page.drawSvgPath(`M${x} 0 L${x + h} 0 L${x + h * 2} ${h} L${x + h} ${h} Z`, { x: 0, y: A4[1], color: rgb(C.aid) });
+      page.drawSvgPath(`M${x} 0 L${x + h} 0 L${x + h * 2} ${h} L${x + h} ${h} Z`, { x: 0, y: A4[1], color: rgb(C.teal) });
     }
   }
 

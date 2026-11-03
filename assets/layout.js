@@ -98,6 +98,31 @@
     fmtRange(start, end) {
       return end ? `${EHFY.fmtTime(start)} – ${EHFY.fmtTime(end)} Uhr` : `ab ${EHFY.fmtTime(start)} Uhr`;
     },
+    // Geburtsdatum: „TT.MM.JJJJ“ (oder JJJJ-MM-TT vom automatischen Ausfüllen) → JJJJ-MM-TT, sonst null
+    parseBirth(value) {
+      const s = String(value || "").trim();
+      const m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/) || s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!m) return null;
+      const [y, mo, d] = m[1].length === 4 ? [+m[1], +m[2], +m[3]] : [+m[3], +m[2], +m[1]];
+      const date = new Date(Date.UTC(y, mo - 1, d));
+      if (date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return null; // z. B. 31.02.
+      if (y < 1900 || date > new Date()) return null;
+      return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    },
+    // Punkte beim Tippen automatisch setzen: 01022008 → 01.02.2008, 1.2. → 01.02.
+    birthField(el) {
+      el.addEventListener("input", () => {
+        const raw = el.value.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) { // automatisches Ausfüllen
+          const [y, m, d] = raw.split("-");
+          el.value = `${d}.${m}.${y}`;
+          return;
+        }
+        const parts = raw.replace(/[^\d.]/g, "").split(".");
+        const digits = parts.map((p, i) => (i < parts.length - 1 && i < 2 && p.length === 1 ? "0" + p : p)).join("").slice(0, 8);
+        el.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join(".");
+      });
+    },
     seatsPill(c) {
       const free = Math.max(0, c.capacity - c.booked);
       if (free === 0) return '<span class="pill pill-full">ausgebucht</span>';
