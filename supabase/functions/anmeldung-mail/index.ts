@@ -44,7 +44,6 @@ function buildMail(reg, course, opts = {}) {
     ["Buchung", esc(pkg)],
     ["Name (laut Ausweis)", `<strong>${esc(reg.first_name)} ${esc(reg.last_name)}</strong>`],
     ["Geburtsdatum", birth],
-    ["Anschrift", reg.street ? `${esc(reg.street)}<br>${esc(reg.zip)} ${esc(reg.city)}` : "–"],
     ["E-Mail", reg.email ? `<a href="mailto:${esc(reg.email)}">${esc(reg.email)}</a>` : "–"],
     ["Telefon", reg.phone ? `<a href="tel:${esc(reg.phone)}">${esc(reg.phone)}</a>` : "–"],
     ["Angemeldet am", created]
@@ -72,7 +71,6 @@ function buildMail(reg, course, opts = {}) {
     `Buchung:       ${pkg}`,
     `Name:          ${reg.first_name} ${reg.last_name}`,
     `Geburtsdatum:  ${birth}`,
-    `Anschrift:     ${reg.street ? `${reg.street}, ${reg.zip} ${reg.city}` : "–"}`,
     `E-Mail:        ${reg.email || "–"}`,
     `Telefon:       ${reg.phone || "–"}`,
     `Angemeldet am: ${created}`, "",

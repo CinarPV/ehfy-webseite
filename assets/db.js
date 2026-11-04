@@ -29,7 +29,7 @@
         return check(await sb.rpc("register_for_course", {
           p_course_id: d.course_id, p_first_name: d.first_name, p_last_name: d.last_name,
           p_birth_date: d.birth_date || null, p_email: d.email, p_phone: d.phone,
-          p_street: d.street, p_zip: d.zip, p_city: d.city,
+          p_street: d.street ?? null, p_zip: d.zip ?? null, p_city: d.city ?? null,
           p_package: d.package, p_message: d.message
         }));
       },
@@ -119,7 +119,7 @@
       async setInvoiceStatus(id, status) {
         check(await sb.from("invoices").update({ status, paid_on: status === "bezahlt" ? new Date().toISOString().slice(0, 10) : null }).eq("id", id));
       },
-      // Beleg direkt über dein web.de-Postfach senden (Funktion "beleg-mail")
+      // Beleg direkt über dein Postfach info@ehfy.de senden (Funktion "beleg-mail")
       async sendInvoiceMail(m) {
         const { data, error } = await sb.functions.invoke("beleg-mail", { body: m });
         if (error) {

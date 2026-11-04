@@ -116,9 +116,6 @@ begin
      or coalesce(p_email, '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
     raise exception 'Bitte gib deinen Namen und eine gültige E-Mail-Adresse an.';
   end if;
-  if coalesce(trim(p_street), '') = '' or coalesce(p_zip, '') !~ '^[0-9]{5}$' or coalesce(trim(p_city), '') = '' then
-    raise exception 'Bitte gib deine vollständige Anschrift an.';
-  end if;
   if p_package not in ('kurs', 'komplett') then
     raise exception 'Bitte wähle ein gültiges Paket.';
   end if;

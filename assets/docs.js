@@ -80,6 +80,48 @@
     });
   }
 
+  // Quittung auf der hochgeladenen Vorlage: Name und Geburtsdatum statt Anschrift
+  const RECEIPT = {
+    date: { x: 126, y: 565, size: 10 },
+    number: { x: 320, y: 563.5, size: 10 },
+    name: { x: 174, y: 490, size: 11 },
+    birthLabel: { x: 90.1, y: 463.5, size: 10 },
+    birth: { x: 170, y: 464.5, size: 11 },
+    service: { x: 90.1, y: 364.5, size: 10 },
+    extra: { x: 245, y: 364.5, size: 10 },
+    detail: { x: 90.1, y: 349, size: 9 },
+    amount: { x: 122, y: 292, size: 10 },
+    confirm: { x: 247, y: 267, size: 9.5 },
+    place: { x: 112, y: 196, size: 10 }
+  };
+  function receiptsFromTemplate(templateBytes, list, issuer, loadFont) {
+    const { rgb: color } = root.PDFLib;
+    const white = color(1, 1, 1), plain = n => eur(n).replace(" €", "");
+    return fillTemplate(templateBytes, list, loadFont, (page, inv, f) => {
+      const r = inv.recipient || {};
+      const [service = "", detail = ""] = String((inv.items && inv.items[0] && inv.items[0].text) || "").split("\n");
+      text(page, fmtDate(inv.issued_on), RECEIPT.date, f.bold);
+      text(page, `Quittungs-Nr.: ${inv.number}`, RECEIPT.number, f.bold);
+      text(page, r.name, RECEIPT.name, f.bold);
+      // Zeilen „Adresse“ und „PLZ / Wohnort“ der Vorlage überdecken
+      page.drawRectangle({ x: 85, y: 431, width: 347, height: 43, color: white });
+      page.drawText("Geburtsdatum:", { ...RECEIPT.birthLabel, font: f.regular, color: color(0, 0, 0) });
+      page.drawLine({ start: { x: 166, y: 462 }, end: { x: 423, y: 462 }, thickness: 0.6, color: color(0, 0, 0) });
+      text(page, fmtBirth(r.birth_date), RECEIPT.birth, f.bold);
+      // „Erste-Hilfe-Kurs – Teilnahmegebühr“ steht in der Vorlage; alles andere ersetzt die Zeile
+      if (service.startsWith("Erste-Hilfe-Kurs + Sehtest")) text(page, "+ Sehtest und 2 Passbilder", RECEIPT.extra, f.regular);
+      else if (!service.startsWith("Erste-Hilfe-Kurs")) {
+        page.drawRectangle({ x: 85, y: 358, width: 347, height: 18, color: white });
+        text(page, service, RECEIPT.service, f.regular);
+      }
+      text(page, detail.replace(/, inkl\..*$/, ""), RECEIPT.detail, f.regular);
+      text(page, eur(inv.total), RECEIPT.amount, f.bold);
+      text(page, plain(inv.total), RECEIPT.confirm, f.bold);
+      text(page, issuer.city, RECEIPT.place, f.bold);
+      if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 400, size: 64, font: f.black, color: color(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(25) });
+    });
+  }
+
   // ---------- Quittung & Rechnung im EHfy-Design ----------
   const A4 = [595.28, 841.89];
   const M = 56; // Rand
@@ -175,14 +217,15 @@
 
   const KLEIN = "Gemäß § 19 UStG (Kleinunternehmerregelung) wird keine Umsatzsteuer berechnet.";
 
-  async function receipts(invoices, issuer, loadFont) {
+  async function receipts(invoices, issuer, loadFont, templateBytes) {
+    if (templateBytes) return receiptsFromTemplate(templateBytes, invoices, issuer, loadFont);
     const { PDFDocument } = root.PDFLib;
     const pdf = await PDFDocument.create();
     const f = await fonts(pdf, loadFont);
     for (const inv of invoices) {
       const page = pdf.addPage(A4);
       frame(page, f, issuer, "Quittung", [["Quittungs-Nr.", inv.number], ["Datum", fmtDate(inv.issued_on)], ["Zahlungsart", "Bar"]]);
-      addressBlock(page, f, "Erhalten von", inv.recipient, A4[1] - 230);
+      addressBlock(page, f, "Erhalten von", { name: inv.recipient.name, street: inv.recipient.birth_date ? `geb. ${fmtBirth(inv.recipient.birth_date)}` : "" }, A4[1] - 230);
       const y = itemsTable(page, f, inv.items, A4[1] - 340, false);
       totalBox(page, f, inv.total, y - 20, "Gesamtbetrag");
       const yy = y - 80;

@@ -563,7 +563,9 @@
   });
 
   // ---------- Dokumente als PDF ----------
-  const TEMPLATES = { bescheinigung: "Bescheinigung", datenblatt: "Teilnehmerdatenblatt" };
+  const TEMPLATES = { bescheinigung: "Bescheinigung", datenblatt: "Teilnehmerdatenblatt", quittung: "Quittung" };
+  // Quittung: auf deiner Vorlage, solange keine hochgeladen ist im EHfy-Design
+  const receiptPdf = async list => EHFYDocs.receipts(list, await issuer(), loadFont, await db.getTemplate("quittung").catch(() => null));
   const eur = n => Number(n).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
   let pdfReady = null;
   const fontCache = {};
@@ -606,7 +608,7 @@
   }
 
   // ---------- PDF-Dialog und Versand per E-Mail ----------
-  // Über das Teilen-Menü landet die PDF als Anhang direkt in deiner Mail-App (mit deinem web.de-Konto).
+  // Über das Teilen-Menü landet die PDF als Anhang direkt in deiner Mail-App (mit dem dort eingerichteten Konto).
   const pdlg = $("pdf-dialog");
   let pd = null;
   function pdfDialog(bytes, name, mail) {
@@ -648,7 +650,7 @@
     return btoa(bin);
   }
 
-  // Direkt über dein web.de-Postfach senden
+  // Direkt über dein Postfach info@ehfy.de senden
   $("pd-mail").addEventListener("submit", async ev => {
     ev.preventDefault();
     const m = mailFields();
@@ -705,7 +707,7 @@
     if (inv.draft) throw new Error("Dieser Beleg ist noch ein Entwurf ohne Nummer. Bitte zuerst „Online stellen“, dann senden.");
     await ensurePdf();
     const bytes = inv.type === "quittung"
-      ? await EHFYDocs.receipts([inv], await issuer(), loadFont)
+      ? await receiptPdf([inv])
       : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays);
     pdfDialog(bytes, `${inv.type === "quittung" ? "Quittung" : "Rechnung"}_${inv.number}.pdf`, billMail(inv));
   }
@@ -723,11 +725,12 @@
         inv = await db.createInvoice({
           type, registration_id: r.id, status: cash ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
           issued_on: cash ? day : localDate(new Date()), service_date: day,
-          recipient: { name: `${r.first_name} ${r.last_name}`, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "" },
+          recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "" },
           items: EHFYDocs.receiptItems(r, course, cfg.packages)
         });
       }
-      out.push(inv);
+      // Ältere Belege kennen das Geburtsdatum noch nicht
+      out.push({ ...inv, recipient: { ...inv.recipient, birth_date: inv.recipient.birth_date || r.birth_date || null } });
     }
     return out;
   }
@@ -737,7 +740,7 @@
     const D = window.EHFYDocs;
     if (kind === "bescheinigung") return D.certificates(await template("bescheinigung"), course, people, loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded });
     if (kind === "datenblatt") return D.datasheets(await template("datenblatt"), course, people, loadFont);
-    if (kind === "quittung") return D.receipts(await billsFor("quittung", people, course), await issuer(), loadFont);
+    if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course), await issuer(), loadFont, cfg.documents.paymentDays);
   }
   const DOC_NAMES = { bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
@@ -824,7 +827,7 @@
   async function invoicePdf(inv, win) {
     await ensurePdf();
     const bytes = inv.type === "quittung"
-      ? await EHFYDocs.receipts([inv], await issuer(), loadFont)
+      ? await receiptPdf([inv])
       : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays);
     showPdf(bytes, `${inv.type === "quittung" ? "Quittung" : "Rechnung"}_${inv.number}.pdf`, win);
   }
@@ -981,7 +984,16 @@
     const sample = [{ first_name: "Max", last_name: "Mustermann", birth_date: "2008-01-15", street: "Musterstraße 1", zip: "57072", city: "Siegen", package: "komplett" }];
     const course = { starts_at: new Date().toISOString(), location: cfg.defaultLocation, address: cfg.defaultAddress };
     const win = openTab();
-    try { await makeDoc(b.dataset.test, sample, course, win); }
+    try {
+      // Testdruck der Quittung ohne echte Nummer
+      if (b.dataset.test === "quittung") {
+        await ensurePdf();
+        const items = EHFYDocs.receiptItems(sample[0], course, cfg.packages);
+        const bytes = await receiptPdf([{ number: "MUSTER", status: "bezahlt", issued_on: localDate(new Date()), total: items[0].price, items,
+          recipient: { name: "Max Mustermann", birth_date: sample[0].birth_date } }]);
+        showPdf(bytes, "Quittung_Muster.pdf", win);
+      } else await makeDoc(b.dataset.test, sample, course, win);
+    }
     catch (e) { if (win) win.close(); $("tpl-err-" + b.dataset.test).textContent = e.message; }
   });
 

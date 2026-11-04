@@ -154,24 +154,19 @@ Die Mitteilung zeigt Name, Kurstag und Ort – auch auf dem Sperrbildschirm.
 - In **Rechnungen** bei einem Beleg auf **„E-Mail“** tippen – oder in der Teilnehmerliste „Drucken …“ →
   „Quittung/Rechnung per E-Mail senden“.
 - Empfänger, Betreff und Text sind vorausgefüllt und lassen sich ändern. **„Jetzt senden“** verschickt die Mail
-  mit der PDF im Anhang **direkt von deiner web.de-Adresse**. Du bekommst automatisch eine Kopie (BCC).
+  mit der PDF im Anhang **direkt von info@ehfy.de**. Du bekommst automatisch eine Kopie (BCC).
 - In der Rechnungsliste steht danach ✉ mit dem Versanddatum.
 - Alternativ: „Über Mail-App“ (Teilen-Menü) oder herunterladen und selbst anhängen.
 
-### Einmalig einrichten: Direktversand über web.de
+### Einmalig einrichten: Direktversand über info@ehfy.de
 
-1. **web.de freischalten**: In web.de einloggen → **E-Mail → Einstellungen → POP3/IMAP Abruf** →
-   **„POP3 und IMAP Zugriff erlauben“** anhaken → Speichern. (Ohne das lehnt web.de den Versand ab.)
-   Hast du bei web.de die Zwei-Faktor-Anmeldung aktiv, erstelle dort ein **App-Passwort** und nimm dieses.
-2. In Supabase: **Edge Functions → Deploy a new function → Via Editor**, Name **`beleg-mail`**,
-   Inhalt von `supabase/functions/beleg-mail/index.ts` einfügen → **Deploy**.
-3. **Edge Functions → Secrets**:
-   - `WEBDE_USER` = `ehfy@web.de`
-   - `WEBDE_PASSWORD` = dein web.de-Passwort bzw. App-Passwort
-4. Testen: in der Verwaltung eine Rechnung an deine eigene Adresse senden.
+1. In Supabase: **Edge Functions → Deploy a new function → Via Editor**, Name: `beleg-mail`.
+   Den kompletten Inhalt von `supabase/functions/beleg-mail/index.ts` einfügen → **Deploy**.
+2. Die Secrets `IONOS_USER` und `IONOS_PASSWORD` aus Schritt 1b gelten auch hier.
+3. Testen: in der Verwaltung eine Rechnung an deine eigene Adresse senden.
 
-Dein Passwort liegt nur verschlüsselt bei Supabase – nicht auf der Webseite und nicht im Browser.
-Versendet wird über web.de mit SSL (Port 465). Sollte web.de diese Verbindung ablehnen, steht der Grund
+Das Passwort liegt nur verschlüsselt bei Supabase – nicht auf der Webseite und nicht im Browser.
+Versendet wird über IONOS mit SSL (Port 465). Lehnt IONOS die Verbindung ab, steht der Grund
 in der Fehlermeldung beim Senden bzw. unter Edge Functions → beleg-mail → Logs.
 
 ## Verwaltung benutzen

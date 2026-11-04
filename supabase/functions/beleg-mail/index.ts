@@ -1,10 +1,10 @@
 // Supabase Edge Function "beleg-mail"
-// Verschickt eine Quittung oder Rechnung (PDF im Anhang) direkt über dein web.de-Postfach.
+// Verschickt eine Quittung oder Rechnung (PDF im Anhang) direkt über dein IONOS-Postfach info@ehfy.de.
 // Aufruf nur aus der Verwaltung – nur angemeldete Verwaltungs-Konten dürfen senden.
 //
 // Benötigte Secrets (Supabase → Edge Functions → Secrets):
-//   WEBDE_USER      – deine web.de-Adresse, z. B. ehfy@web.de
-//   WEBDE_PASSWORD  – dein web.de-Passwort (bei Zwei-Faktor: ein App-Passwort von web.de)
+//   IONOS_USER      – info@ehfy.de
+//   IONOS_PASSWORD  – das Passwort dieses Postfachs (nur hier eintragen, nie in die Webseite)
 // Optional:
 //   MAIL_NAME       – Absendername (Standard: Erste Hilfe for you)
 //   COPY_TO_SELF    – "false", wenn du keine Kopie an dich selbst möchtest
@@ -36,12 +36,12 @@ Deno.serve(async req => {
   if (!b || !/^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(b.to ?? "")) return json({ error: "Bitte eine gültige Empfänger-Adresse angeben." }, 400);
   if (typeof b.pdfBase64 !== "string" || !b.pdfBase64 || b.pdfBase64.length > 8_000_000) return json({ error: "Die PDF fehlt oder ist zu groß." }, 400);
 
-  const from = Deno.env.get("WEBDE_USER");
-  const pass = Deno.env.get("WEBDE_PASSWORD");
-  if (!from || !pass) return json({ error: "web.de-Zugang ist noch nicht eingerichtet (Secrets WEBDE_USER / WEBDE_PASSWORD)." }, 500);
+  const from = Deno.env.get("IONOS_USER");
+  const pass = Deno.env.get("IONOS_PASSWORD");
+  if (!from || !pass) return json({ error: "Das Postfach ist noch nicht eingerichtet (Secrets IONOS_USER / IONOS_PASSWORD)." }, 500);
 
-  // web.de über SSL (Port 465) – Port 587 ist bei Supabase gesperrt
-  const transport = nodemailer.createTransport({ host: "smtp.web.de", port: 465, secure: true, auth: { user: from, pass } });
+  // IONOS über SSL (Port 465) – Port 587 ist bei Supabase gesperrt
+  const transport = nodemailer.createTransport({ host: "smtp.ionos.de", port: 465, secure: true, auth: { user: from, pass } });
   try {
     await transport.sendMail({
       from: `"${oneLine(Deno.env.get("MAIL_NAME") ?? "Erste Hilfe for you", 80)}" <${from}>`,
@@ -55,8 +55,8 @@ Deno.serve(async req => {
       }]
     });
   } catch (e) {
-    console.error("web.de-Versand fehlgeschlagen:", e);
-    return json({ error: "Versand über web.de fehlgeschlagen: " + ((e as Error)?.message ?? String(e)) }, 502);
+    console.error("Versand fehlgeschlagen:", e);
+    return json({ error: "Versand über info@ehfy.de fehlgeschlagen: " + ((e as Error)?.message ?? String(e)) }, 502);
   }
 
   // Versand am Beleg vermerken
