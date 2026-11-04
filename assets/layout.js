@@ -42,6 +42,7 @@
     footer.innerHTML = `
       <div class="stripes" aria-hidden="true"></div>
       <div class="container">
+        <div class="symbol-row" aria-hidden="true"><svg class="sym"><use href="assets/symbole.svg#kreuz"/></svg><svg class="sym"><use href="assets/symbole.svg#herz"/></svg><svg class="sym"><use href="assets/symbole.svg#aed"/></svg><svg class="sym"><use href="assets/symbole.svg#ekg"/></svg><svg class="sym"><use href="assets/symbole.svg#notruf"/></svg><svg class="sym"><use href="assets/symbole.svg#verband"/></svg><svg class="sym"><use href="assets/symbole.svg#warnung"/></svg><svg class="sym"><use href="assets/symbole.svg#seitenlage"/></svg><svg class="sym"><use href="assets/symbole.svg#auge"/></svg></div>
         <div class="footer-grid">
           <div>
             <div class="footer-logo" data-logo="full" data-theme="dark"></div>

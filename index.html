@@ -69,38 +69,45 @@
         <div>
           <span class="kicker">Zugelassen · Bezirksregierung Arnsberg</span>
           <h1>Im Notfall zählt<br>jede Sekunde.<br><span class="hl">Auch deine.</span></h1>
-          <p class="lead">Erste-Hilfe-Kurs, Sehtest und Passbild für deinen Führerschein – an einem Wochenende. Danach weißt du, was zu tun ist. Wirklich.</p>
+          <p class="lead">Erste-Hilfe-Kurs, Sehtest und Passbild für deinen Führerschein – an einem Tag. Danach weißt du, was zu tun ist.</p>
           <div class="btn-row">
             <a class="plaster" href="anmelden.html">Platz sichern</a>
-            <a class="btn btn-ghost" href="#mitmachen">Teste dich: Drück-Takt</a>
+            <a class="btn btn-ghost" href="#mitmachen">Drück-Takt testen</a>
           </div>
         </div>
-
-        <figure class="panel hero-panel">
-          <img src="assets/skizzen/drueck.svg" alt="Gezeichnete Figur übt die Herzdruckmassage an einer liegenden Person" width="410" height="290">
-          <figcaption>So geht Herzdruckmassage: 100–120 × pro Minute.</figcaption>
-        </figure>
+        <aside class="monitor" id="next-course" aria-live="polite">
+          <div class="monitor-head"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#ekg"/></svg><span>Nächster Kurs</span></div>
+          <div class="monitor-date">Termine werden geladen …</div>
+        </aside>
       </div>
+      <svg class="ecg-line" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true">
+        <path class="base" d="M0 55H250l14-22 22 50 26-74 26 76 18-30H720l14-22 22 50 26-74 26 76 18-30H1190l14-22 22 50 26-74 26 76 18-30H1440"/>
+        <path class="pulse" pathLength="1000" d="M0 55H250l14-22 22 50 26-74 26 76 18-30H720l14-22 22 50 26-74 26 76 18-30H1190l14-22 22 50 26-74 26 76 18-30H1440"/>
+      </svg>
     </section>
 
-    <div class="ticker" aria-hidden="true"><div class="ticker-track">
-      <span>ERSTE HILFE</span><i>✚</i><span>SEHTEST</span><i>✚</i><span>PASSBILD</span><i>✚</i><span>AN EINEM TAG</span><i>✚</i><span>BE A SECOND CHANCE</span><i>✚</i>
-      <span>ERSTE HILFE</span><i>✚</i><span>SEHTEST</span><i>✚</i><span>PASSBILD</span><i>✚</i><span>AN EINEM TAG</span><i>✚</i><span>BE A SECOND CHANCE</span><i>✚</i>
-    </div></div>
+    <section class="facts" aria-label="Auf einen Blick">
+      <div class="container">
+        <div class="fact"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#uhr"/></svg></span><div><b>1 Tag</b><span>Kurs, Sehtest, Passbild</span></div></div>
+        <div class="fact"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#gruppe"/></svg></span><div><b>max. 12</b><span>Teilnehmer pro Kurs</span></div></div>
+        <div class="fact"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#auge"/></svg></span><div><b>§ 67 FeV</b><span>anerkannte Sehteststelle</span></div></div>
+        <div class="fact"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#urkunde"/></svg></span><div><b>9 UE</b><span>mit Bescheinigung</span></div></div>
+      </div>
+    </section>
 
     <section class="section" id="schritte">
       <div class="container">
         <h2 class="rv">Prüfen. Rufen. Drücken.</h2>
-        <p class="lead rv">Drei Schritte, die Leben retten. Im Kurs übst du sie selbst – mit Puppe, Profi und Humor.</p>
-        <div class="panels">
-          <figure class="panel rv"><span class="panel-num">1</span><img src="assets/skizzen/pruefen.svg" alt="Figur rüttelt an der Schulter einer liegenden Person und ruft Hallo" width="400" height="250" loading="lazy"><figcaption><b>Prüfen</b>Reagiert die Person? Atmet sie normal?</figcaption></figure>
-          <figure class="panel rv"><span class="panel-num">2</span><img src="assets/skizzen/rufen.svg" alt="Figur telefoniert und ruft 112" width="400" height="250" loading="lazy"><figcaption><b>Rufen</b>Notruf 112 wählen – oder rufen lassen.</figcaption></figure>
-          <figure class="panel rv"><span class="panel-num">3</span><img src="assets/skizzen/drueck.svg" alt="Figur drückt auf den Brustkorb" width="410" height="290" loading="lazy"><figcaption><b>Drücken</b>Fest und schnell, bis Hilfe da ist.</figcaption></figure>
+        <p class="lead rv">Drei Schritte, die Leben retten. Im Kurs übst du sie selbst an der Puppe.</p>
+        <div class="grid grid-3" style="margin-top:28px">
+          <div class="card step-card rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#pruefen"/></svg></span><span class="step-no">01</span><h3>Prüfen</h3><p class="muted">Reagiert die Person? Atmet sie normal?</p></div>
+          <div class="card step-card step-alarm rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#notruf"/></svg></span><span class="step-no">02</span><h3>Rufen</h3><p class="muted">Notruf 112 wählen – oder rufen lassen.</p></div>
+          <div class="card step-card rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#druck"/></svg></span><span class="step-no">03</span><h3>Drücken</h3><p class="muted">Fest und schnell: 100–120 × pro Minute.</p></div>
         </div>
       </div>
     </section>
 
-    <section class="section" id="mitmachen">
+    <section class="section section-dark" id="mitmachen">
       <div class="container">
         <h2 class="rv">Hast du den Takt drauf?</h2>
         <p class="lead rv">Bei der Herzdruckmassage drückst du 100 bis 120 Mal pro Minute. Tipp im Rhythmus auf das Herz – wir messen dein Tempo.</p>
@@ -110,7 +117,7 @@
             <span class="hint" id="hint">Tippen</span>
           </button>
           <div class="meter">
-            <div class="bpm"><span id="bpm">–</span> <small>pro Minute</small></div>
+            <div class="bpm"><span id="bpm">0</span> <small>pro Minute</small></div>
             <div class="gauge" aria-hidden="true"><i id="needle"></i></div>
             <div class="scale"><span style="left:2%">60</span><span style="left:40%">100</span><span style="left:60%">120</span><span style="left:96%">160</span></div>
             <div class="verdict" id="verdict" aria-live="polite">Tippe mindestens 4 Mal.</div>
@@ -125,15 +132,15 @@
 
     <section class="section section-soft" id="lernen">
       <div class="container">
-        <h2 class="rv">Was in deinem Erste-Hilfe-Kasten landet</h2>
-        <p class="lead rv">Kein Frontalunterricht – du übst alles selbst. In kleinen Gruppen mit maximal 12 Leuten.</p>
+        <h2 class="rv">Was du im Kurs lernst</h2>
+        <p class="lead rv">Kein Frontalunterricht – du übst alles selbst, in kleinen Gruppen mit maximal 12 Leuten.</p>
         <div class="kit" style="margin-top:28px">
-          <div class="item kit-box rv"><span class="sign" style="font-size:44px"></span><div><div class="big">1 Tag</div><p>Kurs, Sehtest (§67 FeV) und auf Wunsch 2 Passbilder – alles für den Führerscheinantrag.</p></div></div>
-          <div class="item rv"><img class="kit-img" src="assets/skizzen/drueck.svg" alt="Herzdruckmassage" loading="lazy"><h3>Wiederbelebung</h3><p>Herzdruckmassage und Beatmung.</p></div>
-          <div class="item rv"><img class="kit-img" src="assets/skizzen/seitenlage.svg" alt="Stabile Seitenlage" loading="lazy"><h3>Stabile Seitenlage</h3><p>Bewusstlose sicher lagern.</p></div>
-          <div class="item rv"><img class="kit-img" src="assets/skizzen/verband.svg" alt="Verband am Arm" loading="lazy"><h3>Wunden versorgen</h3><p>Verbände und Blutungen stoppen.</p></div>
-          <div class="item rv"><img class="kit-img" src="assets/skizzen/rufen.svg" alt="Notruf" loading="lazy"><h3>Notruf absetzen</h3><p>Die richtigen Infos an die 112.</p></div>
-          <div class="item rv"><img class="kit-img" src="assets/skizzen/sichern.svg" alt="Warndreieck aufstellen" loading="lazy"><h3>Unfallstelle sichern</h3><p>Erst du, dann die anderen.</p></div>
+          <div class="item rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#herz"/></svg></span><h3>Wiederbelebung</h3><p>Herzdruckmassage und Beatmung.</p></div>
+          <div class="item rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#aed"/></svg></span><h3>Defibrillator</h3><p>Einen AED sicher einsetzen.</p></div>
+          <div class="item rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#seitenlage"/></svg></span><h3>Stabile Seitenlage</h3><p>Bewusstlose sicher lagern.</p></div>
+          <div class="item rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#verband"/></svg></span><h3>Wunden versorgen</h3><p>Verbände und Blutungen stoppen.</p></div>
+          <div class="item rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#notruf"/></svg></span><h3>Notruf absetzen</h3><p>Die richtigen Infos an die 112.</p></div>
+          <div class="item rv"><span class="tile"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#warnung"/></svg></span><h3>Unfallstelle sichern</h3><p>Erst du, dann die anderen.</p></div>
         </div>
       </div>
     </section>
@@ -209,6 +216,18 @@
       }).join("") : '<p class="muted">Aktuell sind keine Termine eingetragen. Melde dich gern telefonisch oder per WhatsApp.</p>';
       const next = all.find(c => c.online_booking && c.booked < c.capacity);
       if (next) document.getElementById("dock-t").textContent = `${fmt(new Date(next.starts_at), { weekday: "short", day: "2-digit", month: "2-digit" })} · ${next.location}`;
+      const mon = document.getElementById("next-course");
+      if (next) {
+        const free = Math.max(0, next.capacity - next.booked);
+        mon.querySelector(".monitor-date").textContent = fmt(new Date(next.starts_at), { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+        mon.insertAdjacentHTML("beforeend", `
+          <div class="monitor-meta">${EHFY.esc(next.location)} · ${EHFY.fmtRange(next.starts_at, next.ends_at)}</div>
+          <div class="monitor-seats"><b>${free}</b><span>von ${next.capacity} Plätzen frei</span></div>
+          <div class="seat-bar"><i style="width:${Math.round(next.booked / next.capacity * 100)}%"></i></div>
+          <a class="btn" href="anmelden.html">Jetzt anmelden</a>`);
+      } else {
+        mon.querySelector(".monitor-date").textContent = "Neue Termine folgen";
+      }
     } catch (e) {
       box.innerHTML = '<p class="muted">Termine konnten nicht geladen werden. Bitte versuche es später erneut.</p>';
     }

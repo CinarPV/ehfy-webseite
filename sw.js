@@ -1,6 +1,6 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v4";
+const CACHE = "ehfy-app-v5";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
@@ -8,7 +8,7 @@ const SHELL = [
   "assets/vendor/supabase.js", "assets/vendor/pdf-lib.min.js", "assets/vendor/fontkit.umd.min.js",
   "assets/fonts/jakarta-400.woff2", "assets/fonts/jakarta-600.woff2", "assets/fonts/jakarta-800.woff2",
   "assets/fonts/jakarta-400.ttf", "assets/fonts/jakarta-700.ttf", "assets/fonts/jakarta-800.ttf",
-  "assets/icon-192.png", "assets/favicon.svg"
+  "assets/icon-192.png", "assets/favicon.svg", "assets/symbole.svg"
 ];
 
 self.addEventListener("install", e => {
