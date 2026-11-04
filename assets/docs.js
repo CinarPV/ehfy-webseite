@@ -88,7 +88,6 @@
     birthLabel: { x: 90.1, y: 463.5, size: 10 },
     birth: { x: 170, y: 464.5, size: 11 },
     service: { x: 90.1, y: 364.5, size: 10 },
-    extra: { x: 245, y: 364.5, size: 10 },
     detail: { x: 90.1, y: 349, size: 9 },
     amount: { x: 122, y: 292, size: 10 },
     confirm: { x: 247, y: 267, size: 9.5 },
@@ -108,13 +107,10 @@
       page.drawText("Geburtsdatum:", { ...RECEIPT.birthLabel, font: f.regular, color: color(0, 0, 0) });
       page.drawLine({ start: { x: 166, y: 462 }, end: { x: 423, y: 462 }, thickness: 0.6, color: color(0, 0, 0) });
       text(page, fmtBirth(r.birth_date), RECEIPT.birth, f.bold);
-      // „Erste-Hilfe-Kurs – Teilnahmegebühr“ steht in der Vorlage; alles andere ersetzt die Zeile
-      if (service.startsWith("Erste-Hilfe-Kurs + Sehtest")) text(page, "+ Sehtest und 2 Passbilder", RECEIPT.extra, f.regular);
-      else if (!service.startsWith("Erste-Hilfe-Kurs")) {
-        page.drawRectangle({ x: 85, y: 358, width: 347, height: 18, color: white });
-        text(page, service, RECEIPT.service, f.regular);
-      }
-      text(page, detail.replace(/, inkl\..*$/, ""), RECEIPT.detail, f.regular);
+      // Die feste Zeile der Vorlage durch die gebuchte Leistung ersetzen
+      page.drawRectangle({ x: 85, y: 358, width: 347, height: 18, color: white });
+      page.drawText(service, { ...RECEIPT.service, font: f.regular, color: color(0, 0, 0) });
+      text(page, detail, RECEIPT.detail, f.regular);
       text(page, eur(inv.total), RECEIPT.amount, f.bold);
       text(page, plain(inv.total), RECEIPT.confirm, f.bold);
       text(page, issuer.city, RECEIPT.place, f.bold);
@@ -293,9 +289,8 @@
   function receiptItems(reg, course, packages) {
     const p = packages.find(x => x.key === reg.package) || packages[0];
     const when = `${fmtLongDate(course.starts_at)} in ${course.location}`;
-    const text = p.key === "komplett"
-      ? `Erste-Hilfe-Kurs + Sehtest – Teilnahmegebühr\nKurs am ${when}, inkl. Sehtest und 2 Passbilder`
-      : `Erste-Hilfe-Kurs – Teilnahmegebühr\nKurs am ${when}`;
+    const name = p.key === "komplett" ? "Erste-Hilfe-Kurs Komplettpaket (mit Sehtest und 2 Passbildern gratis)" : "Erste-Hilfe-Kurs";
+    const text = `${name}\nKurs am ${when}`;
     return [{ text, qty: 1, price: p.price }];
   }
 
