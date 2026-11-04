@@ -69,6 +69,11 @@
       async addRegistration(r) {
         check(await sb.from("registrations").insert(r));
       },
+      // Für den Abgleich der Verwaltung (assets/sync.js)
+      async putCourse(row) { check(await sb.from("courses").upsert(row)); },
+      async putRegistration(row) { check(await sb.from("registrations").upsert(row)); },
+      async listAllRegistrations() { return check(await sb.from("registrations").select("*").order("created_at")); },
+      async listAllInvoices() { return check(await sb.from("invoices").select("*").order("seq", { ascending: false })); },
       async updateRegistration(id, patch) {
         check(await sb.from("registrations").update(patch).eq("id", id));
       },
@@ -222,6 +227,19 @@
       },
       async deleteCourse(id) { const db = load(); db.courses = db.courses.filter(c => c.id !== id); db.regs = db.regs.filter(r => r.course_id !== id); save(); },
       async listRegistrations(courseId) { return load().regs.filter(r => r.course_id === courseId); },
+      async putCourse(row) {
+        const db = load(), i = db.courses.findIndex(c => c.id === row.id);
+        if (i >= 0) db.courses[i] = { ...db.courses[i], ...row }; else db.courses.push(row);
+        save();
+      },
+      async putRegistration(row) {
+        const db = load(), i = db.regs.findIndex(r => r.id === row.id);
+        const full = { status: "angemeldet", cancel_token: uid(), created_at: new Date().toISOString(), cancelled_at: null, ...row };
+        if (i >= 0) db.regs[i] = { ...db.regs[i], ...row }; else db.regs.push(full);
+        save();
+      },
+      async listAllRegistrations() { return load().regs.map(r => ({ ...r })); },
+      async listAllInvoices() { return (load().invoices || []).map(i => ({ ...i })); },
       async addRegistration(r) {
         const db = load();
         db.regs.push({ id: uid(), status: "angemeldet", cancel_token: uid(), created_at: new Date().toISOString(), cancelled_at: null, ...r });

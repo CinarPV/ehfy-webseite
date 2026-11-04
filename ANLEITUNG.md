@@ -121,6 +121,19 @@ Funktioniert, sobald die Seite unter https://www.ehfy.de online ist.
 Einmal angemeldet, bleibst du angemeldet. Termine, Teilnehmer und Rechnungen sind auf allen Geräten gleich,
 weil alles in der Datenbank liegt.
 
+## Lokal arbeiten und „Online stellen“
+
+Oben in der Verwaltung zeigt eine Leiste, ob du online bist und wie viele Änderungen noch nicht übertragen sind.
+
+- **Termine und Teilnehmer** speicherst du zuerst nur auf dem Gerät – auch ohne Internet. Kunden sehen davon noch nichts.
+- **„Online stellen“** überträgt alles in die Datenbank. Erst dann sehen Kunden die neuen Termine und dein anderes Gerät bekommt den Stand.
+- **Neue Anmeldungen** holt die App beim Öffnen und über „Aktualisieren“.
+- **Rechnungen und Quittungen ohne Internet** sind Entwürfe mit „ENTWURF“ statt Nummer. Die fortlaufende Nummer kommt beim Online-Stellen.
+  Danach das PDF neu erzeugen. Mit Internet bekommt ein Beleg sofort seine Nummer.
+- **E-Mail-Versand und das Hochladen von Vorlagen** brauchen Internet.
+- Ändern Mac und iPhone denselben Eintrag, gilt der Stand, der zuletzt online gestellt wurde. Deshalb am besten nach dem Bearbeiten direkt online stellen.
+- **Abmelden** löscht die lokalen Daten vom Gerät. Teilnehmerdaten liegen sonst auf dem Gerät: Bitte Geräte-Code bzw. Passwort am Mac und iPhone aktiv lassen.
+
 ## Quittungen und Rechnungen per E-Mail senden
 
 - In **Rechnungen** bei einem Beleg auf **„E-Mail“** tippen – oder in der Teilnehmerliste „Drucken …“ →

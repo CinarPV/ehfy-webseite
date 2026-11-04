@@ -43,6 +43,11 @@
             <h1 style="margin:0;font-size:1.8rem">Verwaltung</h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
+          <div class="sync-bar no-print" id="sync-bar" role="status">
+            <span class="sync-dot" id="sync-dot"></span>
+            <span id="sync-text"></span>
+            <button class="btn btn-sm" id="sync-btn" type="button">Online stellen</button>
+          </div>
           <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
             <button data-view="termine" class="active">Termine</button>
             <button data-view="rechnungen">Rechnungen</button>
@@ -288,6 +293,7 @@
   <script src="assets/layout.js"></script>
   <script src="assets/vendor/supabase.js"></script>
   <script src="assets/db.js"></script>
+  <script src="assets/sync.js"></script>
   <script src="assets/calendar.js"></script>
   <script src="assets/admin.js"></script>
   <script>

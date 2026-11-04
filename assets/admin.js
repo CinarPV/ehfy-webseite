@@ -44,6 +44,7 @@
 
   async function showApp() {
     $("app-view").classList.remove("hidden");
+    renderSync();
     await loadCourses();
   }
 
@@ -85,7 +86,7 @@
           <td>${fmtRange(c.starts_at, c.ends_at)}</td>
           <td>${esc(c.location)}</td>
           <td><strong>${c.booked}</strong> / ${c.capacity}</td>
-          <td>${pill}</td>
+          <td>${pill}${db.isPending(c.id) ? '<br><span class="small muted">noch nicht online</span>' : ""}</td>
           <td><div class="btn-row">
             <button class="btn btn-sm" data-act="people" data-id="${c.id}">Teilnehmer</button>
             ${c.booked ? `<button class="btn btn-sm btn-teal" data-act="print" data-id="${c.id}" title="Datenblätter, Bescheinigungen und Quittungen für alle Teilnehmer">Kursmappe drucken</button>` : ""}
@@ -399,6 +400,33 @@
     } catch (e) { $("rd-error").textContent = e.message; }
   });
 
+  // ---------- Abgleich: lokal arbeiten, dann „Online stellen“ ----------
+  function renderSync() {
+    const st = db.status();
+    $("sync-dot").className = "sync-dot " + (st.online ? "on" : "off");
+    const parts = [st.online ? "Online" : "Offline – du arbeitest auf diesem Gerät"];
+    parts.push(st.pending ? `${st.pending} Änderung${st.pending === 1 ? "" : "en"} noch nicht online` : "Alles online");
+    if (st.lastSync) parts.push(`Stand ${new Date(st.lastSync).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`);
+    if (!st.live) parts.push("Demo: nur dieses Gerät");
+    $("sync-text").textContent = st.error || parts.join(" · ");
+    $("sync-text").style.color = st.error ? "var(--danger)" : "";
+    $("sync-btn").disabled = !st.online || st.syncing;
+    $("sync-btn").textContent = st.syncing ? "Wird übertragen …" : st.pending ? `Online stellen (${st.pending})` : "Aktualisieren";
+  }
+  $("sync-btn").onclick = () => db.sync().catch(() => {});
+  let lastView = "";
+  window.addEventListener("ehfy-sync", () => {
+    renderSync();
+    // Listen auffrischen, aber nur wenn sich etwas geändert hat und kein Fenster offen ist
+    if (document.querySelector("dialog[open]")) return;
+    const view = JSON.stringify([db.status().lastSync, db.status().pending]);
+    if (view === lastView) return;
+    lastView = view;
+    if (!$("courses-view").classList.contains("hidden")) loadCourses();
+    if (!$("participants-view").classList.contains("hidden") && current) loadRegs();
+    if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
+  });
+
   // ---------- Bereiche: Termine, Rechnungen, Vorlagen ----------
   $("main-tabs").addEventListener("click", ev => {
     const b = ev.target.closest("button[data-view]");
@@ -573,6 +601,7 @@
   }
 
   async function sendBill(inv) {
+    if (inv.draft) throw new Error("Dieser Beleg ist noch ein Entwurf ohne Nummer. Bitte zuerst „Online stellen“, dann senden.");
     await ensurePdf();
     const bytes = inv.type === "quittung"
       ? await EHFYDocs.receipts([inv], await issuer(), loadFont)
@@ -676,7 +705,7 @@
       <div class="stat"><b>${eur(sum(open))}</b><span>noch offen</span></div>`;
     $("inv-rows").innerHTML = invoices.length ? invoices.map(i => `
       <tr class="${i.status === "storniert" ? "is-past" : ""}">
-        <td><strong>${esc(i.number)}</strong></td>
+        <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
         <td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
         <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td>
         <td>${esc(i.recipient.name)}</td>
@@ -684,7 +713,7 @@
         <td>${INV_STATUS[i.status]}${i.sent_at ? `<br><span class="small muted" title="${esc(i.sent_to || "")}">✉ ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}</td>
         <td><div class="btn-row">
           <button class="btn btn-sm btn-outline" data-inv="pdf" data-id="${i.id}">PDF</button>
-          ${i.status !== "storniert" ? `<button class="btn btn-sm btn-outline" data-inv="mail" data-id="${i.id}">E-Mail</button>` : ""}
+          ${i.status !== "storniert" && !i.draft ? `<button class="btn btn-sm btn-outline" data-inv="mail" data-id="${i.id}">E-Mail</button>` : ""}
           ${i.status === "offen" ? `<button class="btn btn-sm btn-outline" data-inv="paid" data-id="${i.id}">bezahlt</button>` : ""}
           ${i.status !== "storniert" ? `<button class="btn btn-sm btn-outline" data-inv="cancel" data-id="${i.id}" title="Stornieren">✕</button>` : ""}
         </div></td>
