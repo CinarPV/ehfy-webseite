@@ -213,7 +213,10 @@
 
   const KLEIN = "Gemäß § 19 UStG (Kleinunternehmerregelung) wird keine Umsatzsteuer berechnet.";
 
-  async function receipts(invoices, issuer, loadFont, templateBytes) {
+  // Auf der Quittung steht nie der Kursort, nur das Datum (gilt auch für ältere Belege)
+  const withoutPlace = inv => ({ ...inv, items: (inv.items || []).map(i => ({ ...i, text: String(i.text || "").replace(/^(Kurs am [^\n]*?\d{4}) in [^\n]*$/m, "$1") })) });
+  async function receipts(list, issuer, loadFont, templateBytes) {
+    const invoices = list.map(withoutPlace);
     if (templateBytes) return receiptsFromTemplate(templateBytes, invoices, issuer, loadFont);
     const { PDFDocument } = root.PDFLib;
     const pdf = await PDFDocument.create();
