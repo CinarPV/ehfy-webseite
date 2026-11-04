@@ -134,42 +134,11 @@
 
   // ---------- Demo (localStorage) ----------
   function demoApi() {
-    const KEY = "ehfy-demo-v4";
+    const KEY = "ehfy-demo-v5";
     let memory = null;
     const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now());
 
-    function seed() {
-      const courses = [];
-      const add = (date, loc) => {
-        const s = new Date(date); s.setHours(10, 0, 0, 0);
-        const e = new Date(s); e.setHours(17, 30, 0, 0);
-        courses.push({
-          id: uid(), starts_at: s.toISOString(), ends_at: e.toISOString(),
-          location: loc.name, address: loc.address, capacity: cfg.defaultCapacity,
-          online_booking: true, status: "offen", note: ""
-        });
-      };
-      const [siegen, ...others] = cfg.locations;
-      const d = new Date();
-      d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7)); // nächster Sonntag
-      for (let i = 0; i < 8; i++) { const s = new Date(d); s.setDate(d.getDate() + i * 7); add(s, siegen); }
-      // Je Ort ein Samstag pro Monat
-      others.forEach((loc, j) => {
-        for (let m = 0; m < 2; m++) { const s = new Date(d); s.setDate(d.getDate() + j * 7 + m * 28 - 1); add(s, loc); }
-      });
-      courses.sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
-      const regs = [];
-      for (let i = 0; i < 10; i++) {
-        regs.push({
-          id: uid(), course_id: courses[0].id, first_name: ["Lena", "Tim", "Ayse", "Jonas", "Mia", "Can", "Lea", "Ben", "Sara", "Elif"][i],
-          last_name: "Muster", birth_date: "2007-05-1" + (i % 9), email: `demo${i}@example.com`, phone: "",
-          street: `Musterweg ${i + 1}`, zip: "57072", city: "Siegen",
-          package: i % 2 ? "komplett" : "kurs", message: "", status: "angemeldet", cancel_token: uid(),
-          created_at: new Date().toISOString(), cancelled_at: null
-        });
-      }
-      return { courses, regs };
-    }
+    const seed = () => ({ courses: [], regs: [] });
     function load() {
       // Immer frisch lesen: Eine Anmeldung aus einem anderen Tab soll beim Aktualisieren erscheinen
       try { memory = JSON.parse(localStorage.getItem(KEY)) || memory; } catch (e) { /* bleibt im Speicher */ }

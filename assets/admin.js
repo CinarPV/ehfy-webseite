@@ -58,6 +58,7 @@
     }
     renderStats();
     renderCourses();
+    setupPanel();
   }
 
   function renderStats() {
@@ -174,97 +175,119 @@
     dlg.showModal();
   }
 
-  $("new-course").onclick = () => openQuick();
-
   // Orte als Vorschläge; bei bekanntem Ort die Adresse automatisch eintragen
   $("loc-list").innerHTML = cfg.locations.map(l => `<option value="${esc(l.name)}">`).join("");
   const locByName = name => cfg.locations.find(l => l.name.toLowerCase() === name.trim().toLowerCase());
   $("cd-loc").addEventListener("change", () => { const l = locByName($("cd-loc").value); if (l) $("cd-addr").value = l.address; });
-  $("q-loc").addEventListener("change", () => { const l = locByName($("q-loc").value); if (l) $("q-addr").value = l.address; });
 
-  // ---------- Schnell-Eingabe ----------
-  const qdlg = $("quick-dialog");
-  let qSel = new Set(), qCal = null;
+  // ---------- Termin freigeben: Ort antippen, Tag antippen, freigeben ----------
+  const FREE = { free: true, name: "", weekday: 6, start: cfg.locations[0].start, end: cfg.locations[0].end, address: "" };
+  const qSel = new Set();
+  let qCal = null, qIndex = -1, qList = [];
   const todayKey = EHFYKey(new Date());
+  const qFormat = k => new Date(k + "T12:00").toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 
   function courseMarks() {
     const m = {};
     for (const c of courses) {
       const k = EHFYKey(new Date(c.starts_at));
-      m[k] = { cls: "has-course", label: (m[k] ? "2×" : c.location.slice(0, 2).toUpperCase()), title: c.location };
+      m[k] = { cls: "has-course", label: m[k] ? "2×" : c.location.slice(0, 2).toUpperCase(), title: c.location };
     }
     return m;
   }
 
-  function renderQSel() {
+  async function loadLocations() {
+    const saved = (await db.getSettings().catch(() => ({}))).locations;
+    qList = saved && saved.length ? saved : [...cfg.locations, FREE];
+    if (!qList.some(l => l.free)) qList = [...qList, FREE];
+  }
+  function renderChips() {
+    $("q-locs").innerHTML = qList.map((l, i) =>
+      `<button type="button" class="chip-btn ${i === qIndex ? "active" : ""}" data-i="${i}">${esc(l.name || "Frei")}</button>`).join("");
+  }
+  function renderQ() {
+    renderChips();
     const keys = [...qSel].sort();
-    $("q-sel").textContent = keys.length
-      ? `${keys.length} ${keys.length === 1 ? "Tag" : "Tage"}: ` + keys.map(k => new Date(k + "T12:00").toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })).join(", ")
-      : "Noch kein Tag ausgewählt.";
-    $("q-save").disabled = !keys.length;
-    $("q-save").textContent = keys.length ? `${keys.length} ${keys.length === 1 ? "Termin" : "Termine"} anlegen` : "Termine anlegen";
+    $("q-hint").textContent = qIndex < 0 ? "Zuerst einen Ort antippen, dann im Kalender den Tag." : "Tippe alle gewünschten Tage an. Bereits eingetragene Termine sind grau.";
+    $("q-sel").textContent = keys.length ? `Ausgewählt: ${keys.map(qFormat).join(", ")}` : "Noch kein Tag ausgewählt.";
+    $("q-save").disabled = qIndex < 0 || !keys.length;
+    $("q-save").textContent = keys.length > 1 ? `${keys.length} Termine freigeben` : "Termin freigeben";
+    if (qCal) qCal.render();
   }
-
-  function setQLoc(loc) {
-    [...$("q-locs").children].forEach(b => b.classList.toggle("active", b.dataset.loc === loc.name));
-    $("q-loc").value = loc.name;
-    $("q-addr").value = loc.address;
-    $("q-start").value = loc.start;
-    $("q-end").value = loc.end;
-  }
-
-  function openQuick() {
-    qSel = new Set();
-    $("q-error").textContent = "";
-    $("q-cap").value = cfg.defaultCapacity;
-    $("q-note").value = "";
-    $("q-online").checked = true;
-    $("q-locs").innerHTML = cfg.locations.map(l =>
-      `<button type="button" class="chip-btn" data-loc="${esc(l.name)}">${esc(l.name)} <span class="small" style="opacity:.7">${l.weekday === 0 ? "So" : l.weekday === 6 ? "Sa" : ""}</span></button>`).join("");
-    setQLoc(cfg.locations[0]);
+  function setupPanel() {
+    if (qCal) { qCal.setMarks(courseMarks()); return; }
     qCal = EHFYCalendar($("q-cal"), {
       marks: courseMarks(),
       selected: qSel,
       highlightWeekdays: [0, 6],
-      isPickable: key => key >= todayKey,
-      onPick: key => { qSel.has(key) ? qSel.delete(key) : qSel.add(key); qCal.setSelected(qSel); renderQSel(); }
+      isPickable: key => qIndex >= 0 && key >= todayKey,
+      onPick: key => { qSel.has(key) ? qSel.delete(key) : qSel.add(key); renderQ(); }
     });
-    renderQSel();
-    qdlg.showModal();
+    loadLocations().then(renderQ);
   }
-
   $("q-locs").addEventListener("click", ev => {
-    const b = ev.target.closest("[data-loc]");
-    if (b) setQLoc(cfg.locations.find(l => l.name === b.dataset.loc));
+    const b = ev.target.closest("[data-i]");
+    if (!b) return;
+    qIndex = Number(b.dataset.i);
+    const l = qList[qIndex];
+    $("q-loc").value = l.name || "";
+    $("q-addr").value = l.address || "";
+    $("q-start").value = l.start;
+    $("q-end").value = l.end;
+    $("q-cap").value = l.capacity ?? cfg.defaultCapacity;
+    $("q-note").value = "";
+    $("q-online").checked = true;
+    $("q-error").textContent = "";
+    $("q-remember-msg").textContent = "";
+    // Der freie Knopf braucht zuerst einen Namen
+    if (l.free && !l.name) { $("q-details").open = true; $("q-loc").focus(); }
+    renderQ();
   });
-
-  $("quick-form").addEventListener("submit", async ev => {
-    if (ev.submitter?.value !== "save") return;
-    ev.preventDefault();
-    const start = $("q-start").value, end = $("q-end").value;
-    if (end && end <= start) { $("q-error").textContent = "Das Ende muss nach dem Beginn liegen."; return; }
-    const loc = $("q-loc").value.trim();
+  $("q-loc").addEventListener("change", () => {
+    const l = qList.find(x => x.name && x.name.toLowerCase() === $("q-loc").value.trim().toLowerCase());
+    if (l && !$("q-addr").value.trim()) $("q-addr").value = l.address;
+  });
+  // Angaben dauerhaft für den gewählten Knopf merken (auch der freie Knopf)
+  $("q-remember").onclick = async () => {
+    if (qIndex < 0) return;
+    qList[qIndex] = { ...qList[qIndex], name: $("q-loc").value.trim(), address: $("q-addr").value.trim(), start: $("q-start").value, end: $("q-end").value, capacity: parseInt($("q-cap").value, 10) || 0 };
+    const settings = await db.getSettings().catch(() => ({}));
+    await db.saveSettings({ ...settings, locations: qList });
+    bankData = null;
+    $("q-remember-msg").textContent = "Gespeichert ✓ – kommt mit „Online stellen“ auf deine anderen Geräte.";
+    renderQ();
+  };
+  $("q-save").onclick = async () => {
+    const start = $("q-start").value, end = $("q-end").value, loc = $("q-loc").value.trim();
+    $("q-error").textContent = "";
+    if (!loc) { $("q-details").open = true; $("q-error").textContent = "Bitte einen Ort eintragen."; return; }
+    if (!start) { $("q-details").open = true; $("q-error").textContent = "Bitte eine Uhrzeit eintragen."; return; }
+    if (end && end <= start) { $("q-details").open = true; $("q-error").textContent = "Das Ende muss nach dem Beginn liegen."; return; }
     const keys = [...qSel].sort();
     const dupes = keys.filter(k => courses.some(c => EHFYKey(new Date(c.starts_at)) === k && c.location === loc));
-    if (dupes.length && !confirm(`Am ${dupes.map(k => new Date(k + "T12:00").toLocaleDateString("de-DE")).join(", ")} gibt es in ${loc} schon einen Termin. Trotzdem anlegen?`)) return;
+    if (dupes.length && !confirm(`Am ${dupes.map(qFormat).join(", ")} gibt es in ${loc} schon einen Termin. Trotzdem freigeben?`)) return;
     $("q-save").disabled = true;
     try {
       for (const k of keys) {
         await db.saveCourse({
           starts_at: new Date(`${k}T${start}`).toISOString(),
           ends_at: end ? new Date(`${k}T${end}`).toISOString() : null,
-          location: loc, address: $("q-addr").value.trim(),
-          capacity: parseInt($("q-cap").value, 10), note: $("q-note").value.trim() || null,
+          location: loc, address: $("q-addr").value.trim() || loc,
+          capacity: parseInt($("q-cap").value, 10) || 0, note: $("q-note").value.trim() || null,
           status: "offen", online_booking: $("q-online").checked
         });
       }
-      qdlg.close();
+      qSel.clear();
+      // Freigeben heißt: gleich online. Ohne Internet bleibt es für „Online stellen“ gespeichert.
+      if (db.isOnline()) await db.sync();
       await loadCourses();
+      renderQ();
     } catch (e) {
+      await loadCourses();
       $("q-error").textContent = e.message;
-      $("q-save").disabled = false;
+      renderQ();
     }
-  });
+  };
 
   $("course-form").addEventListener("submit", async ev => {
     if (ev.submitter?.value !== "save") return;
@@ -468,7 +491,7 @@
   }
   $("bank-form").addEventListener("submit", async ev => {
     ev.preventDefault();
-    const value = {};
+    const value = { ...(await db.getSettings().catch(() => ({}))) };
     for (const [k, id] of Object.entries(BANK_FIELDS)) value[k] = $(id).value.trim();
     try {
       await db.saveSettings(value);

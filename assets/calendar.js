@@ -56,7 +56,7 @@
         </div>`;
     }
 
-    el.addEventListener("click", ev => {
+    el.onclick = ev => {
       const nav = ev.target.closest("[data-nav]");
       if (nav) {
         state.month = new Date(state.month.getFullYear(), state.month.getMonth() + Number(nav.dataset.nav), 1);
@@ -66,7 +66,7 @@
       }
       const day = ev.target.closest(".cal-day");
       if (day && !day.disabled && opts.onPick) opts.onPick(day.dataset.key);
-    });
+    };
 
     render();
     return {

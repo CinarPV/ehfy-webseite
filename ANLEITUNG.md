@@ -179,6 +179,7 @@ in der Fehlermeldung beim Senden bzw. unter Edge Functions → beleg-mail → Lo
 ## Verwaltung benutzen
 
 - `https://www.ehfy.de/admin.html` → mit deiner Supabase-E-Mail und deinem Passwort anmelden.
+- **Termin freigeben**: Ort antippen (Siegen, Burbach, Netphen, Wilnsdorf oder der freie Knopf), Tag(e) im Kalender antippen, „Termin freigeben“. Unter „Ort, Uhrzeit und Plätze anpassen“ änderst du die Angaben; „Für diesen Knopf speichern“ merkt sie dauerhaft.
 - **+ Neuer Termin**: Datum, Uhrzeit, Ort (öffentlich), genaue Adresse (sehen Teilnehmer erst nach der Anmeldung), max. Teilnehmer.
   „Online-Anmeldung möglich“ ausschalten → Termin wird angezeigt, aber nur mit Hinweis „nur telefonisch“.
 - **+1 Woche**: kopiert einen Termin auf den nächsten Sonntag – praktisch für regelmäßige Kurse.

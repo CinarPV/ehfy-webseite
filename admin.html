@@ -55,10 +55,33 @@
           </div>
 
           <div id="courses-view" data-section="termine">
-            <div class="admin-bar no-print" style="margin-bottom:16px">
-              <h2 style="margin:0;font-size:1.4rem">Termine</h2>
-              <button class="btn btn-teal" id="new-course">+ Termine eintragen</button>
+            <div class="card no-print" style="margin-bottom:22px">
+              <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>
+              <p class="muted small" id="q-hint"></p>
+              <div class="chips" id="q-locs" role="group" aria-label="Kursort"></div>
+              <div class="quick-grid">
+                <div><div id="q-cal"></div></div>
+                <div>
+                  <p class="sel-list" id="q-sel"></p>
+                  <div class="btn-row"><button class="btn" id="q-save" type="button" disabled>Termin freigeben</button></div>
+                  <p class="form-error" id="q-error" role="alert"></p>
+                  <details id="q-details" style="margin-top:6px">
+                    <summary>Ort, Uhrzeit und Plätze anpassen</summary>
+                    <div class="form-grid" style="margin-top:12px">
+                      <div class="field full"><label for="q-loc">Ort (öffentlich sichtbar)</label><input id="q-loc" list="loc-list"></div>
+                      <div class="field full"><label for="q-addr">Genaue Adresse (erst nach der Anmeldung sichtbar)</label><input id="q-addr"></div>
+                      <div class="field"><label for="q-start">Beginn</label><input id="q-start" type="time"></div>
+                      <div class="field"><label for="q-end">Ende</label><input id="q-end" type="time"></div>
+                      <div class="field"><label for="q-cap">Max. Teilnehmer</label><input id="q-cap" type="number" min="0" max="999"></div>
+                      <div class="field"><label for="q-note">Hinweis (öffentlich)</label><input id="q-note"></div>
+                      <label class="check full"><input type="checkbox" id="q-online" checked><span>Online-Anmeldung möglich</span></label>
+                    </div>
+                    <div class="btn-row" style="margin-top:12px"><button class="btn btn-sm btn-ghost" id="q-remember" type="button">Für diesen Knopf speichern</button><span class="small muted" id="q-remember-msg"></span></div>
+                  </details>
+                </div>
+              </div>
             </div>
+            <h2 style="margin:0 0 14px;font-size:1.3rem">Alle Termine</h2>
             <div class="stat-row" id="stats"></div>
             <div class="tabs no-print" id="filter">
               <button data-f="upcoming" class="active">Kommende</button>
@@ -217,37 +240,6 @@
   </dialog>
 
   <datalist id="loc-list"></datalist>
-
-  <!-- Schnell-Eingabe: mehrere Termine auf einmal -->
-  <dialog id="quick-dialog" class="wide">
-    <form method="dialog" class="dialog-body" id="quick-form">
-      <h2 style="margin-top:0">Termine eintragen</h2>
-      <p class="muted small" style="margin-top:-6px">Ort wählen, dann im Kalender alle gewünschten Tage antippen – fertig. Wochenenden sind hervorgehoben, bestehende Termine markiert.</p>
-      <div class="chips" id="q-locs" role="group" aria-label="Kursort"></div>
-      <div class="quick-grid">
-        <div>
-          <div id="q-cal"></div>
-          <p class="sel-list" id="q-sel" style="margin-top:10px"></p>
-        </div>
-        <div>
-          <div class="form-grid">
-            <div class="field"><label for="q-start">Beginn</label><input id="q-start" type="time" required></div>
-            <div class="field"><label for="q-end">Ende</label><input id="q-end" type="time"></div>
-            <div class="field"><label for="q-cap">Max. Teilnehmer</label><input id="q-cap" type="number" min="0" max="999" required></div>
-            <div class="field"><label for="q-loc">Ort (öffentlich)</label><input id="q-loc" list="loc-list" required></div>
-            <div class="field full"><label for="q-addr">Genaue Adresse (nach Anmeldung sichtbar)</label><input id="q-addr" required></div>
-            <div class="field full"><label for="q-note">Hinweis (optional, öffentlich)</label><input id="q-note"></div>
-            <label class="check full"><input type="checkbox" id="q-online" checked><span>Online-Anmeldung möglich</span></label>
-          </div>
-        </div>
-      </div>
-      <p class="form-error" id="q-error"></p>
-      <div class="btn-row">
-        <button class="btn" value="save" id="q-save" disabled>Termine anlegen</button>
-        <button class="btn btn-outline" value="cancel" formnovalidate>Abbrechen</button>
-      </div>
-    </form>
-  </dialog>
 
   <!-- Fertige PDF: teilen, öffnen, per E-Mail senden -->
   <dialog id="pdf-dialog">

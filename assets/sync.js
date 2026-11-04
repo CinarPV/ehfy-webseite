@@ -36,7 +36,13 @@
   let lastError = "";
   let newRegs = 0;
 
+  const scope = window.EHFY_CONFIG.supabaseUrl || "demo";
   const ready = opened.then(async () => {
+    if ((await kvGet("scope").catch(() => null)) !== scope) {
+      await kvClear().catch(() => {});
+      await kvPut("scope", scope).catch(() => {});
+      localStorage.removeItem(FLAG);
+    }
     state = (await kvGet("state").catch(() => null)) || empty();
     outbox = (await kvGet("outbox").catch(() => null)) || [];
   });

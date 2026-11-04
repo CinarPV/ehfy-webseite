@@ -224,7 +224,6 @@
       onMonth: renderList
     });
     renderList();
-    if (first && bookable(first)) select(first.id, false);
 
     list.addEventListener("change", ev => { if (ev.target.name === "course") select(ev.target.value, matchMedia("(max-width: 860px)").matches); });
     $("change").onclick = () => $("booking").scrollIntoView({ behavior: "smooth" });

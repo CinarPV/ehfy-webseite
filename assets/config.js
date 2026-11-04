@@ -20,9 +20,9 @@ window.EHFY_CONFIG = {
   // Die Adresse sehen Teilnehmer erst nach der Anmeldung.
   locations: [
     { name: "Siegen",    weekday: 0, start: "10:00", end: "17:30", address: "Selims Fahrschule, Hagener Straße 20, 57072 Siegen" },
-    { name: "Burbach",   weekday: 6, start: "10:00", end: "17:30", address: "Adresse folgt – bitte in config.js eintragen" },
-    { name: "Netphen",   weekday: 6, start: "10:00", end: "17:30", address: "Adresse folgt – bitte in config.js eintragen" },
-    { name: "Wilnsdorf", weekday: 6, start: "10:00", end: "17:30", address: "Adresse folgt – bitte in config.js eintragen" }
+    { name: "Burbach",   weekday: 6, start: "10:00", end: "17:30", address: "Adresse folgt" },
+    { name: "Netphen",   weekday: 6, start: "10:00", end: "17:30", address: "Adresse folgt" },
+    { name: "Wilnsdorf", weekday: 6, start: "10:00", end: "17:30", address: "Adresse folgt" }
   ],
   cancelHours: 48,
   prices: { kurs: 50, komplett: 55 },
