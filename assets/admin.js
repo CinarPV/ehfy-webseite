@@ -208,7 +208,7 @@
   function renderQ() {
     renderChips();
     const keys = [...qSel].sort();
-    $("q-hint").textContent = qIndex < 0 ? "Zuerst einen Ort antippen, dann im Kalender den Tag." : "Tippe alle gewünschten Tage an. Bereits eingetragene Termine sind grau.";
+    $("q-hint").textContent = qIndex < 0 ? (keys.length ? "Jetzt noch oben einen Ort antippen." : "Ort und Tag antippen, dann freigeben.") : "Tippe alle gewünschten Tage an. Bereits eingetragene Termine sind grau.";
     $("q-sel").textContent = keys.length ? `Ausgewählt: ${keys.map(qFormat).join(", ")}` : "Noch kein Tag ausgewählt.";
     $("q-save").disabled = qIndex < 0 || !keys.length;
     $("q-save").textContent = keys.length > 1 ? `${keys.length} Termine freigeben` : "Termin freigeben";
@@ -220,7 +220,7 @@
       marks: courseMarks(),
       selected: qSel,
       highlightWeekdays: [0, 6],
-      isPickable: key => qIndex >= 0 && key >= todayKey,
+      isPickable: key => key >= todayKey,
       onPick: key => { qSel.has(key) ? qSel.delete(key) : qSel.add(key); renderQ(); }
     });
     loadLocations().then(renderQ);

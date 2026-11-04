@@ -1,6 +1,6 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v9";
+const CACHE = "ehfy-app-v10";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
@@ -26,7 +26,8 @@ self.addEventListener("fetch", e => {
   // Nur eigene Dateien – Datenbank-Anfragen (Supabase) laufen immer direkt übers Netz
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    // no-cache: den 10-Minuten-Zwischenspeicher des Browsers umgehen, damit nie eine alte Version startet
+    fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
       .then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
         return res;

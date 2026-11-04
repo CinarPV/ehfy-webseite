@@ -227,7 +227,7 @@ form h2 { font-size: 1.35rem; display: flex; align-items: center; gap: 12px; }
 .cal-head strong { font-size: 1.1rem; }
 .cal-nav { width: 42px; height: 42px; border-radius: 12px; border: 2px solid var(--line); background: #fff; font: inherit; font-size: 1.4rem; line-height: 1; color: var(--ink); cursor: pointer; }
 .cal-nav:hover { border-color: var(--aid); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-wd span { text-align: center; font-size: .74rem; font-weight: 800; color: var(--muted); padding: 4px 0; text-transform: uppercase; letter-spacing: .06em; }
 .cal-wd span.we { color: var(--aid-dark); }
 .cal-day { position: relative; aspect-ratio: 1; min-height: 40px; border: none; border-radius: 12px; background: transparent; font: inherit; font-weight: 600; color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0; transition: background .15s, color .15s, transform .1s; }
@@ -373,8 +373,13 @@ td select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px sol
 .stat { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 18px; }
 .stat b { display: block; font-size: 1.8rem; color: var(--ink); line-height: 1.1; letter-spacing: -.02em; }
 .stat span { color: var(--muted); font-size: .88rem; }
-.quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-@media (max-width: 720px) { .quick-grid { grid-template-columns: 1fr; } }
+.quick-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 720px) {
+  .quick-grid { grid-template-columns: minmax(0, 1fr); }
+  .q-card { padding: 14px; }
+  .q-card .cal { padding: 10px; }
+  .q-card .cal-day { min-height: 0; }
+}
 .sel-list { font-size: .9rem; color: var(--muted); min-height: 1.4em; }
 dialog { border: none; border-radius: 22px; padding: 0; width: min(640px, calc(100vw - 32px)); box-shadow: 0 30px 80px rgba(0,0,0,.3); }
 dialog.wide { width: min(880px, calc(100vw - 24px)); }

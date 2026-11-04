@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung</h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 10</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -55,7 +55,7 @@
           </div>
 
           <div id="courses-view" data-section="termine">
-            <div class="card no-print" style="margin-bottom:22px">
+            <div class="card q-card no-print" style="margin-bottom:22px">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>
               <p class="muted small" id="q-hint"></p>
               <div class="chips" id="q-locs" role="group" aria-label="Kursort"></div>
@@ -303,7 +303,15 @@
   <script src="assets/calendar.js"></script>
   <script src="assets/admin.js"></script>
   <script>
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+    if ("serviceWorker" in navigator) {
+      // Kommt eine neue Version an, lädt die Seite einmal selbst neu
+      const hadVersion = Boolean(navigator.serviceWorker.controller);
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (hadVersion && !reloaded) { reloaded = true; location.reload(); }
+      });
+      navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+    }
   </script>
 </body>
 </html>
