@@ -3,8 +3,8 @@
 // Termine und Anmeldungen werden dann nur im eigenen Browser gespeichert.
 // Wie du die beiden Werte bekommst, steht in der ANLEITUNG.md.
 window.EHFY_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://oujxqtrqmopgfyskgwpt.supabase.co",
+  supabaseAnonKey: "sb_publishable_NA_Q9dpLRXAtcy5QrpmzgQ_ZYg9dQ8s",
 
   name: "Erste Hilfe for you",
   phone: "0175 1567473",
