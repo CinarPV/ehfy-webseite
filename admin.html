@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 10</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 11</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -66,7 +66,7 @@
                   <div class="btn-row"><button class="btn" id="q-save" type="button" disabled>Termin freigeben</button></div>
                   <p class="form-error" id="q-error" role="alert"></p>
                   <details id="q-details" style="margin-top:6px">
-                    <summary>Ort, Uhrzeit und Plätze anpassen</summary>
+                    <summary>Ort ändern oder löschen, Uhrzeit, Plätze</summary>
                     <div class="form-grid" style="margin-top:12px">
                       <div class="field full"><label for="q-loc">Ort (öffentlich sichtbar)</label><input id="q-loc" list="loc-list"></div>
                       <div class="field full"><label for="q-addr">Genaue Adresse (erst nach der Anmeldung sichtbar)</label><input id="q-addr"></div>
@@ -76,7 +76,8 @@
                       <div class="field"><label for="q-note">Hinweis (öffentlich)</label><input id="q-note"></div>
                       <label class="check full"><input type="checkbox" id="q-online" checked><span>Online-Anmeldung möglich</span></label>
                     </div>
-                    <div class="btn-row" style="margin-top:12px"><button class="btn btn-sm btn-ghost" id="q-remember" type="button">Für diesen Knopf speichern</button><span class="small muted" id="q-remember-msg"></span></div>
+                    <div class="btn-row" style="margin-top:12px"><button class="btn btn-sm btn-ghost" id="q-remember" type="button">Ort speichern</button><button class="btn btn-sm btn-ghost hidden" id="q-delete" type="button">Ort löschen</button></div>
+                    <p class="small muted" id="q-remember-msg" role="status" style="margin-top:8px"></p>
                   </details>
                 </div>
               </div>

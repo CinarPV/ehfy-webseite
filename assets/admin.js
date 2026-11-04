@@ -176,14 +176,13 @@
   }
 
   // Orte als Vorschläge; bei bekanntem Ort die Adresse automatisch eintragen
-  $("loc-list").innerHTML = cfg.locations.map(l => `<option value="${esc(l.name)}">`).join("");
-  const locByName = name => cfg.locations.find(l => l.name.toLowerCase() === name.trim().toLowerCase());
+  const locByName = name => qList.find(l => l.name.toLowerCase() === name.trim().toLowerCase());
   $("cd-loc").addEventListener("change", () => { const l = locByName($("cd-loc").value); if (l) $("cd-addr").value = l.address; });
 
   // ---------- Termin freigeben: Ort antippen, Tag antippen, freigeben ----------
-  const FREE = { free: true, name: "", weekday: 6, start: cfg.locations[0].start, end: cfg.locations[0].end, address: "" };
+  const NONE = -1, NEW = -2; // kein Ort gewählt / neuer Ort
   const qSel = new Set();
-  let qCal = null, qIndex = -1, qList = [];
+  let qCal = null, qIndex = NONE, qList = [];
   const todayKey = EHFYKey(new Date());
   const qFormat = k => new Date(k + "T12:00").toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 
@@ -196,26 +195,72 @@
     return m;
   }
 
+  // Die Orte liegen in den privaten Einstellungen und gelten damit auf jedem Gerät
   async function loadLocations() {
     const saved = (await db.getSettings().catch(() => ({}))).locations;
-    qList = saved && saved.length ? saved : [...cfg.locations, FREE];
-    if (!qList.some(l => l.free)) qList = [...qList, FREE];
+    const list = Array.isArray(saved) ? saved.filter(l => l.name) : cfg.locations;
+    const selected = qIndex >= 0 && qList[qIndex] ? qList[qIndex].name : null;
+    const changed = JSON.stringify(list) !== JSON.stringify(qList);
+    qList = list;
+    if (selected !== null) qIndex = qList.findIndex(l => l.name === selected);
+    $("loc-list").innerHTML = qList.map(l => `<option value="${esc(l.name)}">`).join("");
+    return changed;
   }
   function renderChips() {
     $("q-locs").innerHTML = qList.map((l, i) =>
-      `<button type="button" class="chip-btn ${i === qIndex ? "active" : ""}" data-i="${i}">${esc(l.name || "Frei")}</button>`).join("");
+      `<button type="button" class="chip-btn ${i === qIndex ? "active" : ""}" data-i="${i}">${esc(l.name)}</button>`).join("") +
+      `<button type="button" class="chip-btn ${qIndex === NEW ? "active" : ""}" data-i="${NEW}">+ Neuer Ort</button>`;
+    $("q-delete").classList.toggle("hidden", qIndex < 0);
+  }
+  function fillForm(l) {
+    $("q-loc").value = l.name || "";
+    $("q-addr").value = l.address || "";
+    $("q-start").value = l.start || "10:00";
+    $("q-end").value = l.end || "17:30";
+    $("q-cap").value = l.capacity ?? cfg.defaultCapacity;
+    $("q-note").value = "";
+    $("q-online").checked = true;
+    $("q-error").textContent = "";
+    $("q-remember-msg").textContent = "";
+  }
+  const formLocation = () => ({
+    name: $("q-loc").value.trim(), address: $("q-addr").value.trim(),
+    start: $("q-start").value, end: $("q-end").value,
+    capacity: parseInt($("q-cap").value, 10) || 0
+  });
+  // Nur die Orte übertragen. Andere noch nicht online gestellte Änderungen bleiben liegen.
+  async function storeLocations() {
+    if (db.isOnline() && !db.status().lastSync) await db.pull();
+    const settings = await db.getSettings();
+    await db.saveSettings({ ...settings, locations: qList });
+    bankData = null;
+    $("loc-list").innerHTML = qList.map(l => `<option value="${esc(l.name)}">`).join("");
+    return db.pushSettings();
+  }
+  async function storeWithMessage(text) {
+    try {
+      const sent = await storeLocations();
+      $("q-remember-msg").textContent = sent ? `${text} ✓` : `${text} ✓ – wird mit „Online stellen“ übertragen.`;
+    } catch (e) {
+      $("q-remember-msg").textContent = `Auf diesem Gerät gespeichert, aber noch nicht online: ${e.message}`;
+    }
   }
   function renderQ() {
     renderChips();
     const keys = [...qSel].sort();
-    $("q-hint").textContent = qIndex < 0 ? (keys.length ? "Jetzt noch oben einen Ort antippen." : "Ort und Tag antippen, dann freigeben.") : "Tippe alle gewünschten Tage an. Bereits eingetragene Termine sind grau.";
+    $("q-hint").textContent = qIndex === NONE ? (keys.length ? "Jetzt noch oben einen Ort antippen." : "Ort und Tag antippen, dann freigeben.") : "Tippe alle gewünschten Tage an. Bereits eingetragene Termine sind grau.";
     $("q-sel").textContent = keys.length ? `Ausgewählt: ${keys.map(qFormat).join(", ")}` : "Noch kein Tag ausgewählt.";
-    $("q-save").disabled = qIndex < 0 || !keys.length;
+    $("q-save").disabled = qIndex === NONE || !keys.length;
     $("q-save").textContent = keys.length > 1 ? `${keys.length} Termine freigeben` : "Termin freigeben";
     if (qCal) qCal.render();
   }
   function setupPanel() {
-    if (qCal) { qCal.setMarks(courseMarks()); return; }
+    if (qCal) {
+      qCal.setMarks(courseMarks());
+      // Auf einem anderen Gerät geänderte Orte hier ebenfalls zeigen
+      loadLocations().then(changed => { if (changed) renderChips(); });
+      return;
+    }
     qCal = EHFYCalendar($("q-cal"), {
       marks: courseMarks(),
       selected: qSel,
@@ -229,33 +274,39 @@
     const b = ev.target.closest("[data-i]");
     if (!b) return;
     qIndex = Number(b.dataset.i);
-    const l = qList[qIndex];
-    $("q-loc").value = l.name || "";
-    $("q-addr").value = l.address || "";
-    $("q-start").value = l.start;
-    $("q-end").value = l.end;
-    $("q-cap").value = l.capacity ?? cfg.defaultCapacity;
-    $("q-note").value = "";
-    $("q-online").checked = true;
-    $("q-error").textContent = "";
-    $("q-remember-msg").textContent = "";
-    // Der freie Knopf braucht zuerst einen Namen
-    if (l.free && !l.name) { $("q-details").open = true; $("q-loc").focus(); }
+    if (qIndex === NEW) {
+      fillForm({});
+      $("q-details").open = true;
+      $("q-loc").focus();
+    } else {
+      fillForm(qList[qIndex]);
+    }
     renderQ();
   });
   $("q-loc").addEventListener("change", () => {
-    const l = qList.find(x => x.name && x.name.toLowerCase() === $("q-loc").value.trim().toLowerCase());
+    const l = locByName($("q-loc").value);
     if (l && !$("q-addr").value.trim()) $("q-addr").value = l.address;
   });
-  // Angaben dauerhaft für den gewählten Knopf merken (auch der freie Knopf)
+  // Ort speichern: der gewählte Knopf wird geändert, sonst kommt ein neuer dazu
   $("q-remember").onclick = async () => {
-    if (qIndex < 0) return;
-    qList[qIndex] = { ...qList[qIndex], name: $("q-loc").value.trim(), address: $("q-addr").value.trim(), start: $("q-start").value, end: $("q-end").value, capacity: parseInt($("q-cap").value, 10) || 0 };
-    const settings = await db.getSettings().catch(() => ({}));
-    await db.saveSettings({ ...settings, locations: qList });
-    bankData = null;
-    $("q-remember-msg").textContent = "Gespeichert ✓ – kommt mit „Online stellen“ auf deine anderen Geräte.";
+    const data = formLocation();
+    if (!data.name) { $("q-remember-msg").textContent = "Bitte einen Namen für den Ort eintragen."; $("q-loc").focus(); return; }
+    const same = qList.findIndex(l => l.name.toLowerCase() === data.name.toLowerCase());
+    if (same >= 0 && same !== qIndex) { $("q-remember-msg").textContent = `„${data.name}“ gibt es schon.`; return; }
+    if (qIndex >= 0) qList[qIndex] = { ...qList[qIndex], ...data };
+    else { qList.push(data); qIndex = qList.length - 1; }
     renderQ();
+    await storeWithMessage("Gespeichert");
+  };
+  $("q-delete").onclick = async () => {
+    if (qIndex < 0) return;
+    if (!confirm(`„${qList[qIndex].name}“ aus der Leiste löschen? Bereits eingetragene Termine bleiben bestehen.`)) return;
+    qList.splice(qIndex, 1);
+    qIndex = NONE;
+    fillForm({});
+    $("q-details").open = false;
+    renderQ();
+    await storeWithMessage("Gelöscht");
   };
   $("q-save").onclick = async () => {
     const start = $("q-start").value, end = $("q-end").value, loc = $("q-loc").value.trim();
@@ -276,6 +327,17 @@
           capacity: parseInt($("q-cap").value, 10) || 0, note: $("q-note").value.trim() || null,
           status: "offen", online_booking: $("q-online").checked
         });
+      }
+      // Geänderte Angaben merkt sich der Ort; ein neuer Name wird ein neuer Knopf
+      const data = formLocation();
+      const before = JSON.stringify(qList);
+      qIndex = qList.findIndex(l => l.name.toLowerCase() === data.name.toLowerCase());
+      if (qIndex < 0) { qList.push(data); qIndex = qList.length - 1; }
+      else qList[qIndex] = { ...qList[qIndex], ...data };
+      if (JSON.stringify(qList) !== before) {
+        await db.saveSettings({ ...(await db.getSettings()), locations: qList });
+        bankData = null;
+        $("loc-list").innerHTML = qList.map(l => `<option value="${esc(l.name)}">`).join("");
       }
       qSel.clear();
       // Freigeben heißt: gleich online. Ohne Internet bleibt es für „Online stellen“ gespeichert.

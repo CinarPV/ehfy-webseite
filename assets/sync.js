@@ -156,10 +156,23 @@
     }
   }
 
+  // Nur die Einstellungen (z. B. Orte) übertragen, ohne andere Änderungen zu veröffentlichen.
+  // Ergebnis: true = in der Datenbank, false = bleibt für „Online stellen“ liegen.
+  async function pushSettings() {
+    if (!isOnline() || syncing) return false;
+    const op = outbox.find(o => o.type === "settings");
+    if (!op) return true;
+    await remote.saveSettings(op.value);
+    outbox = outbox.filter(o => o !== op);
+    await persist();
+    notify();
+    return true;
+  }
+
   // ---------- Dieselbe Schnittstelle wie EHFY_DB ----------
   window.EHFY_DB = {
     live: remote.live,
-    status, sync, isOnline, pull,
+    status, sync, isOnline, pull, pushSettings,
     clearNew() { newRegs = 0; notify(); },
     savePushSubscription: (s, d) => remote.savePushSubscription(s, d),
     removePushSubscription: e => remote.removePushSubscription(e),
