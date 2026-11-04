@@ -134,6 +134,23 @@ Oben in der Verwaltung zeigt eine Leiste, ob du online bist und wie viele Änder
 - Ändern Mac und iPhone denselben Eintrag, gilt der Stand, der zuletzt online gestellt wurde. Deshalb am besten nach dem Bearbeiten direkt online stellen.
 - **Abmelden** löscht die lokalen Daten vom Gerät. Teilnehmerdaten liegen sonst auf dem Gerät: Bitte Geräte-Code bzw. Passwort am Mac und iPhone aktiv lassen.
 
+## Plätze jederzeit ändern
+
+In der Terminliste und in der Teilnehmeransicht ändert **− / +** die maximale Teilnehmerzahl sofort.
+Damit Kunden die neue Zahl sehen, danach **„Online stellen“** drücken. Bereits angemeldete Personen bleiben angemeldet, auch wenn du unter ihre Zahl gehst.
+
+## Push-Mitteilungen bei neuen Anmeldungen
+
+1. Schlüsselpaar erzeugen und mir melden: Der öffentliche Teil kommt in `assets/config.js` (`vapidPublicKey`),
+   der private nur in die Supabase-Secrets.
+2. In Supabase die Funktion **`anmeldung-push`** anlegen (Inhalt aus `supabase/functions/anmeldung-push/index.ts`).
+3. **Edge Functions → Secrets**: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` = `mailto:ehfy@web.de`.
+4. **Database → Webhooks**: zweiten Hook für Tabelle **registrations**, Ereignis **Insert**, Funktion **anmeldung-push**.
+5. In der App unter **Einstellungen → Mitteilungen** auf jedem Gerät einschalten.
+   Auf dem **iPhone** geht das nur in der installierten App vom Home-Bildschirm (ab iOS 16.4).
+
+Die Mitteilung zeigt Name, Kurstag und Ort – auch auf dem Sperrbildschirm.
+
 ## Quittungen und Rechnungen per E-Mail senden
 
 - In **Rechnungen** bei einem Beleg auf **„E-Mail“** tippen – oder in der Teilnehmerliste „Drucken …“ →

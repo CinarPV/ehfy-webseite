@@ -34,6 +34,7 @@
   let outbox = [];
   let syncing = false;
   let lastError = "";
+  let newRegs = 0;
 
   const ready = opened.then(async () => {
     state = (await kvGet("state").catch(() => null)) || empty();
@@ -48,7 +49,7 @@
   const stripCourse = ({ booked, registrations, ...row }) => row;
 
   function status() {
-    return { live: remote.live, online: isOnline(), pending: outbox.length, lastSync: state.lastSync, syncing, error: lastError };
+    return { live: remote.live, online: isOnline(), pending: outbox.length, lastSync: state.lastSync, syncing, error: lastError, newRegs };
   }
   function notify() { window.dispatchEvent(new CustomEvent("ehfy-sync", { detail: status() })); }
   window.addEventListener("online", () => { notify(); pull().catch(() => {}); });
@@ -116,6 +117,11 @@
       remote.listCourses(), remote.listAllRegistrations(), remote.listAllInvoices(), remote.getSettings()
     ]);
     const next = { courses: courses.map(stripCourse), regs, invoices, settings: settings || {}, lastSync: new Date().toISOString() };
+    // Neue Anmeldungen seit dem letzten Stand zählen
+    if (state.lastSync) {
+      const known = new Set(state.regs.map(r => r.id));
+      newRegs += regs.filter(r => !known.has(r.id) && r.message !== "manuell eingetragen").length;
+    }
     outbox.forEach(op => applyOp(next, op));
     state = next;
     await persist();
@@ -147,7 +153,10 @@
   // ---------- Dieselbe Schnittstelle wie EHFY_DB ----------
   window.EHFY_DB = {
     live: remote.live,
-    status, sync, isOnline,
+    status, sync, isOnline, pull,
+    clearNew() { newRegs = 0; notify(); },
+    savePushSubscription: (s, d) => remote.savePushSubscription(s, d),
+    removePushSubscription: e => remote.removePushSubscription(e),
     isPending: id => outbox.some(o => (o.row && o.row.id === id) || o.id === id || (o.row && o.row.course_id === id)),
 
     async hasSession() {
@@ -258,8 +267,9 @@
     }
   };
 
-  // Beim Zurückkehren in die App neue Anmeldungen holen
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && localStorage.getItem(FLAG) === "1") pull().catch(() => {});
-  });
+  // Neue Anmeldungen holen: beim Zurückkehren in die App, jede Minute und bei einer Push-Mitteilung
+  const refresh = () => { if (document.visibilityState === "visible" && localStorage.getItem(FLAG) === "1") pull().catch(() => {}); };
+  document.addEventListener("visibilitychange", refresh);
+  setInterval(refresh, 60000);
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data === "neue-anmeldung") refresh(); });
 })();

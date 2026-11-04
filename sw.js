@@ -1,6 +1,6 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v6";
+const CACHE = "ehfy-app-v7";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
@@ -33,4 +33,25 @@ self.addEventListener("fetch", e => {
       })
       .catch(() => caches.match(req, { ignoreSearch: true }))
   );
+});
+
+// Push-Mitteilung bei neuer Anmeldung
+self.addEventListener("push", e => {
+  let data = {};
+  try { data = e.data.json(); } catch (err) { /* ohne Inhalt */ }
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(data.title || "Neue Anmeldung", {
+      body: data.body || "Es gibt eine neue Anmeldung.",
+      icon: "assets/icon-192.png", badge: "assets/icon-192.png", tag: "anmeldung-" + Date.now()
+    }),
+    self.clients.matchAll({ type: "window" }).then(list => list.forEach(c => c.postMessage("neue-anmeldung")))
+  ]));
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    const open = list.find(c => c.url.includes("admin.html"));
+    return open ? open.focus() : self.clients.openWindow("admin.html");
+  }));
 });

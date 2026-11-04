@@ -275,6 +275,18 @@ begin
 end $$;
 grant execute on function public.create_invoice(text, uuid, jsonb, jsonb, date, date, text, text) to authenticated;
 
+-- ---------- Geräte für Push-Mitteilungen ----------
+create table if not exists public.push_subscriptions (
+  endpoint text primary key,
+  subscription jsonb not null,
+  device text,
+  created_at timestamptz not null default now()
+);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists "admin_push" on public.push_subscriptions;
+create policy "admin_push" on public.push_subscriptions
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
 -- ---------- Bankverbindung und Steuernummer ----------
 -- Stehen nicht in den öffentlichen Webseiten-Dateien, sondern nur hier (nur für das Verwaltungs-Konto).
 create table if not exists public.app_settings (

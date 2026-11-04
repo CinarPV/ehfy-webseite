@@ -85,7 +85,10 @@
           <td><strong>${fmtShortDate(c.starts_at)}</strong></td>
           <td>${fmtRange(c.starts_at, c.ends_at)}</td>
           <td>${esc(c.location)}</td>
-          <td><strong>${c.booked}</strong> / ${c.capacity}</td>
+          <td><span class="cap"><strong>${c.booked}</strong> /
+            <button class="cap-btn" data-act="cap-down" data-id="${c.id}" aria-label="Ein Platz weniger">−</button>
+            <b>${c.capacity}</b>
+            <button class="cap-btn" data-act="cap-up" data-id="${c.id}" aria-label="Ein Platz mehr">+</button></span></td>
           <td>${pill}${db.isPending(c.id) ? '<br><span class="small muted">noch nicht online</span>' : ""}</td>
           <td><div class="btn-row">
             <button class="btn btn-sm" data-act="people" data-id="${c.id}">Teilnehmer</button>
@@ -112,6 +115,10 @@
     const c = courses.find(x => x.id === b.dataset.id);
     if (b.dataset.act === "edit") openCourseDialog(c);
     if (b.dataset.act === "people") openParticipants(c);
+    if (b.dataset.act === "cap-up" || b.dataset.act === "cap-down") {
+      const capacity = Math.max(0, c.capacity + (b.dataset.act === "cap-up" ? 1 : -1));
+      try { await db.saveCourse({ ...c, capacity }); await loadCourses(); } catch (e) { alert(e.message); }
+    }
     if (b.dataset.act === "print") {
       try {
         const people = (await db.listRegistrations(c.id)).filter(r => r.status !== "storniert").sort(byName);
@@ -307,6 +314,7 @@
     const active = regs.filter(r => r.status !== "storniert");
     $("p-sub").textContent = `${fmtRange(current.starts_at, current.ends_at)} · ${current.location} · ${active.length} von ${current.capacity} Plätzen belegt` +
       (current.status === "abgesagt" ? " · TERMIN ABGESAGT" : "");
+    $("p-cap-value").textContent = current.capacity;
     $("p-mail").href = mailtoAll(regs, current, false);
     const sorted = [...active.sort(byName), ...regs.filter(r => r.status === "storniert").sort(byName)];
     let n = 0;
@@ -342,6 +350,13 @@
     if (!confirm(`Anmeldung von ${r.first_name} ${r.last_name} endgültig löschen?`)) return;
     try { await db.deleteRegistration(r.id); await loadRegs(); } catch (e) { alert(e.message); }
   });
+
+  async function changeCapacity(delta) {
+    current = { ...current, capacity: Math.max(0, current.capacity + delta) };
+    try { await db.saveCourse(current); await loadRegs(); } catch (e) { alert(e.message); }
+  }
+  $("p-cap-down").onclick = () => changeCapacity(-1);
+  $("p-cap-up").onclick = () => changeCapacity(1);
 
   $("back").onclick = async () => {
     $("participants-view").classList.add("hidden");
@@ -406,6 +421,7 @@
     $("sync-dot").className = "sync-dot " + (st.online ? "on" : "off");
     const parts = [st.online ? "Online" : "Offline – du arbeitest auf diesem Gerät"];
     parts.push(st.pending ? `${st.pending} Änderung${st.pending === 1 ? "" : "en"} noch nicht online` : "Alles online");
+    if (st.newRegs) parts.unshift(`${st.newRegs} neue Anmeldung${st.newRegs === 1 ? "" : "en"}`);
     if (st.lastSync) parts.push(`Stand ${new Date(st.lastSync).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`);
     if (!st.live) parts.push("Demo: nur dieses Gerät");
     $("sync-text").textContent = st.error || parts.join(" · ");
@@ -413,13 +429,13 @@
     $("sync-btn").disabled = !st.online || st.syncing;
     $("sync-btn").textContent = st.syncing ? "Wird übertragen …" : st.pending ? `Online stellen (${st.pending})` : "Aktualisieren";
   }
-  $("sync-btn").onclick = () => db.sync().catch(() => {});
+  $("sync-btn").onclick = () => { db.clearNew(); db.sync().catch(() => {}); };
   let lastView = "";
   window.addEventListener("ehfy-sync", () => {
     renderSync();
     // Listen auffrischen, aber nur wenn sich etwas geändert hat und kein Fenster offen ist
     if (document.querySelector("dialog[open]")) return;
-    const view = JSON.stringify([db.status().lastSync, db.status().pending]);
+    const view = JSON.stringify([db.status().lastSync, db.status().pending, db.status().newRegs]);
     if (view === lastView) return;
     lastView = view;
     if (!$("courses-view").classList.contains("hidden")) loadCourses();
@@ -435,7 +451,7 @@
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
-    if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); }
+    if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
   });
 
   // ---------- Absender: öffentliche Angaben + Bankverbindung aus der Verwaltung ----------
@@ -797,6 +813,60 @@
       await invoicePdf(inv, win);
     } catch (e) { if (win) win.close(); $("iv-error").textContent = e.message; }
   });
+
+  // ---------- Push-Mitteilungen auf diesem Gerät ----------
+  const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const b64ToBytes = s => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=")), c => c.charCodeAt(0));
+  const pushMsg = t => { $("push-status").textContent = t; };
+
+  async function renderPush() {
+    $("push-on").classList.add("hidden");
+    $("push-off").classList.add("hidden");
+    $("push-test").classList.add("hidden");
+    if (isIos && !appMode) return pushMsg("Auf dem iPhone gehen Mitteilungen nur in der installierten App: In Safari auf Teilen → „Zum Home-Bildschirm“, dann die App von dort öffnen.");
+    if (!pushSupported) return pushMsg("Dieser Browser unterstützt keine Mitteilungen.");
+    if (Notification.permission === "denied") return pushMsg("Mitteilungen sind für diese App blockiert. Du kannst sie in den Einstellungen deines Geräts wieder erlauben.");
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) {
+      $("push-off").classList.remove("hidden");
+      $("push-test").classList.remove("hidden");
+      pushMsg("Eingeschaltet: Dieses Gerät meldet neue Anmeldungen.");
+    } else {
+      $("push-on").classList.remove("hidden");
+      if (Notification.permission === "granted") $("push-test").classList.remove("hidden");
+      pushMsg("Ausgeschaltet.");
+    }
+  }
+  $("push-on").onclick = async () => {
+    try {
+      if (await Notification.requestPermission() !== "granted") return renderPush();
+      if (!db.live || !cfg.vapidPublicKey) {
+        pushMsg("Erlaubt. Echte Mitteilungen kommen erst, wenn Supabase eingerichtet ist – „Test-Mitteilung“ funktioniert schon.");
+        $("push-test").classList.remove("hidden");
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(cfg.vapidPublicKey) });
+      await db.savePushSubscription(sub.toJSON(), navigator.userAgent.slice(0, 120));
+      await renderPush();
+    } catch (e) { pushMsg("Hat nicht geklappt: " + e.message); }
+  };
+  $("push-off").onclick = async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) { await db.removePushSubscription(sub.endpoint); await sub.unsubscribe(); }
+      await renderPush();
+    } catch (e) { pushMsg("Hat nicht geklappt: " + e.message); }
+  };
+  $("push-test").onclick = async () => {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification("Neue Anmeldung", { body: "Max Mustermann\nSo., 08.11. · Siegen (Test)", icon: "assets/icon-192.png" });
+    } catch (e) { pushMsg("Hat nicht geklappt: " + e.message); }
+  };
 
   // ---------- Vorlagen ----------
   async function renderTemplates() {

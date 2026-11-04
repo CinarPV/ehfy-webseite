@@ -27,6 +27,9 @@ window.EHFY_CONFIG = {
   cancelHours: 48,
   prices: { kurs: 50, komplett: 55 },
 
+  // Öffentlicher Schlüssel für Push-Mitteilungen (wird bei der Einrichtung eingetragen, siehe ANLEITUNG.md)
+  vapidPublicKey: "",
+
   // Absender für Quittungen und Rechnungen
   issuer: {
     name: "Erste Hilfe for you",

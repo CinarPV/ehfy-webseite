@@ -51,7 +51,7 @@
           <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
             <button data-view="termine" class="active">Termine</button>
             <button data-view="rechnungen">Rechnungen</button>
-            <button data-view="vorlagen">Vorlagen &amp; Bank</button>
+            <button data-view="vorlagen">Einstellungen</button>
           </div>
 
           <div id="courses-view" data-section="termine">
@@ -79,6 +79,10 @@
                 <button class="btn btn-sm btn-outline no-print" id="back">← Zurück zu den Terminen</button>
                 <h2 style="margin:14px 0 4px" id="p-title"></h2>
                 <p class="muted" style="margin:0" id="p-sub"></p>
+                <p class="cap no-print" style="margin:10px 0 0">Max. Teilnehmer:
+                  <button class="cap-btn" id="p-cap-down" type="button" aria-label="Ein Platz weniger">−</button>
+                  <b id="p-cap-value"></b>
+                  <button class="cap-btn" id="p-cap-up" type="button" aria-label="Ein Platz mehr">+</button></p>
               </div>
               <div class="btn-row no-print">
                 <button class="btn btn-sm btn-teal" id="p-add">+ Teilnehmer eintragen</button>
@@ -129,8 +133,18 @@
 
           <!-- Vorlagen -->
           <div id="templates-view" class="hidden" data-section="vorlagen">
-            <h2 style="font-size:1.4rem">Vorlagen</h2>
-            <p class="lead" style="margin-bottom:24px">Lade hier deine leeren PDF-Vorlagen hoch. Sie werden geschützt gespeichert – nur du kannst sie sehen, sie sind nicht öffentlich auf der Webseite.</p>
+            <h2 style="font-size:1.4rem">Einstellungen</h2>
+            <div class="card" style="margin-bottom:20px">
+              <h3>Mitteilungen bei neuen Anmeldungen</h3>
+              <p class="muted small" id="push-status"></p>
+              <div class="btn-row">
+                <button class="btn btn-sm hidden" id="push-on" type="button">Auf diesem Gerät einschalten</button>
+                <button class="btn btn-sm btn-ghost hidden" id="push-off" type="button">Ausschalten</button>
+                <button class="btn btn-sm btn-ghost hidden" id="push-test" type="button">Test-Mitteilung</button>
+              </div>
+            </div>
+            <h3 style="margin-top:8px">Vorlagen</h3>
+            <p class="muted small" style="margin-bottom:14px">Deine leeren PDF-Vorlagen. Sie werden geschützt gespeichert und sind nicht öffentlich auf der Webseite.</p>
             <div class="grid grid-2" id="tpl-cards"></div>
             <div class="card" style="margin-top:20px">
               <h3>Bankverbindung und Steuernummer</h3>
@@ -184,7 +198,7 @@
       <h2 id="cd-title" style="margin-top:0">Neuer Termin</h2>
       <div class="form-grid">
         <div class="field"><label for="cd-date">Datum *</label><input id="cd-date" type="date" required></div>
-        <div class="field"><label for="cd-cap">Max. Teilnehmer *</label><input id="cd-cap" type="number" min="1" max="99" required></div>
+        <div class="field"><label for="cd-cap">Max. Teilnehmer *</label><input id="cd-cap" type="number" min="0" max="999" required></div>
         <div class="field"><label for="cd-start">Beginn *</label><input id="cd-start" type="time" required></div>
         <div class="field"><label for="cd-end">Ende</label><input id="cd-end" type="time"></div>
         <div class="field"><label for="cd-loc">Ort (öffentlich sichtbar) *</label><input id="cd-loc" list="loc-list" required></div>
@@ -219,7 +233,7 @@
           <div class="form-grid">
             <div class="field"><label for="q-start">Beginn</label><input id="q-start" type="time" required></div>
             <div class="field"><label for="q-end">Ende</label><input id="q-end" type="time"></div>
-            <div class="field"><label for="q-cap">Max. Teilnehmer</label><input id="q-cap" type="number" min="1" max="99" required></div>
+            <div class="field"><label for="q-cap">Max. Teilnehmer</label><input id="q-cap" type="number" min="0" max="999" required></div>
             <div class="field"><label for="q-loc">Ort (öffentlich)</label><input id="q-loc" list="loc-list" required></div>
             <div class="field full"><label for="q-addr">Genaue Adresse (nach Anmeldung sichtbar)</label><input id="q-addr" required></div>
             <div class="field full"><label for="q-note">Hinweis (optional, öffentlich)</label><input id="q-note"></div>

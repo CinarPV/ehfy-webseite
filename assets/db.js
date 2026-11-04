@@ -69,6 +69,13 @@
       async addRegistration(r) {
         check(await sb.from("registrations").insert(r));
       },
+      // Geräte für Push-Mitteilungen
+      async savePushSubscription(subscription, device) {
+        check(await sb.from("push_subscriptions").upsert({ endpoint: subscription.endpoint, subscription, device }));
+      },
+      async removePushSubscription(endpoint) {
+        check(await sb.from("push_subscriptions").delete().eq("endpoint", endpoint));
+      },
       // Für den Abgleich der Verwaltung (assets/sync.js)
       async putCourse(row) { check(await sb.from("courses").upsert(row)); },
       async putRegistration(row) { check(await sb.from("registrations").upsert(row)); },
@@ -164,8 +171,8 @@
       return { courses, regs };
     }
     function load() {
-      if (memory) return memory;
-      try { memory = JSON.parse(localStorage.getItem(KEY)); } catch (e) { memory = null; }
+      // Immer frisch lesen: Eine Anmeldung aus einem anderen Tab soll beim Aktualisieren erscheinen
+      try { memory = JSON.parse(localStorage.getItem(KEY)) || memory; } catch (e) { /* bleibt im Speicher */ }
       if (!memory) { memory = seed(); save(); }
       return memory;
     }
@@ -227,6 +234,8 @@
       },
       async deleteCourse(id) { const db = load(); db.courses = db.courses.filter(c => c.id !== id); db.regs = db.regs.filter(r => r.course_id !== id); save(); },
       async listRegistrations(courseId) { return load().regs.filter(r => r.course_id === courseId); },
+      async savePushSubscription() { /* im Demo-Modus nur Test-Mitteilung */ },
+      async removePushSubscription() { },
       async putCourse(row) {
         const db = load(), i = db.courses.findIndex(c => c.id === row.id);
         if (i >= 0) db.courses[i] = { ...db.courses[i], ...row }; else db.courses.push(row);
