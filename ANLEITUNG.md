@@ -45,27 +45,25 @@ Hinweis: Kostenlose Supabase-Projekte werden nach ca. 1 Woche ohne Aktivität pa
 
 ## Schritt 1b: E-Mail bei jeder neuen Anmeldung – ca. 10 Minuten
 
-Bei jeder Online-Anmeldung bekommst du eine E-Mail mit allen Daten.
-Betreff: **„Ersthilfeanmeldung – 07.11.2026 (Burbach)“**. Wie die Mail aussieht: `supabase/mail-vorschau.html`.
-Antwortest du auf die Mail, geht deine Antwort direkt an den Teilnehmer.
+Bei jeder Online-Anmeldung gehen zwei E-Mails über `info@ehfy.de` raus:
+die **Bestätigung an den Teilnehmer** (mit Termin, Ort und Absage-Link) und die **Benachrichtigung an dich**
+mit allen Daten. Betreff an dich: **„Ersthilfeanmeldung – 07.11.2026 (Burbach)“**.
+Antwortest du auf die Benachrichtigung, geht deine Antwort direkt an den Teilnehmer.
 
-1. Auf **https://resend.com** ein kostenloses Konto **mit ehfy@web.de** anlegen
-   (bis 3.000 Mails/Monat kostenlos). **API Keys → Create API Key** → Schlüssel kopieren.
-2. In Supabase: **Edge Functions → Deploy a new function → Via Editor**, Name: `anmeldung-mail`.
+1. In Supabase: **Edge Functions → Deploy a new function → Via Editor**, Name: `anmeldung-mail`.
    Den kompletten Inhalt von `supabase/functions/anmeldung-mail/index.ts` einfügen → **Deploy**.
-3. **Edge Functions → Secrets** → zwei Einträge anlegen:
-   - `RESEND_API_KEY` = der kopierte Schlüssel von Resend
+2. **Edge Functions → Secrets** → diese Einträge anlegen:
+   - `IONOS_USER` = `info@ehfy.de`
+   - `IONOS_PASSWORD` = das Passwort des Postfachs info@ehfy.de (bleibt nur bei Supabase)
    - `NOTIFY_TO` = `ehfy@web.de`
-4. **Database → Webhooks → Create a new hook**:
+   - `SITE_URL` = `https://cinarpv.github.io/ehfy-webseite` (nach dem Domain-Umzug `https://www.ehfy.de`)
+3. **Database → Webhooks → Create a new hook**:
    Name `anmeldung-mail`, Tabelle **registrations**, Ereignis **Insert** anhaken,
    Typ **Supabase Edge Functions**, Funktion **anmeldung-mail** → **Create webhook**.
-5. Testen: eine Probe-Anmeldung auf der Webseite machen → die Mail sollte nach wenigen Sekunden da sein
-   (auch im Spam-Ordner nachsehen und als „kein Spam“ markieren).
+4. Testen: eine Probe-Anmeldung mit deiner eigenen E-Mail-Adresse machen. Beide Mails sollten nach wenigen Sekunden da sein
+   (auch im Spam-Ordner nachsehen). Klappt es nicht: **Edge Functions → anmeldung-mail → Logs**.
 
 Teilnehmer, die du selbst in der Verwaltung einträgst, lösen keine Mail aus.
-Solange keine eigene Domain bei Resend bestätigt ist, kommt die Mail von `onboarding@resend.dev` – das ist in Ordnung,
-da sie nur an dich geht. Später kannst du unter **Resend → Domains** `ehfy.de` bestätigen und das Secret
-`MAIL_FROM` = `EHfy Anmeldung <anmeldung@ehfy.de>` setzen.
 
 ## Schritt 1c: Vorlagen hochladen
 
