@@ -504,3 +504,12 @@ dialog::backdrop { background: rgba(10, 37, 64, .55); }
 @keyframes sr-pulse { 0% { transform: scale(1); } 40% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .sync-reminder.pulse { animation: none; } }
 body.has-reminder { padding-bottom: 90px; }
+
+/* Schülerdatenbank */
+.sc-list { display: grid; gap: 14px; }
+.sc-person { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.sc-person h3 { margin: 0; font-size: 1.1rem; }
+.sc-entry { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; display: grid; gap: 10px; }
+.sc-entry .sc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.sc-entry label { display: block; font-size: .8rem; color: var(--muted, #5a6b78); margin-bottom: 4px; }
+.sc-entry input[type=date] { width: 100%; max-width: 220px; }

@@ -27,11 +27,12 @@
 
   // Positionen in den Vorlagen (Punkte, Ursprung unten links, A4 = 595 × 842)
   const CERT = {
-    name: { x: 150, y: 464.5, size: 12 },
-    birth: { x: 417, y: 464.5, size: 12 },
-    date: { x: 118, y: 416, size: 12 },
+    // Linien: von x1 bis x2, der Text steht immer mittig darauf
+    name: { x1: 145.5, x2: 376, y: 464.5, size: 12 },
+    birth: { x1: 414, x2: 494.5, y: 464.5, size: 12 },
+    date: { x1: 112.5, x2: 275.5, y: 418.5, size: 12 },
     infoYes: { x: 389.6, y: 350.7 },
-    issued: { x: 151, y: 67, size: 11 }
+    issued: { x1: 146.5, x2: 247.5, y: 67, size: 11 }
   };
   const SHEET = {
     date: { x: 166, y: 652, size: 12 },
@@ -44,6 +45,16 @@
   };
 
   const text = (page, s, p, font, color = C.ink) => page.drawText(String(s || ""), { x: p.x, y: p.y, size: p.size, font, color: rgb(color) });
+
+  // Mittig auf eine Linie schreiben; zu langer Text wird kleiner, damit er auf die Linie passt
+  function centered(page, s, line, font) {
+    const value = String(s || "");
+    const room = line.x2 - line.x1 - 4;
+    let size = line.size;
+    while (size > 6 && font.widthOfTextAtSize(value, size) > room) size -= 0.25;
+    const width = font.widthOfTextAtSize(value, size);
+    page.drawText(value, { x: line.x1 + (line.x2 - line.x1 - width) / 2, y: line.y, size, font, color: rgb(C.ink) });
+  }
 
   // Eine Seite der Vorlage pro Teilnehmer, ausgefüllt
   async function fillTemplate(templateBytes, people, loadFont, fill) {
@@ -59,12 +70,12 @@
 
   function certificates(templateBytes, course, people, loadFont, opts) {
     return fillTemplate(templateBytes, people, loadFont, (page, r, f) => {
-      text(page, `${r.first_name} ${r.last_name}`, CERT.name, f.bold);
-      text(page, fmtBirth(r.birth_date), CERT.birth, f.bold);
-      text(page, fmtDate(course.starts_at), CERT.date, f.bold);
+      centered(page, `${r.first_name} ${r.last_name}`, CERT.name, f.bold);
+      centered(page, fmtBirth(r.birth_date), CERT.birth, f.bold);
+      centered(page, fmtDate(course.starts_at), CERT.date, f.bold);
       // Die Anschrift der Ausbildungsstelle (Siegen) steht fest in der Vorlage und bleibt immer gleich
       if (opts.infoLeafletHanded) text(page, "X", { x: CERT.infoYes.x - 4.6, y: CERT.infoYes.y - 3.6, size: 10 }, f.bold);
-      text(page, fmtDate(course.starts_at), CERT.issued, f.bold);
+      centered(page, fmtDate(course.starts_at), CERT.issued, f.bold);
     });
   }
 

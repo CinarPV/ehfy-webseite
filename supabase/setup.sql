@@ -41,6 +41,9 @@ create index if not exists registrations_course_idx on public.registrations(cour
 alter table public.registrations add column if not exists street text;
 alter table public.registrations add column if not exists zip text;
 alter table public.registrations add column if not exists city text;
+alter table public.registrations add column if not exists sehtest_on date;
+alter table public.registrations add column if not exists sehtest_none boolean not null default false;
+alter table public.registrations add column if not exists protocol_added_on date;
 
 -- Wer hier eingetragen ist, darf die Verwaltung benutzen.
 create table if not exists public.admins (

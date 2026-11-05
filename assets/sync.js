@@ -209,6 +209,7 @@
     async deleteCourse(id) { await queue({ type: "course-del", id }); },
 
     // Teilnehmer
+    async listAllRegistrations() { await ready; return state.regs.map(r => ({ ...r })); },
     async listRegistrations(courseId) { await ready; return state.regs.filter(r => r.course_id === courseId).map(r => ({ ...r })); },
     async addRegistration(r) {
       await queue({ type: "reg-put", row: { id: uid(), status: "angemeldet", created_at: new Date().toISOString(), ...r } });
@@ -236,6 +237,12 @@
       if (!isOnline()) throw new Error("Vorlagen lassen sich nur mit Internet hochladen.");
       await remote.saveTemplate(key, file);
       await kvPut("tpl-" + key, new Uint8Array(await file.arrayBuffer())).catch(() => {});
+    },
+
+    async removeTemplate(key) {
+      if (!isOnline()) throw new Error("Dateien lassen sich nur mit Internet entfernen.");
+      await remote.removeTemplate(key);
+      await kvPut("tpl-" + key, null).catch(() => {});
     },
 
     // Rechnungen und Quittungen

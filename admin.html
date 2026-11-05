@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 16</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 17</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -50,6 +50,7 @@
           </div>
           <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
             <button data-view="termine" class="active">Termine</button>
+            <button data-view="schueler">Schüler</button>
             <button data-view="rechnungen">Rechnungen</button>
             <button data-view="vorlagen">Einstellungen</button>
           </div>
@@ -137,6 +138,16 @@
           </div>
 
           <!-- Rechnungen -->
+          <div id="students-view" class="hidden" data-section="schueler">
+            <h2 style="margin:0 0 4px;font-size:1.4rem">Schüler</h2>
+            <p class="muted small" id="sc-count"></p>
+            <div class="field" style="margin:12px 0 18px"><label for="sc-search">Suchen nach Name, Geburtsdatum, E-Mail, Telefon oder Ort</label>
+              <input id="sc-search" type="search" autocomplete="off" placeholder="z. B. Müller oder 01.02.2008"></div>
+            <p class="form-error" id="sc-error" role="alert"></p>
+            <div id="sc-list" class="sc-list"></div>
+            <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">
+          </div>
+
           <div id="invoices-view" class="hidden" data-section="rechnungen">
             <div class="admin-bar no-print" style="margin-bottom:16px">
               <h2 style="margin:0;font-size:1.4rem">Rechnungen &amp; Quittungen</h2>

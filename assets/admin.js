@@ -437,7 +437,7 @@
     if (!b) return;
     const r = regs.find(x => x.id === b.dataset.del);
     if (!confirm(`Anmeldung von ${r.first_name} ${r.last_name} endgültig löschen?`)) return;
-    try { await db.deleteRegistration(r.id); await loadRegs(); } catch (e) { alert(e.message); }
+    try { await removeRegistration(r); await loadRegs(); } catch (e) { alert(e.message); }
   });
 
   async function changeCapacity(delta) {
@@ -583,6 +583,7 @@
     if (!$("courses-view").classList.contains("hidden")) loadCourses();
     if (!$("participants-view").classList.contains("hidden") && current) loadRegs();
     if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
+    if (!$("students-view").classList.contains("hidden")) loadStudents();
   });
 
   // ---------- Bereiche: Termine, Rechnungen, Vorlagen ----------
@@ -592,8 +593,148 @@
     [...$("main-tabs").children].forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
+    if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
+  });
+
+  // ---------- Schülerdatenbank: alle Anmeldungen aller Kurse, je Person zusammengefasst ----------
+  let studentRegs = [], studentCourses = {};
+  const dayOf = iso => (iso ? localDate(new Date(iso)) : "");
+  const birthText = d => (d ? new Date(d + "T12:00").toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }) : "–");
+  // Sehtest: eigenes Datum, sonst bei Komplettpaket der Kurstag
+  const sehtestDay = (r, c) => {
+    if (r.sehtest_none) return "";
+    if (r.sehtest_on) return r.sehtest_on;
+    if (r.package === "komplett" && !["storniert", "nicht_erschienen"].includes(r.status) && c) return dayOf(c.starts_at);
+    return "";
+  };
+  async function loadStudents() {
+    const [regsAll, list] = await Promise.all([db.listAllRegistrations(), db.listCourses()]);
+    studentRegs = regsAll;
+    studentCourses = Object.fromEntries(list.map(c => [c.id, c]));
+    renderStudents();
+  }
+  function renderStudents() {
+    if (document.activeElement && document.activeElement.matches("#sc-list input")) return;
+    const words = $("sc-search").value.toLowerCase().split(/\s+/).filter(Boolean);
+    const people = new Map();
+    for (const r of studentRegs) {
+      const c = studentCourses[r.course_id];
+      const hay = [r.first_name, r.last_name, birthText(r.birth_date), r.email, r.phone, c && c.location].join(" ").toLowerCase();
+      if (!words.every(w => hay.includes(w))) continue;
+      const key = `${r.last_name}|${r.first_name}|${r.birth_date || ""}`.toLowerCase();
+      if (!people.has(key)) people.set(key, []);
+      people.get(key).push(r);
+    }
+    const when = r => (studentCourses[r.course_id] ? studentCourses[r.course_id].starts_at : "");
+    const sorted = [...people.values()].map(l => l.sort((a, b) => when(b).localeCompare(when(a))))
+      .sort((a, b) => when(b[0]).localeCompare(when(a[0])));
+    $("sc-count").textContent = `${sorted.length} ${sorted.length === 1 ? "Person" : "Personen"} · Stand vom letzten Synchronisieren`;
+    const limit = 100;
+    $("sc-list").innerHTML = sorted.length ? sorted.slice(0, limit).map(entries => {
+      const p = entries[0];
+      return `<article class="sc-person">
+        <h3>${esc(p.last_name)}, ${esc(p.first_name)}</h3>
+        <p class="small muted" style="margin:2px 0 0">geb. ${birthText(p.birth_date)}${p.email ? ` · <a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}${p.phone ? ` · <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""}</p>
+        ${entries.map(r => studentEntry(r)).join("")}
+      </article>`;
+    }).join("") + (sorted.length > limit ? `<p class="muted small">Es werden die neuesten ${limit} angezeigt. Bitte die Suche genauer eingeben.</p>` : "")
+      : '<p class="muted">Keine Schüler gefunden.</p>';
+  }
+  function studentEntry(r) {
+    const c = studentCourses[r.course_id];
+    const off = r.status === "storniert" || !c;
+    return `<div class="sc-entry" data-reg="${r.id}">
+      <div class="sc-facts">
+        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? fmtRange(c.starts_at, c.ends_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}${esc(STATUS[r.status] || r.status)}</span></div>
+        <div><label for="sc-st-${r.id}">Sehtest am (leer = kein Sehtest)</label><input type="date" id="sc-st-${r.id}" data-sehtest value="${sehtestDay(r, c)}"></div>
+        <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
+      </div>
+      ${off ? "" : `<div class="btn-row">
+        <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-sc-print="quittung">Quittung</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-sc-print="rechnung">Rechnung</button>
+      </div>`}
+      <div><button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
+    </div>`;
+  }
+  // Anmeldung löschen; ein hinterlegtes Protokoll geht mit
+  async function removeRegistration(r) {
+    if (r.protocol_added_on) await db.removeTemplate(`protokolle/${r.id}`);
+    await db.deleteRegistration(r.id);
+  }
+  $("sc-search").addEventListener("input", renderStudents);
+  const protocolKey = id => `protokolle/${id}`;
+  let protoFor = null;
+  // Fotos werden zur PDF, damit jedes Protokoll gleich gedruckt werden kann
+  async function protocolPdf(file) {
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return file;
+    if (!/^image\/(jpeg|png)$/.test(file.type)) throw new Error("Bitte eine PDF-Datei oder ein Foto (JPG oder PNG) wählen.");
+    await ensurePdf();
+    const { PDFDocument } = window.PDFLib;
+    const pdf = await PDFDocument.create();
+    const bytes = await file.arrayBuffer();
+    const img = file.type === "image/png" ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+    const page = pdf.addPage([595.28, 841.89]);
+    const scale = Math.min(555 / img.width, 800 / img.height, 1);
+    page.drawImage(img, { x: (595.28 - img.width * scale) / 2, y: (841.89 - img.height * scale) / 2, width: img.width * scale, height: img.height * scale });
+    return new File([await pdf.save()], "protokoll.pdf", { type: "application/pdf" });
+  }
+  $("sc-file").addEventListener("change", async ev => {
+    const file = ev.target.files[0];
+    ev.target.value = "";
+    if (!file || !protoFor) return;
+    $("sc-error").textContent = "";
+    try {
+      await db.saveTemplate(protocolKey(protoFor), await protocolPdf(file));
+      await db.updateRegistration(protoFor, { protocol_added_on: localDate(new Date()) });
+      await loadStudents();
+    } catch (e) { $("sc-error").textContent = e.message; }
+  });
+  $("sc-list").addEventListener("change", async ev => {
+    const input = ev.target.closest("input[data-sehtest]");
+    if (!input) return;
+    const id = input.closest("[data-reg]").dataset.reg;
+    input.blur();
+    try {
+      await db.updateRegistration(id, input.value ? { sehtest_on: input.value, sehtest_none: false } : { sehtest_on: null, sehtest_none: true });
+      await loadStudents();
+    } catch (e) { $("sc-error").textContent = e.message; }
+  });
+  $("sc-list").addEventListener("click", async ev => {
+    const box = ev.target.closest("[data-reg]");
+    if (!box) return;
+    const r = studentRegs.find(x => x.id === box.dataset.reg);
+    const show = msg => { $("sc-error").textContent = msg; };
+    const printKind = ev.target.closest("[data-sc-print]");
+    if (printKind) return runDoc(printKind.dataset.scPrint, [r], studentCourses[r.course_id], show);
+    if (ev.target.closest("[data-sc-del]")) {
+      if (!confirm(`${r.first_name} ${r.last_name} endgültig aus der Liste löschen?`)) return;
+      try { await removeRegistration(r); await loadStudents(); } catch (e) { show(e.message); }
+      return;
+    }
+    const proto = ev.target.closest("[data-proto]");
+    if (!proto) return;
+    show("");
+    if (proto.dataset.proto === "add") { protoFor = r.id; $("sc-file").click(); return; }
+    if (proto.dataset.proto === "print") {
+      const win = openTab();
+      try {
+        const bytes = await db.getTemplate(protocolKey(r.id));
+        if (!bytes) throw new Error("Das Protokoll konnte nicht geladen werden.");
+        showPdf(bytes, `Protokoll_${r.last_name}_${r.first_name}.pdf`, win);
+      } catch (e) { if (win) win.close(); show(e.message); }
+      return;
+    }
+    if (proto.dataset.proto === "remove") {
+      if (!confirm(`Protokoll von ${r.first_name} ${r.last_name} endgültig entfernen?`)) return;
+      try {
+        await db.removeTemplate(protocolKey(r.id));
+        await db.updateRegistration(r.id, { protocol_added_on: null });
+        await loadStudents();
+      } catch (e) { show(e.message); }
+    }
   });
 
   // ---------- Absender: öffentliche Angaben + Bankverbindung aus der Verwaltung ----------
@@ -644,7 +785,7 @@
 
   async function template(key) {
     const bytes = await db.getTemplate(key);
-    if (!bytes) throw new Error(`Die Vorlage „${TEMPLATES[key]}“ fehlt noch. Bitte unter „Vorlagen“ hochladen.`);
+    if (!bytes) throw new Error(`Die Vorlage „${TEMPLATES[key]}“ fehlt noch. Bitte unter „Einstellungen“ hochladen.`);
     return bytes;
   }
 

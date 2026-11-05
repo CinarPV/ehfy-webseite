@@ -102,6 +102,9 @@
       async saveTemplate(key, file) {
         check(await sb.storage.from("vorlagen").upload(key + ".pdf", file, { upsert: true, contentType: "application/pdf" }));
       },
+      async removeTemplate(key) {
+        check(await sb.storage.from("vorlagen").remove([key + ".pdf"]));
+      },
       // Rechnungen und Quittungen
       async listInvoices(year) {
         return check(await sb.from("invoices").select("*").eq("year", year).order("seq", { ascending: false }));
@@ -248,6 +251,7 @@
         try { localStorage.setItem("ehfy-demo-tpl-" + key, btoa(bin)); }
         catch (e) { throw new Error("Die Vorlage ist zu groß für den Demo-Speicher dieses Browsers."); }
       },
+      async removeTemplate(key) { try { localStorage.removeItem("ehfy-demo-tpl-" + key); } catch (e) { /* egal */ } },
       async listInvoices(year) {
         return (load().invoices || []).filter(i => i.year === year).sort((a, b) => b.seq - a.seq);
       },

@@ -173,6 +173,7 @@ in der Fehlermeldung beim Senden bzw. unter Edge Functions → beleg-mail → Lo
 
 - `https://www.ehfy.de/admin.html` → mit deiner Supabase-E-Mail und deinem Passwort anmelden.
 - **Synchronisieren**: Beim Öffnen wird nichts abgeglichen. Änderungen bleiben auf dem Gerät, bis du „Synchronisieren“ drückst; das holt auch neue Anmeldungen. Eine Leiste erinnert dich daran, ebenso eine Nachfrage beim Zurückkehren oder Neuöffnen. Nur „Termin freigeben“ überträgt sofort.
+- **Schüler**: Hier findest du alle Anmeldungen aller Kurse mit Suche, Kursdatum und Sehtest-Datum. Protokolle (PDF oder Foto) fügst du je Schüler hinzu und druckst sie jederzeit, ebenso Bescheinigung, Quittung und Rechnung. „Aus der Liste löschen“ entfernt einen Schüler. Löschst du einen Termin, verschwinden auch seine Schülerdaten.
 - **Termin freigeben**: Ort antippen, Tag(e) im Kalender antippen, „Termin freigeben“. Geänderte Angaben (Adresse, Uhrzeit, Plätze) merkt sich der Ort automatisch; ein neu eingetippter Ort erscheint danach oben als Knopf.
 - **Orte verwalten**: „+ Neuer Ort“ legt einen Ort an. Unter „Ort ändern oder löschen, Uhrzeit, Plätze“ änderst oder entfernst du den gewählten Ort. Eingetragene Termine bleiben dabei bestehen. Die Orte gelten auf allen deinen Geräten.
 - **+ Neuer Termin**: Datum, Uhrzeit, Ort (öffentlich), genaue Adresse (sehen Teilnehmer erst nach der Anmeldung), max. Teilnehmer.
