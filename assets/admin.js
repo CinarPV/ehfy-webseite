@@ -390,8 +390,10 @@
   });
 
   // ---------- Teilnehmer ----------
+  const participantsStep = () => $("back").click();
   async function openParticipants(c) {
     current = c;
+    window.EHFYNav.push(participantsStep);
     $("courses-view").classList.add("hidden");
     $("participants-view").classList.remove("hidden");
     $("p-title").textContent = `${fmtDate(c.starts_at)}`;
@@ -449,6 +451,7 @@
   $("p-cap-up").onclick = () => changeCapacity(1);
 
   $("back").onclick = async () => {
+    window.EHFYNav.remove(participantsStep);
     $("participants-view").classList.add("hidden");
     $("courses-view").classList.remove("hidden");
     await loadCourses();
@@ -588,9 +591,13 @@
   });
 
   // ---------- Bereiche: Termine, Rechnungen, Vorlagen ----------
+  let navRestoring = false;
   $("main-tabs").addEventListener("click", ev => {
     const b = ev.target.closest("button[data-view]");
     if (!b) return;
+    // Für den Zurück-Knopf merken, woher du kommst
+    const was = $("main-tabs").querySelector("button.active");
+    if (was && was !== b && !navRestoring) window.EHFYNav.push(() => { navRestoring = true; was.click(); navRestoring = false; });
     [...$("main-tabs").children].forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }

@@ -17,9 +17,12 @@
     header.className = "site-header";
     header.innerHTML = `
       <div class="container">
-        <a class="brand" href="index.html" aria-label="Erste Hilfe for you – Startseite">
-          <span data-logo="compact"></span>
-        </a>
+        <div class="header-left">
+          <button class="back-btn no-print" id="back-btn" type="button" hidden>← Zurück</button>
+          <a class="brand" href="index.html" aria-label="Erste Hilfe for you – Startseite">
+            <span data-logo="compact"></span>
+          </a>
+        </div>
         <button class="nav-toggle" aria-expanded="false" aria-controls="main-nav">Menü</button>
         <nav class="nav" id="main-nav">
           ${links.map(([href, label, key, cls]) =>
@@ -34,6 +37,22 @@
       const open = nav.classList.toggle("open");
       toggle.setAttribute("aria-expanded", open);
     });
+
+    // Zurück-Knopf: erst innerhalb der Seite (z. B. Verwaltung), dann zur vorigen Seite oder zum Start
+    const back = header.querySelector("#back-btn");
+    const steps = [];
+    const cameFromSite = document.referrer.startsWith(location.origin) && document.referrer !== location.href;
+    const refresh = () => { back.hidden = !(steps.length || cameFromSite || !["start", "admin"].includes(page)); };
+    back.addEventListener("click", () => {
+      if (steps.length) { steps.pop()(); refresh(); window.scrollTo(0, 0); }
+      else if (cameFromSite) history.back();
+      else location.href = "index.html";
+    });
+    window.EHFYNav = {
+      push(step) { steps.push(step); refresh(); },
+      remove(step) { const i = steps.lastIndexOf(step); if (i >= 0) steps.splice(i, 1); refresh(); }
+    };
+    refresh();
   }
 
   const footer = document.getElementById("site-footer");

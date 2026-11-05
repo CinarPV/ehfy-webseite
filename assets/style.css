@@ -540,3 +540,9 @@ body.has-reminder { padding-bottom: 90px; }
 .att-folder > summary::after { margin-left: auto; }
 .att-folder > summary small { font-weight: 500; color: var(--muted, #5a6b78); }
 .att-body { padding: 0 16px 12px; }
+
+/* Zurück-Knopf im Kopfbereich */
+.header-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.back-btn { font: inherit; font-weight: 700; font-size: .86rem; white-space: nowrap; padding: 8px 12px; color: var(--ink); background: var(--soft); border: 2px solid var(--line); border-radius: 10px; cursor: pointer; }
+.back-btn:hover { border-color: var(--aid); }
+.back-btn[hidden] { display: none; }
