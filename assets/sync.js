@@ -209,6 +209,15 @@
     async deleteCourse(id) { await queue({ type: "course-del", id }); },
 
     // Teilnehmer
+    // Alte Teilnehmer direkt in die Datenbank; danach den neuen Stand holen
+    async importLegacy(courses, regs, progress) {
+      await ready;
+      if (!isOnline()) throw new Error("Für den Import braucht es Internet.");
+      await remote.importLegacy(courses, regs, progress);
+      await pull();
+      newRegs = 0;
+      notify();
+    },
     async listAllRegistrations() { await ready; return state.regs.map(r => ({ ...r })); },
     async listRegistrations(courseId) { await ready; return state.regs.filter(r => r.course_id === courseId).map(r => ({ ...r })); },
     async addRegistration(r) {

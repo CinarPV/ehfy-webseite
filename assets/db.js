@@ -20,6 +20,15 @@
       if (error) throw new Error(error.message || "Unbekannter Fehler");
       return data;
     };
+    // Die Datenbank liefert höchstens 1000 Zeilen je Abruf, darum seitenweise holen
+    const fetchAll = async build => {
+      const out = [];
+      for (let from = 0; ; from += 1000) {
+        const page = check(await build().range(from, from + 999));
+        out.push(...page);
+        if (page.length < 1000) return out;
+      }
+    };
     return {
       live: true,
       async getOpenCourses() {
@@ -79,8 +88,16 @@
       // Für den Abgleich der Verwaltung (assets/sync.js)
       async putCourse(row) { check(await sb.from("courses").upsert(row)); },
       async putRegistration(row) { check(await sb.from("registrations").upsert(row)); },
-      async listAllRegistrations() { return check(await sb.from("registrations").select("*").order("created_at")); },
-      async listAllInvoices() { return check(await sb.from("invoices").select("*").order("seq", { ascending: false })); },
+      async listAllRegistrations() { return fetchAll(() => sb.from("registrations").select("*").order("created_at").order("id")); },
+      async listAllInvoices() { return fetchAll(() => sb.from("invoices").select("*").order("seq", { ascending: false }).order("id")); },
+      // Alte Teilnehmer: vorhandene Einträge bleiben unverändert
+      async importLegacy(courses, regs, progress) {
+        for (let i = 0; i < courses.length; i += 200) check(await sb.from("courses").upsert(courses.slice(i, i + 200), { ignoreDuplicates: true }));
+        for (let i = 0; i < regs.length; i += 200) {
+          check(await sb.from("registrations").upsert(regs.slice(i, i + 200), { ignoreDuplicates: true }));
+          if (progress) progress(Math.min(i + 200, regs.length));
+        }
+      },
       async updateRegistration(id, patch) {
         check(await sb.from("registrations").update(patch).eq("id", id));
       },
@@ -220,6 +237,13 @@
         save();
       },
       async listAllRegistrations() { return load().regs.map(r => ({ ...r })); },
+      async importLegacy(courses, regs, progress) {
+        const db = load();
+        for (const c of courses) if (!db.courses.some(x => x.id === c.id)) db.courses.push(c);
+        for (const r of regs) if (!db.regs.some(x => x.id === r.id)) db.regs.push({ cancel_token: uid(), cancelled_at: null, ...r });
+        save();
+        if (progress) progress(regs.length);
+      },
       async listAllInvoices() { return (load().invoices || []).map(i => ({ ...i })); },
       async addRegistration(r) {
         const db = load();

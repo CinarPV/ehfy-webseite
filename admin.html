@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 17</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 18</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -181,6 +181,14 @@
             <h3 style="margin-top:8px">Vorlagen</h3>
             <p class="muted small" style="margin-bottom:14px">Deine leeren PDF-Vorlagen. Sie werden geschützt gespeichert und sind nicht öffentlich auf der Webseite.</p>
             <div class="grid grid-2" id="tpl-cards"></div>
+            <div class="card" style="margin-top:22px" id="import-card">
+              <h3 style="margin-top:0">Alte Teilnehmer importieren</h3>
+              <p class="small muted">Datei <code>alte-teilnehmer-ehfy.json</code> auswählen. Es gehen keine Mails raus, und nichts wird doppelt angelegt.</p>
+              <div class="field" style="margin:12px 0"><label for="im-file">Datei auswählen</label><input type="file" id="im-file" accept="application/json,.json"></div>
+              <div id="im-preview" class="small" role="status"></div>
+              <div class="btn-row" style="margin-top:10px"><button class="btn hidden" id="im-start" type="button">Import starten</button></div>
+              <p class="form-error" id="im-error" role="alert"></p>
+            </div>
             <div class="card" style="margin-top:20px">
               <h3>Bankverbindung und Steuernummer</h3>
               <p class="muted small">Erscheinen auf deinen Rechnungen. Sie werden geschützt gespeichert und stehen nicht in den öffentlichen Webseiten-Dateien.</p>
@@ -324,6 +332,7 @@
   <script src="assets/db.js"></script>
   <script src="assets/sync.js"></script>
   <script src="assets/calendar.js"></script>
+  <script src="assets/import-alt.js"></script>
   <script src="assets/admin.js"></script>
   <script>
     if ("serviceWorker" in navigator) {

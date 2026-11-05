@@ -737,6 +737,49 @@
     }
   });
 
+  // ---------- Alte Teilnehmer importieren ----------
+  let importPlan = null;
+  const nameList = list => list.length ? `<ul>${list.map(x => `<li>${esc(x.who)}: ${esc(x.why)}</li>`).join("")}</ul>` : "";
+  $("im-file").addEventListener("change", async ev => {
+    const file = ev.target.files[0];
+    $("im-error").textContent = "";
+    $("im-preview").innerHTML = "";
+    $("im-start").classList.add("hidden");
+    importPlan = null;
+    if (!file) return;
+    try {
+      const rows = JSON.parse(await file.text());
+      if (!Array.isArray(rows)) throw new Error("Das ist nicht die erwartete Datei.");
+      importPlan = await EHFYImport.plan(rows, { siegenAddress: cfg.defaultAddress });
+      const p = importPlan;
+      $("im-preview").innerHTML = `<p><strong>${p.regs.length} Teilnehmer in ${p.courses.length} Kursen</strong> werden übernommen.
+        ${p.merged} doppelte Einträge werden zusammengelegt, ${p.skipped.length} nicht übernommen.</p>
+        ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped)}` : ""}
+        ${p.check.length ? `<p><strong>Werden übernommen, bitte prüfen:</strong></p>${nameList(p.check)}` : ""}`;
+      $("im-start").classList.remove("hidden");
+    } catch (e) { $("im-error").textContent = e instanceof SyntaxError ? "Die Datei konnte nicht gelesen werden." : e.message; }
+  });
+  $("im-start").onclick = async () => {
+    const p = importPlan;
+    if (!p || !confirm(`${p.regs.length} alte Teilnehmer jetzt übernehmen?`)) return;
+    $("im-start").disabled = true;
+    $("im-error").textContent = "";
+    const note = document.createElement("p");
+    $("im-preview").prepend(note);
+    try {
+      await db.importLegacy(p.courses, p.regs, n => { note.textContent = `${n} von ${p.regs.length} übertragen …`; });
+      note.innerHTML = "<strong>Import fertig ✓</strong> Die alten Teilnehmer stehen jetzt im Bereich Schüler. Bitte lösche danach die Datei von deinem Schreibtisch.";
+      $("im-start").classList.add("hidden");
+      $("im-file").value = "";
+      importPlan = null;
+      await loadCourses();
+    } catch (e) {
+      note.remove();
+      $("im-error").textContent = `Import nicht abgeschlossen: ${e.message} Du kannst ihn gefahrlos wiederholen.`;
+    }
+    $("im-start").disabled = false;
+  };
+
   // ---------- Absender: öffentliche Angaben + Bankverbindung aus der Verwaltung ----------
   let bankData = null;
   async function issuer() {
