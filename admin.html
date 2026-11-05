@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 23</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 24</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -165,6 +165,16 @@
               </div>
             </div>
             <div class="stat-row" id="inv-stats"></div>
+            <div class="card no-print" style="margin-bottom:16px">
+              <h3 style="margin-top:0">Monat drucken</h3>
+              <div class="btn-row" style="align-items:center">
+                <select id="inv-month" class="chip-btn" aria-label="Monat"></select>
+                <button class="btn" id="inv-print-bills" type="button">Rechnungen drucken</button>
+                <button class="btn btn-ghost" id="inv-print-receipts" type="button">Quittungen drucken</button>
+              </div>
+              <p class="form-error" id="inv-print-error" role="alert"></p>
+              <p class="small muted" style="margin:8px 0 0">Stornierte Belege werden mitgedruckt und sind als storniert markiert, damit die Nummern lückenlos bleiben.</p>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead><tr><th>Nr.</th><th>Datum</th><th>Art</th><th>Empfänger</th><th>Betrag</th><th>Status</th><th></th></tr></thead>

@@ -1279,7 +1279,25 @@
   const thisYear = new Date().getFullYear();
   $("inv-year").innerHTML = [thisYear + 1, thisYear, thisYear - 1, thisYear - 2]
     .map(y => `<option value="${y}" ${y === thisYear ? "selected" : ""}>${y}</option>`).join("");
-  $("inv-year").onchange = () => loadInvoices();
+  $("inv-year").onchange = () => { invMonth = ""; loadInvoices(); };
+  const INV_MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  let invMonth = String(new Date().getMonth() + 1).padStart(2, "0");
+  const inMonth = i => !invMonth || i.issued_on.slice(5, 7) === invMonth;
+  $("inv-month").onchange = () => { invMonth = $("inv-month").value; renderInvoiceRows(); };
+  // Alle Belege des gewählten Monats als eine PDF, in Nummernfolge
+  async function printMonth(type, label) {
+    $("inv-print-error").textContent = "";
+    const list = invoices.filter(i => i.type === type && inMonth(i) && !i.draft).sort((a, b) => a.seq - b.seq);
+    if (!list.length) { $("inv-print-error").textContent = `Für diese Auswahl gibt es keine ${label}.`; return; }
+    const win = openTab();
+    try {
+      await ensurePdf();
+      const bytes = type === "quittung" ? await receiptPdf(list) : await EHFYDocs.invoices(list, await issuer(), loadFont, cfg.documents.paymentDays);
+      showPdf(bytes, `${label}_${$("inv-year").value}${invMonth ? "-" + invMonth : ""}.pdf`, win);
+    } catch (e) { if (win) win.close(); $("inv-print-error").textContent = e.message; }
+  }
+  $("inv-print-bills").onclick = () => printMonth("rechnung", "Rechnungen");
+  $("inv-print-receipts").onclick = () => printMonth("quittung", "Quittungen");
 
   async function loadInvoices() {
     try { invoices = await db.listInvoices(Number($("inv-year").value)); } catch (e) { alert(e.message); return; }
@@ -1291,7 +1309,20 @@
       <div class="stat"><b>${eur(sum(valid))}</b><span>Umsatz</span></div>
       <div class="stat"><b>${open.length}</b><span>offene Rechnungen</span></div>
       <div class="stat"><b>${eur(sum(open))}</b><span>noch offen</span></div>`;
-    $("inv-rows").innerHTML = invoices.length ? invoices.map(i => `
+    renderInvoiceRows();
+  }
+  function renderInvoiceRows() {
+    const counts = {};
+    for (const i of invoices) counts[i.issued_on.slice(5, 7)] = (counts[i.issued_on.slice(5, 7)] || 0) + 1;
+    $("inv-month").innerHTML = `<option value="">Ganzes Jahr (${invoices.length})</option>` + INV_MONTHS.map((m, n) => {
+      const key = String(n + 1).padStart(2, "0");
+      return `<option value="${key}" ${key === invMonth ? "selected" : ""}>${m} (${counts[key] || 0})</option>`;
+    }).join("");
+    const shown = invoices.filter(inMonth);
+    const of = t => shown.filter(i => i.type === t && !i.draft).length;
+    $("inv-print-bills").textContent = `Rechnungen drucken (${of("rechnung")})`;
+    $("inv-print-receipts").textContent = `Quittungen drucken (${of("quittung")})`;
+    $("inv-rows").innerHTML = shown.length ? shown.map(i => `
       <tr class="${i.status === "storniert" ? "is-past" : ""}">
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
         <td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
@@ -1305,7 +1336,7 @@
           ${i.status === "offen" ? `<button class="btn btn-sm btn-outline" data-inv="paid" data-id="${i.id}">bezahlt</button>` : ""}
           ${i.status !== "storniert" ? `<button class="btn btn-sm btn-outline" data-inv="cancel" data-id="${i.id}" title="Stornieren">✕</button>` : ""}
         </div></td>
-      </tr>`).join("") : '<tr><td colspan="7" class="muted">In diesem Jahr gibt es noch keine Rechnungen oder Quittungen.</td></tr>';
+      </tr>`).join("") : '<tr><td colspan="7" class="muted">Für diese Auswahl gibt es keine Rechnungen oder Quittungen.</td></tr>';
   }
 
   async function invoicePdf(inv, win) {
