@@ -49,6 +49,7 @@ window.EHFY_CONFIG = {
   documents: {
     issueCity: "Siegen",        // „Ort, Datum“ auf der Bescheinigung
     infoLeafletHanded: true,    // Kreuz bei „Informationsschrift wurde ausgehändigt: Ja“
+    noShowFee: 50, // Ausfallgebühr in Euro
     paymentDays: 14,            // Zahlungsziel für Rechnungen
     // Letzte Nummer, die vor der Webseite schon vergeben war – neue Belege machen danach weiter (26-04 …).
     // Für die echte Datenbank steht derselbe Startwert in supabase/setup.sql.

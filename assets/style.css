@@ -513,3 +513,14 @@ body.has-reminder { padding-bottom: 90px; }
 .sc-entry .sc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
 .sc-entry label { display: block; font-size: .8rem; color: var(--muted, #5a6b78); margin-bottom: 4px; }
 .sc-entry input[type=date] { width: 100%; max-width: 220px; }
+
+/* Anwesenheit */
+.att-list { display: grid; gap: 14px; }
+.att-card { background: #fff; border: 2px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.att-card h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.att-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.att-name { flex: 1 1 170px; font-weight: 700; }
+.att-btns, .att-fee { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.att-fee { flex-basis: 100%; }
+.att-btn.on-yes { background: var(--ok); border-color: var(--ok); color: #fff; }
+.att-btn.on-no { background: var(--danger); border-color: var(--danger); color: #fff; }

@@ -44,6 +44,9 @@ alter table public.registrations add column if not exists city text;
 alter table public.registrations add column if not exists sehtest_on date;
 alter table public.registrations add column if not exists sehtest_none boolean not null default false;
 alter table public.registrations add column if not exists protocol_added_on date;
+alter table public.registrations add column if not exists fee_state text;
+alter table public.registrations add column if not exists fee_state_at timestamptz;
+alter table public.registrations add column if not exists chance_until date;
 
 -- Wer hier eingetragen ist, darf die Verwaltung benutzen.
 create table if not exists public.admins (

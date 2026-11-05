@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 18</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 19</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -56,6 +56,15 @@
           </div>
 
           <div id="courses-view" data-section="termine">
+            <section id="att-section" class="no-print" style="margin-bottom:22px" aria-label="Anwesenheit">
+              <h2 style="margin:0 0 4px;font-size:1.3rem">Anwesenheit</h2>
+              <p class="muted small" style="margin-bottom:12px">Die nächsten zwei Kurse. Nichts wird verschickt, bevor du einen Mail-Knopf drückst und bestätigst.</p>
+              <p class="form-error" id="att-error" role="alert"></p>
+              <div id="att-cards" class="att-list"></div>
+              <div id="att-chances" style="margin-top:14px"></div>
+              <div class="field" style="margin:14px 0 8px"><label for="att-past">Früheren Kurs öffnen (zum Nachtragen oder um Rechnungen nachzuschicken)</label><select id="att-past"></select></div>
+              <div id="att-past-card" class="att-list"></div>
+            </section>
             <div class="card q-card no-print" style="margin-bottom:22px">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>
               <p class="muted small" id="q-hint"></p>

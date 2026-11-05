@@ -37,7 +37,7 @@
           <h2 class="h-sym" style="margin-top:0"><span class="tile" style="width:44px;height:44px;font-size:25px"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#warnung"/></svg></span>Absagebedingungen</h2>
           <ul class="checklist">
             <li>Eine Abmeldung ist <strong>bis 48 Stunden vor Kursbeginn kostenfrei</strong>.</li>
-            <li>Bei <strong>Nichtteilnahme ohne Abmeldung</strong> oder einer Abmeldung weniger als 48 Stunden vor Kursbeginn wird die <strong>Kursgebühr in Rechnung gestellt</strong>.</li>
+            <li>Bei <strong>Nichtteilnahme ohne Abmeldung</strong> oder einer Abmeldung weniger als 48 Stunden vor Kursbeginn wird eine <strong>Ausfallgebühr von 50 € in Rechnung gestellt</strong>.</li>
             <li>Muss ein Kurs von unserer Seite abgesagt werden (z. B. wegen Krankheit), informieren wir dich so schnell wie möglich – dir entstehen dann natürlich keine Kosten.</li>
           </ul>
 
@@ -92,7 +92,7 @@
           action = '<div class="notice notice-warn"><p>Der Kurs hat bereits begonnen. Bitte melde dich telefonisch bei uns.</p></div>';
         } else {
           action = (hours < cfg.cancelHours
-            ? `<div class="notice notice-danger"><p><strong>Achtung:</strong> Bis zum Kursbeginn sind es weniger als 48 Stunden. Gemäß unseren Absagebedingungen wird die Kursgebühr in Rechnung gestellt.</p></div>`
+            ? `<div class="notice notice-danger"><p><strong>Achtung:</strong> Bis zum Kursbeginn sind es weniger als 48 Stunden. Gemäß unseren Absagebedingungen wird eine Ausfallgebühr von 50 € in Rechnung gestellt.</p></div>`
             : `<div class="notice notice-ok"><p>Die Abmeldung ist noch <strong>kostenfrei</strong> möglich.</p></div>`) +
             '<button class="btn btn-danger" id="do-cancel">Jetzt verbindlich abmelden</button>';
         }
@@ -109,7 +109,7 @@
           try {
             const res = await EHFY_DB.cancelRegistration(token);
             details.innerHTML = `<div class="notice notice-ok"><p><strong>Du wurdest erfolgreich abgemeldet.</strong></p>
-              ${res.late ? "<p>Da die Abmeldung weniger als 48 Stunden vor Kursbeginn erfolgte, wird die Kursgebühr in Rechnung gestellt.</p>" : "<p>Es entstehen dir keine Kosten.</p>"}</div>
+              ${res.late ? "<p>Da die Abmeldung weniger als 48 Stunden vor Kursbeginn erfolgte, wird eine Ausfallgebühr von 50 € in Rechnung gestellt.</p>" : "<p>Es entstehen dir keine Kosten.</p>"}</div>
               <a class="btn btn-outline" href="anmelden.html">Neuen Termin buchen</a>`;
           } catch (e) { err.textContent = e.message; btn.disabled = false; }
         };

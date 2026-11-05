@@ -60,6 +60,7 @@
     renderStats();
     renderCourses();
     setupPanel();
+    renderAttendance();
   }
 
   function renderStats() {
@@ -596,6 +597,165 @@
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
+  });
+
+  // ---------- Anwesenheit, Ausfallgebühr und zweite Chance ----------
+  const FEE = cfg.documents.noShowFee;
+  let attRegs = [], attById = {}, attPastId = "";
+  const dayText = iso => new Date(iso).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+  const shortDay = s => new Date(s.length > 10 ? s : s + "T12:00").toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const samePerson = (a, b) => (a.email && b.email && a.email.toLowerCase() === b.email.toLowerCase())
+    || (`${a.first_name}|${a.last_name}|${a.birth_date}`.toLowerCase() === `${b.first_name}|${b.last_name}|${b.birth_date}`.toLowerCase());
+  const courseOf = r => attById[r.course_id];
+  // Zu spät abgesagt: weniger als 48 Stunden vor Kursbeginn
+  const lateCancel = r => {
+    if (r.status !== "storniert" || !r.cancelled_at || !courseOf(r)) return false;
+    return new Date(courseOf(r).starts_at) - new Date(r.cancelled_at) < cfg.cancelHours * 3600000;
+  };
+  const absent = r => r.status === "nicht_erschienen" || lateCancel(r);
+  // Anmeldung für den Nachholtermin innerhalb der Frist
+  const followUp = r => attRegs.find(x => x.id !== r.id && x.status !== "storniert" && samePerson(x, r) && courseOf(x)
+    && courseOf(x).starts_at > courseOf(r).starts_at && x.created_at > r.fee_state_at && x.created_at.slice(0, 10) <= r.chance_until);
+  // War diese Anmeldung der Nachholtermin einer zweiten Chance?
+  const chanceBefore = r => attRegs.find(x => x.id !== r.id && x.fee_state === "chance" && samePerson(x, r) && courseOf(x) && followUp(x) && followUp(x).id === r.id);
+
+  function feeControls(r) {
+    if (r.fee_state === "rechnung") return `<span class="small">Rechnung gesendet am ${shortDay(r.fee_state_at)}</span>`;
+    if (r.fee_state === "erlassen") return '<span class="small">Ausfallgebühr gutgeschrieben</span>';
+    if (!r.email) return '<span class="small muted">Keine E-Mail hinterlegt</span>';
+    const before = chanceBefore(r);
+    if (before) return `<span class="small">Zweite Chance nicht genutzt.</span> <button class="btn btn-sm" type="button" data-fee="both">Rechnungen senden: 2 × ${FEE} €</button>`;
+    if (r.fee_state === "chance") return `<span class="small">Zweite Chance gesendet, Frist bis ${shortDay(r.chance_until)}.</span> <button class="btn btn-sm btn-ghost" type="button" data-fee="bill">Rechnung ${FEE} € senden</button>`;
+    return `<button class="btn btn-sm" type="button" data-fee="bill">Rechnung ${FEE} € senden</button>
+      <button class="btn btn-sm btn-ghost" type="button" data-fee="chance">Zweite Chance senden</button>`;
+  }
+  function attRow(r) {
+    const late = lateCancel(r);
+    return `<div class="att-row" data-att="${r.id}">
+      <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}</div>
+      ${late ? "" : `<div class="att-btns">
+        <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
+        <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
+      </div>`}
+      ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
+    </div>`;
+  }
+  function attCard(c) {
+    const list = attRegs.filter(r => r.course_id === c.id && (r.status !== "storniert" || lateCancel(r))).sort(byName);
+    const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
+    return `<article class="att-card"><h3>${dayText(c.starts_at)} · ${esc(c.location)}</h3>
+      <p class="small muted" style="margin:0 0 6px">${list.length} angemeldet · ${yes} da · ${no} nicht da</p>
+      ${list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>'}</article>`;
+  }
+  function chanceRow(r) {
+    const c = courseOf(r), f = followUp(r);
+    let info, action = "";
+    if (f && f.status === "teilgenommen") { info = `Kurs am ${shortDay(courseOf(f).starts_at)} absolviert.`; action = '<button class="btn btn-sm" type="button" data-fee="waive">Ausfallgebühr gutschreiben</button>'; }
+    else if (f && f.status === "nicht_erschienen") { info = `Auch am ${shortDay(courseOf(f).starts_at)} nicht erschienen. Die Knöpfe stehen bei diesem Kurs.`; }
+    else if (f) { info = `Angemeldet für ${shortDay(courseOf(f).starts_at)}.`; }
+    else if (localDate(new Date()) > r.chance_until) { info = `Frist am ${shortDay(r.chance_until)} abgelaufen, nicht angemeldet.`; action = `<button class="btn btn-sm" type="button" data-fee="bill">Rechnung ${FEE} € senden</button>`; }
+    else { info = `Frist bis ${shortDay(r.chance_until)}.`; }
+    return `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)} <span class="small muted">(Kurs ${shortDay(c.starts_at)})</span></div><div class="att-fee"><span class="small">${info}</span> ${action}</div></div>`;
+  }
+  async function renderAttendance() {
+    const [regsAll] = await Promise.all([db.listAllRegistrations()]);
+    attRegs = regsAll;
+    attById = Object.fromEntries(courses.map(c => [c.id, c]));
+    const today = localDate(new Date());
+    const coming = courses.filter(c => c.status === "offen" && localDate(new Date(c.starts_at)) >= today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    $("att-cards").innerHTML = coming.length ? coming.slice(0, 2).map(attCard).join("") : '<p class="muted small">Keine kommenden Kurse.</p>';
+    const open = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
+    $("att-chances").innerHTML = open.length ? `<article class="att-card"><h3>Zweite Chancen</h3>${open.map(chanceRow).join("")}</article>` : "";
+    const shown = new Set(coming.slice(0, 2).map(c => c.id));
+    const past = courses.filter(c => !shown.has(c.id)).sort((a, b) => b.starts_at.localeCompare(a.starts_at));
+    $("att-past").innerHTML = '<option value="">Bitte wählen …</option>' + past.map(c =>
+      `<option value="${c.id}" ${c.id === attPastId ? "selected" : ""}>${dayText(c.starts_at)} · ${esc(c.location)} · ${c.booked} Teilnehmer</option>`).join("");
+    const pick = attById[attPastId];
+    $("att-past-card").innerHTML = pick && !shown.has(pick.id) ? attCard(pick) : "";
+  }
+  $("att-past").addEventListener("change", ev => { attPastId = ev.target.value; renderAttendance(); });
+
+  const feeDate = r => shortDay(courseOf(r).starts_at);
+  async function sendFeeBill(r) {
+    const service = localDate(new Date(courseOf(r).starts_at));
+    const text = `Ausfallgebühr Erste-Hilfe-Kurs am ${feeDate(r)}\nNicht erschienen oder nicht rechtzeitig abgemeldet`;
+    const found = (await db.invoicesForRegistrations([r.id])).find(i => i.type === "rechnung" && String(i.items?.[0]?.text || "").startsWith("Ausfallgebühr"));
+    const inv = found || await db.createInvoice({
+      type: "rechnung", registration_id: r.id, status: "offen", payment: "ueberweisung",
+      issued_on: localDate(new Date()), service_date: service,
+      recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email },
+      items: [{ text, qty: 1, price: FEE }]
+    });
+    if (inv.draft) throw new Error("Die Rechnung konnte ohne Internet keine Nummer bekommen.");
+    const days = cfg.documents.paymentDays;
+    const body = [
+      `Guten Tag ${r.first_name} ${r.last_name},`, "",
+      `Sie waren für den Erste-Hilfe-Kurs am ${feeDate(r)} angemeldet, sind aber nicht erschienen oder haben sich nicht mindestens ${cfg.cancelHours} Stunden vorher abgemeldet.`, "",
+      `Die Teilnehmerzahl unserer Kurse ist begrenzt. Ihr Platz war für Sie reserviert, und gegebenenfalls mussten wir andere Interessenten abweisen. Dadurch ist uns ein Nachteil entstanden. Die Ausfallgebühr von ${FEE},00 € fällt deshalb unabhängig vom Grund an, auch bei Krankheit.`, "",
+      `Bitte bezahlen Sie die beigefügte Rechnung Nr. ${inv.number} innerhalb von ${days} Tagen per PayPal an ${cfg.issuer.paypal}.`, "",
+      "Sollte die Zahlung nicht fristgerecht eingehen, behalten wir uns vor, rechtliche Schritte einzuleiten. Dadurch können weitere Kosten entstehen.", "",
+      "Mit freundlichen Grüßen", cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`
+    ].join("\n");
+    const bytes = await EHFYDocs.invoices([inv], await issuer(), loadFont, days);
+    const filename = `Rechnung_${inv.number}.pdf`;
+    await db.sendInvoiceMail({
+      invoice_id: inv.id, to: r.email, subject: `Rechnung ${inv.number} – Ausfallgebühr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body,
+      filename, pdfBase64: await toBase64(new File([bytes], filename, { type: "application/pdf" }))
+    });
+    await db.updateRegistration(r.id, { fee_state: "rechnung", fee_state_at: new Date().toISOString() });
+  }
+  async function sendChance(r) {
+    const until = new Date(); until.setDate(until.getDate() + 7);
+    const untilDay = localDate(until);
+    const link = new URL("anmelden.html", location.href).href;
+    const body = [
+      `Guten Tag ${r.first_name} ${r.last_name},`, "",
+      `Sie waren für den Erste-Hilfe-Kurs am ${feeDate(r)} angemeldet, sind aber nicht erschienen oder haben sich nicht rechtzeitig abgemeldet. Normalerweise müssten Sie dafür eine Ausfallgebühr von ${FEE},00 € bezahlen.`, "",
+      "Wir geben Ihnen noch eine Chance:", "",
+      `Wenn Sie sich bis zum ${shortDay(untilDay)} für den nächsten Kurs anmelden und daran teilnehmen, bezahlen Sie nur den Betrag für den absolvierten Kurs. Die Ausfallgebühr wird Ihnen dann gutgeschrieben.`, "",
+      `Zur Anmeldung: ${link}`, "",
+      `Melden Sie sich nicht rechtzeitig an, wird die Ausfallgebühr von ${FEE},00 € fällig. Melden Sie sich an und erscheinen wieder nicht, müssen Sie für beide Termine bezahlen.`, "",
+      "Mit freundlichen Grüßen", cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`
+    ].join("\n");
+    await db.sendInvoiceMail({ to: r.email, subject: `Noch eine Chance: Ihr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body, textOnly: true });
+    await db.updateRegistration(r.id, { fee_state: "chance", fee_state_at: new Date().toISOString(), chance_until: untilDay });
+  }
+  $("att-section").addEventListener("click", async ev => {
+    const row = ev.target.closest("[data-att]");
+    if (!row) return;
+    const r = attRegs.find(x => x.id === row.dataset.att);
+    const err = $("att-error");
+    err.textContent = "";
+    const mark = ev.target.closest("[data-mark]");
+    const fee = ev.target.closest("[data-fee]");
+    if (!r || (!mark && !fee)) return;
+    const btn = mark || fee;
+    btn.disabled = true;
+    try {
+      if (mark) {
+        const value = r.status === mark.dataset.mark ? "angemeldet" : mark.dataset.mark;
+        await db.updateRegistration(r.id, { status: value });
+      } else if (fee.dataset.fee === "waive") {
+        if (!confirm(`Ausfallgebühr von ${r.first_name} ${r.last_name} gutschreiben?`)) return;
+        await db.updateRegistration(r.id, { fee_state: "erlassen", fee_state_at: new Date().toISOString() });
+      } else {
+        if (!db.isOnline()) throw new Error("Zum Senden braucht es Internet.");
+        await ensurePdf();
+        if (fee.dataset.fee === "chance") {
+          if (!confirm(`Zweite Chance per E-Mail an ${r.email} senden?`)) return;
+          await sendChance(r);
+        } else if (fee.dataset.fee === "both") {
+          if (!confirm(`Zwei Rechnungen über je ${FEE} € an ${r.email} senden?`)) return;
+          await sendFeeBill(chanceBefore(r));
+          await sendFeeBill(r);
+        } else {
+          if (!confirm(`Rechnung über ${FEE} € an ${r.email} senden?`)) return;
+          await sendFeeBill(r);
+        }
+      }
+      await loadCourses();
+    } catch (e) { err.textContent = e.message; }
+    finally { btn.disabled = false; }
   });
 
   // ---------- Schülerdatenbank: alle Anmeldungen aller Kurse, je Person zusammengefasst ----------

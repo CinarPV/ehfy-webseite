@@ -34,7 +34,8 @@ Deno.serve(async req => {
 
   const b = await req.json().catch(() => null);
   if (!b || !/^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$/.test(b.to ?? "")) return json({ error: "Bitte eine gültige Empfänger-Adresse angeben." }, 400);
-  if (typeof b.pdfBase64 !== "string" || !b.pdfBase64 || b.pdfBase64.length > 8_000_000) return json({ error: "Die PDF fehlt oder ist zu groß." }, 400);
+  // Reine Mitteilungen (textOnly) kommen ohne PDF aus
+  if (!b.textOnly && (typeof b.pdfBase64 !== "string" || !b.pdfBase64 || b.pdfBase64.length > 8_000_000)) return json({ error: "Die PDF fehlt oder ist zu groß." }, 400);
 
   const from = Deno.env.get("IONOS_USER");
   const pass = Deno.env.get("IONOS_PASSWORD");
@@ -49,7 +50,7 @@ Deno.serve(async req => {
       bcc: Deno.env.get("COPY_TO_SELF") === "false" ? undefined : from,
       subject: oneLine(b.subject, 200),
       text: String(b.text ?? "").slice(0, 5000),
-      attachments: [{
+      attachments: b.textOnly ? [] : [{
         filename: oneLine(b.filename || "Beleg.pdf", 120).replace(/[\/\\:*?"<>|]/g, "_"),
         content: b.pdfBase64, encoding: "base64", contentType: "application/pdf"
       }]
