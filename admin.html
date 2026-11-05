@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 33</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 34</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -158,6 +158,14 @@
             <h2 style="margin:0 0 4px;font-size:1.4rem">Schüler</h2>
             <p class="muted small" id="sc-count"></p>
             <p class="form-error" id="sc-error" role="alert"></p>
+            <div class="card" style="margin-bottom:18px" id="import-card">
+              <h3 style="margin-top:0">Teilnehmer importieren</h3>
+              <p class="small muted">WordPress-Datei (<code>.csv</code>) oder alte App (<code>.json</code>) auswählen. Es gehen keine Mails raus, und vorhandene Einträge bleiben unverändert.</p>
+              <div class="field" style="margin:12px 0"><label for="im-file">Datei auswählen</label><input type="file" id="im-file" accept="application/json,.json,text/csv,.csv"></div>
+              <div id="im-preview" class="small" role="status"></div>
+              <div class="btn-row" style="margin-top:10px"><button class="btn hidden" id="im-start" type="button">Import starten</button></div>
+              <p class="form-error" id="im-error" role="alert"></p>
+            </div>
             <div id="sc-list" class="sc-list"></div>
             <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">
           </div>
@@ -221,14 +229,6 @@
               <div id="bk-preview" class="small" role="status"></div>
               <div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost hidden" id="bk-restore" type="button">Fehlende Daten wiederherstellen</button></div>
               <p class="form-error" id="bk-error" role="alert"></p>
-            </div>
-            <div class="card" style="margin-top:22px" id="import-card">
-              <h3 style="margin-top:0">Teilnehmer importieren</h3>
-              <p class="small muted">WordPress-Datei (<code>.csv</code>) oder alte App (<code>.json</code>) auswählen. Es gehen keine Mails raus, und vorhandene Einträge bleiben unverändert.</p>
-              <div class="field" style="margin:12px 0"><label for="im-file">Datei auswählen</label><input type="file" id="im-file" accept="application/json,.json,text/csv,.csv"></div>
-              <div id="im-preview" class="small" role="status"></div>
-              <div class="btn-row" style="margin-top:10px"><button class="btn hidden" id="im-start" type="button">Import starten</button></div>
-              <p class="form-error" id="im-error" role="alert"></p>
             </div>
             <div class="card" style="margin-top:20px">
               <h3>Bankverbindung und Steuernummer</h3>
