@@ -741,6 +741,14 @@
     const hasToday = coming.some(c => localDate(new Date(c.starts_at)) === today);
     const folders = [...(last && !hasToday ? [last] : []), ...coming];
     $("att-cards").innerHTML = folders.length ? folders.map(attFolder).join("") : '<p class="muted small">Keine aktuellen Kurse.</p>';
+    // Ältere Kurse ohne Häkchen: Sie bleiben gespeichert, bis du ✓ Da oder ✗ Nicht da setzt
+    const shownIds = new Set(folders.map(c => c.id));
+    const unchecked = attRegs.filter(r => r.status === "angemeldet" && courseOf(r) && !shownIds.has(r.course_id)
+      && courseOf(r).status !== "abgesagt" && localDate(new Date(courseOf(r).starts_at)) < today)
+      .sort((a, b) => courseOf(b).starts_at.localeCompare(courseOf(a).starts_at));
+    $("att-unchecked").innerHTML = unchecked.length ? `<article class="att-card"><h3>Noch nicht abgehakt (${unchecked.length})</h3>
+      <p class="small muted" style="margin:0 0 6px">Bitte eintragen, ob diese Personen da waren. Wer da war, bleibt unter „Schüler“ gespeichert.</p>
+      ${unchecked.slice(0, 30).map(r => `<div class="small muted" style="margin-top:8px">Kurs ${shortDay(courseOf(r).starts_at)} · ${esc(courseOf(r).location)}</div>${attRow(r)}`).join("")}</article>` : "";
     const open = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
     $("att-chances").innerHTML = open.length ? `<article class="att-card"><h3>Zweite Chancen</h3>${open.map(chanceRow).join("")}</article>` : "";
   }
