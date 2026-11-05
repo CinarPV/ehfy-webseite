@@ -1296,6 +1296,52 @@
       showPdf(bytes, `${label}_${$("inv-year").value}${invMonth ? "-" + invMonth : ""}.pdf`, win);
     } catch (e) { if (win) win.close(); $("inv-print-error").textContent = e.message; }
   }
+  // Rechnungen und Quittungen zusammen, in Nummernfolge, als eine PDF
+  async function allBelegePdf(list) {
+    await ensurePdf();
+    const { PDFDocument } = window.PDFLib;
+    const receiptsList = list.filter(i => i.type === "quittung"), billsList = list.filter(i => i.type !== "quittung");
+    const load = async (bytes) => PDFDocument.load(bytes);
+    const fromReceipts = receiptsList.length ? await load(await receiptPdf(receiptsList)) : null;
+    const fromBills = billsList.length ? await load(await EHFYDocs.invoices(billsList, await issuer(), loadFont, cfg.documents.paymentDays)) : null;
+    const out = await PDFDocument.create();
+    for (const inv of list) {
+      const isReceipt = inv.type === "quittung";
+      const [page] = await out.copyPages(isReceipt ? fromReceipts : fromBills, [(isReceipt ? receiptsList : billsList).indexOf(inv)]);
+      out.addPage(page);
+    }
+    return out.save();
+  }
+  const belegeOf = all => (all ? invoices : invoices.filter(inMonth)).filter(i => !i.draft).sort((a, b) => a.seq - b.seq);
+  function saveFile(bytes, name) {
+    // In der iPhone-App geht das Speichern über den PDF-Dialog
+    if (appMode) return pdfDialog(bytes, name);
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  async function belegeAction(list, name, button, run) {
+    const err = $("inv-print-error");
+    err.textContent = "";
+    if (!list.length) { err.textContent = "Für diese Auswahl gibt es keine Belege."; return; }
+    const label = button.textContent;
+    button.disabled = true; button.textContent = "Wird erstellt …";
+    try { run(await allBelegePdf(list), name); }
+    catch (e) { err.textContent = e.message; }
+    finally { button.disabled = false; button.textContent = label; }
+  }
+  const periodName = all => `Belege_${$("inv-year").value}${!all && invMonth ? "-" + invMonth : ""}.pdf`;
+  $("inv-print-all").onclick = async ev => {
+    const list = belegeOf(false);
+    if (!list.length) { $("inv-print-error").textContent = "Für diese Auswahl gibt es keine Belege."; return; }
+    const win = openTab();
+    await belegeAction(list, periodName(false), ev.target, (bytes, name) => showPdf(bytes, name, win));
+    if (win && $("inv-print-error").textContent) win.close();
+  };
+  $("inv-dl-all").onclick = ev => belegeAction(belegeOf(false), periodName(false), ev.target, saveFile);
+  $("inv-dl-year").onclick = ev => belegeAction(belegeOf(true), periodName(true), ev.target, saveFile);
   $("inv-print-bills").onclick = () => printMonth("rechnung", "Rechnungen");
   $("inv-print-receipts").onclick = () => printMonth("quittung", "Quittungen");
 
@@ -1320,8 +1366,11 @@
     }).join("");
     const shown = invoices.filter(inMonth);
     const of = t => shown.filter(i => i.type === t && !i.draft).length;
-    $("inv-print-bills").textContent = `Rechnungen drucken (${of("rechnung")})`;
-    $("inv-print-receipts").textContent = `Quittungen drucken (${of("quittung")})`;
+    $("inv-print-bills").textContent = `Nur Rechnungen (${of("rechnung")})`;
+    $("inv-print-receipts").textContent = `Nur Quittungen (${of("quittung")})`;
+    $("inv-print-all").textContent = `Alles drucken (${of("rechnung") + of("quittung")})`;
+    $("inv-dl-all").textContent = `Herunterladen (${of("rechnung") + of("quittung")})`;
+    $("inv-dl-year").textContent = `Ganzes Jahr herunterladen (${invoices.filter(i => !i.draft).length})`;
     $("inv-rows").innerHTML = shown.length ? shown.map(i => `
       <tr class="${i.status === "storniert" ? "is-past" : ""}">
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
