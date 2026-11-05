@@ -147,7 +147,7 @@
     seatLevel(c) {
       if (c.seats) return c.seats;
       const free = Math.max(0, (c.capacity || 0) - (c.booked || 0));
-      return free === 0 ? "voll" : free <= 2 ? "letzte" : free <= 5 ? "wenige" : "frei";
+      return free === 0 ? "voll" : free <= 4 ? "letzte" : free <= 8 ? "wenige" : "frei";
     },
     seatText(c) {
       return { frei: "Noch Plätze frei", wenige: "Noch wenige Plätze frei", letzte: "Die letzten Plätze", voll: "Ausgebucht" }[EHFY.seatLevel(c)];
