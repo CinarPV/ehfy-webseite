@@ -1,4 +1,4 @@
-// Verwaltung lokal bearbeiten, später „Online stellen“.
+// Verwaltung lokal bearbeiten, später „Synchronisieren“.
 // Legt sich um EHFY_DB: Änderungen landen zuerst auf dem Gerät (IndexedDB) und in einer Warteschlange.
 // Erst der Abgleich schickt sie zur Datenbank und holt den neuen Stand (auch vom anderen Gerät).
 // Rechnungsnummern vergibt immer die Datenbank; ohne Internet entsteht ein Entwurf ohne Nummer.
@@ -55,13 +55,14 @@
   const stripCourse = ({ booked, registrations, ...row }) => row;
 
   function status() {
-    return { live: remote.live, online: isOnline(), pending: outbox.length, lastSync: state.lastSync, syncing, error: lastError, newRegs };
+    return { live: remote.live, online: isOnline(), pending: outbox.length, lastSync: state.lastSync, syncing, remoteHint, error: lastError, newRegs };
   }
+  let remoteHint = false;
   function notify() { window.dispatchEvent(new CustomEvent("ehfy-sync", { detail: status() })); }
-  window.addEventListener("online", () => { notify(); pull().catch(() => {}); });
+  window.addEventListener("online", notify);
   window.addEventListener("offline", notify);
 
-  // ---------- Änderungen: jede wirkt sofort lokal und wartet dann auf „Online stellen“ ----------
+  // ---------- Änderungen: jede wirkt sofort lokal und wartet dann auf „Synchronisieren“ ----------
   function applyOp(s, op) {
     const upsert = (list, row) => {
       const i = list.findIndex(x => x.id === row.id);
@@ -130,6 +131,7 @@
     }
     outbox.forEach(op => applyOp(next, op));
     state = next;
+    remoteHint = false;
     await persist();
     notify();
   }
@@ -156,23 +158,10 @@
     }
   }
 
-  // Nur die Einstellungen (z. B. Orte) übertragen, ohne andere Änderungen zu veröffentlichen.
-  // Ergebnis: true = in der Datenbank, false = bleibt für „Online stellen“ liegen.
-  async function pushSettings() {
-    if (!isOnline() || syncing) return false;
-    const op = outbox.find(o => o.type === "settings");
-    if (!op) return true;
-    await remote.saveSettings(op.value);
-    outbox = outbox.filter(o => o !== op);
-    await persist();
-    notify();
-    return true;
-  }
-
   // ---------- Dieselbe Schnittstelle wie EHFY_DB ----------
   window.EHFY_DB = {
     live: remote.live,
-    status, sync, isOnline, pull, pushSettings,
+    status, sync, isOnline, pull,
     clearNew() { newRegs = 0; notify(); },
     savePushSubscription: (s, d) => remote.savePushSubscription(s, d),
     removePushSubscription: e => remote.removePushSubscription(e),
@@ -187,7 +176,8 @@
       catch (e) { if (isNetError(e)) return known; throw e; }
       if (!ok) { localStorage.removeItem(FLAG); return false; }
       localStorage.setItem(FLAG, "1");
-      if (state.lastSync) pull().catch(() => {}); else await pull().catch(() => {});
+      // Beim Öffnen wird nichts abgeglichen. Nur ein neues Gerät ohne Daten holt einmal den Stand.
+      if (!state.lastSync) await pull().catch(() => {});
       return true;
     },
     async signIn(email, password) {
@@ -287,8 +277,6 @@
   };
 
   // Neue Anmeldungen holen: beim Zurückkehren in die App, jede Minute und bei einer Push-Mitteilung
-  const refresh = () => { if (document.visibilityState === "visible" && localStorage.getItem(FLAG) === "1") pull().catch(() => {}); };
-  document.addEventListener("visibilitychange", refresh);
-  setInterval(refresh, 60000);
-  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data === "neue-anmeldung") refresh(); });
+  // Kein automatischer Abgleich: Eine Push-Mitteilung setzt nur den Hinweis, abgeglichen wird per Knopf
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data === "neue-anmeldung") { remoteHint = true; notify(); } });
 })();

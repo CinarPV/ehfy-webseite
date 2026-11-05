@@ -46,6 +46,7 @@
     $("app-view").classList.remove("hidden");
     renderSync();
     await loadCourses();
+    askToSync(); // Noch offene Änderungen vom letzten Mal
   }
 
   // ---------- Terminübersicht ----------
@@ -228,21 +229,20 @@
     start: $("q-start").value, end: $("q-end").value,
     capacity: parseInt($("q-cap").value, 10) || 0
   });
-  // Nur die Orte übertragen. Andere noch nicht online gestellte Änderungen bleiben liegen.
+  // Orte auf diesem Gerät speichern; übertragen werden sie mit „Synchronisieren“
   async function storeLocations() {
     if (db.isOnline() && !db.status().lastSync) await db.pull();
     const settings = await db.getSettings();
     await db.saveSettings({ ...settings, locations: qList });
     bankData = null;
     $("loc-list").innerHTML = qList.map(l => `<option value="${esc(l.name)}">`).join("");
-    return db.pushSettings();
   }
   async function storeWithMessage(text) {
     try {
-      const sent = await storeLocations();
-      $("q-remember-msg").textContent = sent ? `${text} ✓` : `${text} ✓ – wird mit „Online stellen“ übertragen.`;
+      await storeLocations();
+      $("q-remember-msg").textContent = `${text} ✓ Bitte noch synchronisieren.`;
     } catch (e) {
-      $("q-remember-msg").textContent = `Auf diesem Gerät gespeichert, aber noch nicht online: ${e.message}`;
+      $("q-remember-msg").textContent = `Nicht gespeichert: ${e.message}`;
     }
   }
   function renderQ() {
@@ -340,7 +340,7 @@
         $("loc-list").innerHTML = qList.map(l => `<option value="${esc(l.name)}">`).join("");
       }
       qSel.clear();
-      // Freigeben heißt: gleich online. Ohne Internet bleibt es für „Online stellen“ gespeichert.
+      // Freigeben heißt: gleich online. Ohne Internet bleibt es zum Synchronisieren gespeichert.
       if (db.isOnline()) await db.sync();
       await loadCourses();
       renderQ();
@@ -500,21 +500,74 @@
     } catch (e) { $("rd-error").textContent = e.message; }
   });
 
-  // ---------- Abgleich: lokal arbeiten, dann „Online stellen“ ----------
+  // ---------- Abgleich: lokal arbeiten, dann „Synchronisieren“ ----------
+  const changes = n => `${n} Änderung${n === 1 ? "" : "en"}`;
   function renderSync() {
     const st = db.status();
     $("sync-dot").className = "sync-dot " + (st.online ? "on" : "off");
     const parts = [st.online ? "Online" : "Offline – du arbeitest auf diesem Gerät"];
-    parts.push(st.pending ? `${st.pending} Änderung${st.pending === 1 ? "" : "en"} noch nicht online` : "Alles online");
+    parts.push(st.pending ? `${changes(st.pending)} noch nicht synchronisiert` : "Alles übertragen");
+    if (st.remoteHint) parts.unshift("Neue Anmeldung eingegangen – bitte synchronisieren");
     if (st.newRegs) parts.unshift(`${st.newRegs} neue Anmeldung${st.newRegs === 1 ? "" : "en"}`);
-    if (st.lastSync) parts.push(`Stand ${new Date(st.lastSync).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`);
+    if (st.lastSync) parts.push(`Letzter Abgleich ${new Date(st.lastSync).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`);
     if (!st.live) parts.push("Demo: nur dieses Gerät");
     $("sync-text").textContent = st.error || parts.join(" · ");
     $("sync-text").style.color = st.error ? "var(--danger)" : "";
     $("sync-btn").disabled = !st.online || st.syncing;
-    $("sync-btn").textContent = st.syncing ? "Wird übertragen …" : st.pending ? `Online stellen (${st.pending})` : "Aktualisieren";
+    $("sync-btn").textContent = st.syncing ? "Wird übertragen …" : st.pending ? `Synchronisieren (${st.pending})` : "Synchronisieren";
+    renderReminder(st);
   }
-  $("sync-btn").onclick = () => { db.clearNew(); db.sync().catch(() => {}); };
+  const runSync = () => { db.clearNew(); return db.sync().catch(() => {}); };
+  $("sync-btn").onclick = runSync;
+
+  // ---------- Erinnerung ans Synchronisieren ----------
+  let shownPending = 0;
+  function renderReminder(st) {
+    const bar = $("sync-reminder");
+    bar.classList.toggle("hidden", !st.pending || $("app-view").classList.contains("hidden"));
+    document.body.classList.toggle("has-reminder", !bar.classList.contains("hidden"));
+    $("sr-text").textContent = st.online ? `${changes(st.pending)} noch nicht synchronisiert` : `${changes(st.pending)} warten auf Internet`;
+    $("sr-btn").disabled = !st.online || st.syncing;
+    $("sr-btn").textContent = st.syncing ? "Wird übertragen …" : "Jetzt synchronisieren";
+    // Nach jeder neuen Eingabe kurz aufleuchten
+    if (st.pending > shownPending) { bar.classList.remove("pulse"); void bar.offsetWidth; bar.classList.add("pulse"); }
+    shownPending = st.pending;
+  }
+  $("sr-btn").onclick = runSync;
+
+  function askToSync() {
+    const st = db.status();
+    if (!st.pending || $("app-view").classList.contains("hidden") || document.querySelector("dialog[open]")) return;
+    $("rm-text").textContent = `${changes(st.pending)} ${st.pending === 1 ? "ist" : "sind"} noch nicht synchronisiert. Teilnehmer und deine anderen Geräte sehen sie erst danach.`;
+    $("rm-sync").disabled = !st.online;
+    $("remind-dialog").showModal();
+  }
+  $("rm-sync").onclick = () => { $("remind-dialog").close(); runSync(); };
+  $("rm-later").onclick = () => $("remind-dialog").close();
+
+  async function swRegistration() {
+    return "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().catch(() => null) : null;
+  }
+  // Beim Schließen des Fensters fragt der Browser nach
+  window.addEventListener("beforeunload", ev => {
+    if (db.status().pending) { ev.preventDefault(); ev.returnValue = ""; }
+  });
+  // Beim Minimieren: Mitteilung, sofern erlaubt. Bei der Rückkehr fragt die Verwaltung nach.
+  let leftPending = false;
+  document.addEventListener("visibilitychange", async () => {
+    const reg = await swRegistration();
+    if (document.visibilityState === "hidden") {
+      const n = db.status().pending;
+      leftPending = Boolean(n);
+      if (n && reg && "Notification" in window && Notification.permission === "granted") {
+        reg.showNotification("Bitte synchronisieren", { body: `${changes(n)} noch nicht synchronisiert.`, icon: "assets/icon-192.png", tag: "ehfy-sync-erinnerung" }).catch(() => {});
+      }
+      return;
+    }
+    if (reg && reg.getNotifications) (await reg.getNotifications({ tag: "ehfy-sync-erinnerung" }).catch(() => [])).forEach(x => x.close());
+    if (leftPending) { leftPending = false; askToSync(); }
+  });
+
   let lastView = "";
   window.addEventListener("ehfy-sync", () => {
     renderSync();
@@ -704,7 +757,7 @@
   }
 
   async function sendBill(inv) {
-    if (inv.draft) throw new Error("Dieser Beleg ist noch ein Entwurf ohne Nummer. Bitte zuerst „Online stellen“, dann senden.");
+    if (inv.draft) throw new Error("Dieser Beleg ist noch ein Entwurf ohne Nummer. Bitte zuerst „Synchronisieren“, dann senden.");
     await ensurePdf();
     const bytes = inv.type === "quittung"
       ? await receiptPdf([inv])

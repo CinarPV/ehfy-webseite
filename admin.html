@@ -40,13 +40,13 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 14</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 15</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
             <span class="sync-dot" id="sync-dot"></span>
             <span id="sync-text"></span>
-            <button class="btn btn-sm" id="sync-btn" type="button">Online stellen</button>
+            <button class="btn btn-sm" id="sync-btn" type="button">Synchronisieren</button>
           </div>
           <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
             <button data-view="termine" class="active">Termine</button>
@@ -191,6 +191,17 @@
   </main>
 
   <!-- Rechnungs-Dialog -->
+  <!-- Erinnerung ans Synchronisieren -->
+  <div class="sync-reminder hidden no-print" id="sync-reminder" role="status">
+    <span id="sr-text"></span>
+    <button class="btn btn-sm" id="sr-btn" type="button">Jetzt synchronisieren</button>
+  </div>
+  <dialog id="remind-dialog" style="padding:22px">
+    <h3 style="margin-top:0">Bitte synchronisieren</h3>
+    <p id="rm-text"></p>
+    <div class="btn-row"><button class="btn" id="rm-sync" type="button">Jetzt synchronisieren</button><button class="btn btn-ghost" id="rm-later" type="button">Später</button></div>
+  </dialog>
+
   <dialog id="inv-dialog" class="wide">
     <form method="dialog" class="dialog-body" id="inv-form">
       <h2 style="margin-top:0">Neue Rechnung</h2>
