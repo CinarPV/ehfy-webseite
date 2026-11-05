@@ -524,3 +524,9 @@ body.has-reminder { padding-bottom: 90px; }
 .att-fee { flex-basis: 100%; }
 .att-btn.on-yes { background: var(--ok); border-color: var(--ok); color: #fff; }
 .att-btn.on-no { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* Sehtest abhaken */
+.st-row { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: .86rem; }
+.st-group { display: flex; align-items: center; gap: 4px; }
+.st-label { color: var(--muted, #5a6b78); }
+.sc-done { font-weight: 800; }

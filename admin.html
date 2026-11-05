@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 19</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 20</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -48,6 +48,8 @@
             <span id="sync-text"></span>
             <button class="btn btn-sm" id="sync-btn" type="button">Synchronisieren</button>
           </div>
+          <div class="field no-print" style="margin:0 0 14px"><label for="sc-search">Schüler suchen</label>
+            <input id="sc-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
           <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
             <button data-view="termine" class="active">Termine</button>
             <button data-view="schueler">Schüler</button>
@@ -60,6 +62,7 @@
               <h2 style="margin:0 0 4px;font-size:1.3rem">Anwesenheit</h2>
               <p class="muted small" style="margin-bottom:12px">Die nächsten zwei Kurse. Nichts wird verschickt, bevor du einen Mail-Knopf drückst und bestätigst.</p>
               <p class="form-error" id="att-error" role="alert"></p>
+              <div class="field" style="margin:0 0 12px"><label for="att-filter">In der Anwesenheit nach Namen suchen</label><input id="att-filter" type="search" autocomplete="off" placeholder="z. B. Müller"></div>
               <div id="att-cards" class="att-list"></div>
               <div id="att-chances" style="margin-top:14px"></div>
               <div class="field" style="margin:14px 0 8px"><label for="att-past">Früheren Kurs öffnen (zum Nachtragen oder um Rechnungen nachzuschicken)</label><select id="att-past"></select></div>
@@ -150,8 +153,6 @@
           <div id="students-view" class="hidden" data-section="schueler">
             <h2 style="margin:0 0 4px;font-size:1.4rem">Schüler</h2>
             <p class="muted small" id="sc-count"></p>
-            <div class="field" style="margin:12px 0 18px"><label for="sc-search">Suchen nach Name, Geburtsdatum, E-Mail, Telefon oder Ort</label>
-              <input id="sc-search" type="search" autocomplete="off" placeholder="z. B. Müller oder 01.02.2008"></div>
             <p class="form-error" id="sc-error" role="alert"></p>
             <div id="sc-list" class="sc-list"></div>
             <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">

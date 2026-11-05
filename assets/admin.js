@@ -599,6 +599,32 @@
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
   });
 
+  // ---------- Sehtest abhaken: gemacht, bestanden, Sehhilfe ----------
+  function sehtestControls(r, c) {
+    const on = (group, value, cur, label, cls = "") => `<button class="btn btn-sm btn-ghost att-btn ${cur === value ? cls || "on-yes" : ""}" type="button" data-st="${group}" data-val="${value}" aria-pressed="${cur === value}">${label}</button>`;
+    const done = Boolean(sehtestDay(r, c));
+    return `<div class="st-row">
+      <div class="st-group"><span class="st-label">Sehtest:</span>${on("done", true, done, done ? "✓ gemacht" : "gemacht")}</div>
+      <div class="st-group"><span class="st-label">Bestanden:</span>${on("passed", true, r.sehtest_passed, "Ja")}${on("passed", false, r.sehtest_passed, "Nein", "on-no")}</div>
+      <div class="st-group"><span class="st-label">Sehhilfe:</span>${on("aid", true, r.sehtest_aid, "Mit")}${on("aid", false, r.sehtest_aid, "Ohne")}</div>
+    </div>`;
+  }
+  async function handleSehtest(btn, r, c) {
+    const value = btn.dataset.val === "true";
+    if (btn.dataset.st === "done") {
+      const done = Boolean(sehtestDay(r, c));
+      return db.updateRegistration(r.id, done
+        ? { sehtest_on: null, sehtest_none: true, sehtest_passed: null, sehtest_aid: null }
+        : { sehtest_on: c ? dayOf(c.starts_at) : localDate(new Date()), sehtest_none: false });
+    }
+    const field = btn.dataset.st === "passed" ? "sehtest_passed" : "sehtest_aid";
+    const patch = { [field]: r[field] === value ? null : value };
+    // Wer ein Ergebnis hat, hat den Sehtest auch gemacht
+    if (patch[field] !== null && !sehtestDay(r, c)) { patch.sehtest_on = c ? dayOf(c.starts_at) : localDate(new Date()); patch.sehtest_none = false; }
+    return db.updateRegistration(r.id, patch);
+  }
+  const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
+
   // ---------- Anwesenheit, Ausfallgebühr und zweite Chance ----------
   const FEE = cfg.documents.noShowFee;
   let attRegs = [], attById = {}, attPastId = "";
@@ -638,10 +664,13 @@
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>`}
       ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
+      ${!absent(r) && (r.package === "komplett" || sehtestDay(r, courseOf(r))) ? sehtestControls(r, courseOf(r)) : ""}
     </div>`;
   }
   function attCard(c) {
-    const list = attRegs.filter(r => r.course_id === c.id && (r.status !== "storniert" || lateCancel(r))).sort(byName);
+    const words = $("att-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
+    const list = attRegs.filter(r => r.course_id === c.id && (r.status !== "storniert" || lateCancel(r))
+      && words.every(w => `${r.first_name} ${r.last_name}`.toLowerCase().includes(w))).sort(byName);
     const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
     return `<article class="att-card"><h3>${dayText(c.starts_at)} · ${esc(c.location)}</h3>
       <p class="small muted" style="margin:0 0 6px">${list.length} angemeldet · ${yes} da · ${no} nicht da</p>
@@ -674,6 +703,7 @@
     $("att-past-card").innerHTML = pick && !shown.has(pick.id) ? attCard(pick) : "";
   }
   $("att-past").addEventListener("change", ev => { attPastId = ev.target.value; renderAttendance(); });
+  $("att-filter").addEventListener("input", renderAttendance);
 
   const feeDate = r => shortDay(courseOf(r).starts_at);
   async function sendFeeBill(r) {
@@ -726,6 +756,11 @@
     const r = attRegs.find(x => x.id === row.dataset.att);
     const err = $("att-error");
     err.textContent = "";
+    const stBtn = ev.target.closest("[data-st]");
+    if (r && stBtn) {
+      try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { err.textContent = e.message; }
+      return;
+    }
     const mark = ev.target.closest("[data-mark]");
     const fee = ev.target.closest("[data-fee]");
     if (!r || (!mark && !fee)) return;
@@ -766,7 +801,7 @@
   const sehtestDay = (r, c) => {
     if (r.sehtest_none) return "";
     if (r.sehtest_on) return r.sehtest_on;
-    if (r.package === "komplett" && !["storniert", "nicht_erschienen"].includes(r.status) && c) return dayOf(c.starts_at);
+    if (r.package === "komplett" && r.status === "teilgenommen" && c) return dayOf(c.starts_at);
     return "";
   };
   async function loadStudents() {
@@ -807,10 +842,11 @@
     const off = r.status === "storniert" || !c;
     return `<div class="sc-entry" data-reg="${r.id}">
       <div class="sc-facts">
-        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? fmtRange(c.starts_at, c.ends_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}${esc(STATUS[r.status] || r.status)}</span></div>
+        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${courseDone(r)}</span></span></div>
         <div><label for="sc-st-${r.id}">Sehtest am (leer = kein Sehtest)</label><input type="date" id="sc-st-${r.id}" data-sehtest value="${sehtestDay(r, c)}"></div>
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
+      ${sehtestControls(r, c)}
       ${off ? "" : `<div class="btn-row">
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="quittung">Quittung</button>
@@ -824,7 +860,12 @@
     if (r.protocol_added_on) await db.removeTemplate(`protokolle/${r.id}`);
     await db.deleteRegistration(r.id);
   }
-  $("sc-search").addEventListener("input", renderStudents);
+  // Das Suchfeld oben führt von überall direkt zu den Schülern
+  $("sc-search").addEventListener("input", () => {
+    if ($("students-view").classList.contains("hidden") && $("sc-search").value.trim()) {
+      document.querySelector('#main-tabs [data-view="schueler"]').click();
+    } else renderStudents();
+  });
   const protocolKey = id => `protokolle/${id}`;
   let protoFor = null;
   // Fotos werden zur PDF, damit jedes Protokoll gleich gedruckt werden kann
@@ -867,6 +908,11 @@
     if (!box) return;
     const r = studentRegs.find(x => x.id === box.dataset.reg);
     const show = msg => { $("sc-error").textContent = msg; };
+    const stBtn = ev.target.closest("[data-st]");
+    if (stBtn) {
+      try { await handleSehtest(stBtn, r, studentCourses[r.course_id]); await loadStudents(); } catch (e) { show(e.message); }
+      return;
+    }
     const printKind = ev.target.closest("[data-sc-print]");
     if (printKind) return runDoc(printKind.dataset.scPrint, [r], studentCourses[r.course_id], show);
     if (ev.target.closest("[data-sc-del]")) {
