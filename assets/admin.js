@@ -602,6 +602,7 @@
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
+    if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
   });
@@ -1333,6 +1334,7 @@
     finally { button.disabled = false; button.textContent = label; }
   }
   const periodName = all => `Belege_${$("inv-year").value}${!all && invMonth ? "-" + invMonth : ""}.pdf`;
+  window.EHFYAdmin = { ensurePdf, showPdf, saveFile, openTab, loadFont, settingsChanged() { bankData = null; } };
   $("inv-print-all").onclick = async ev => {
     const list = belegeOf(false);
     if (!list.length) { $("inv-print-error").textContent = "Für diese Auswahl gibt es keine Belege."; return; }

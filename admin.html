@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 25</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 26</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -54,6 +54,7 @@
             <button data-view="termine" class="active">Termine</button>
             <button data-view="schueler">Schüler</button>
             <button data-view="rechnungen">Rechnungen</button>
+            <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
             <button data-view="vorlagen">Einstellungen</button>
           </div>
 
@@ -155,6 +156,8 @@
             <div id="sc-list" class="sc-list"></div>
             <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">
           </div>
+
+          <div id="finance-view" class="hidden no-print" data-section="finanzen"></div>
 
           <div id="invoices-view" class="hidden" data-section="rechnungen">
             <div class="admin-bar no-print" style="margin-bottom:16px">
@@ -357,6 +360,7 @@
   <script src="assets/calendar.js"></script>
   <script src="assets/import-alt.js"></script>
   <script src="assets/admin.js"></script>
+  <script src="assets/finanzen.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
       // Kommt eine neue Version an, lädt die Seite einmal selbst neu
