@@ -40,7 +40,7 @@
             <div>
               <div id="calendar"><div class="cal"><p class="muted" style="margin:0">Termine werden geladen …</p></div></div>
               <div class="cal-legend">
-                <span><i style="background:var(--aid-light)"></i>freie Plätze</span>
+                <span><i style="background:var(--aid-light)"></i>Plätze frei</span>
                 <span><i style="background:var(--signal-light)"></i>fast voll</span>
                 <span><i style="background:var(--soft)"></i>ausgebucht</span>
               </div>
@@ -138,15 +138,15 @@
 
     let courses = [], filter = "Alle", selectedId = null, cal;
     const dayKey = c => EHFYKey(new Date(c.starts_at));
-    const bookable = c => c.online_booking && c.booked < c.capacity;
+    const bookable = c => c.online_booking && EHFY.seatLevel(c) !== "voll";
     const visible = () => courses.filter(c => filter === "Alle" || c.location === filter);
     const short = loc => loc.slice(0, 2).toUpperCase();
 
     function marks() {
       const m = {};
       for (const c of visible()) {
-        const k = dayKey(c), free = c.capacity - c.booked;
-        const cls = !bookable(c) ? "has-full" : free <= 3 ? "has-few" : "has-free";
+        const k = dayKey(c);
+        const cls = !bookable(c) ? "has-full" : EHFY.seatLevel(c) === "frei" ? "has-free" : "has-few";
         // Bei mehreren Kursen am Tag gewinnt der mit freien Plätzen
         if (!m[k] || m[k].cls === "has-full") m[k] = { cls, label: short(c.location), title: c.location };
       }

@@ -143,11 +143,18 @@
         el.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join(".");
       });
     },
+    // Öffentlich gibt es nur eine Einstufung, keine Platzzahlen
+    seatLevel(c) {
+      if (c.seats) return c.seats;
+      const free = Math.max(0, (c.capacity || 0) - (c.booked || 0));
+      return free === 0 ? "voll" : free <= 2 ? "letzte" : free <= 5 ? "wenige" : "frei";
+    },
+    seatText(c) {
+      return { frei: "Noch Plätze frei", wenige: "Noch wenige Plätze frei", letzte: "Die letzten Plätze", voll: "Ausgebucht" }[EHFY.seatLevel(c)];
+    },
     seatsPill(c) {
-      const free = Math.max(0, c.capacity - c.booked);
-      if (free === 0) return '<span class="pill pill-full">ausgebucht</span>';
-      if (free <= 3) return `<span class="pill pill-warn">nur noch ${free} ${free === 1 ? "Platz" : "Plätze"}</span>`;
-      return `<span class="pill pill-ok">${free} Plätze frei</span>`;
+      const cls = { frei: "pill-ok", wenige: "pill-warn", letzte: "pill-warn", voll: "pill-full" }[EHFY.seatLevel(c)];
+      return `<span class="pill ${cls}">${EHFY.seatText(c)}</span>`;
     }
   };
 })();

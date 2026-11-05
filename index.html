@@ -205,25 +205,21 @@
       const all = await EHFY_DB.getOpenCourses();
       const list = all.slice(0, 6);
       box.innerHTML = list.length ? list.map(c => {
-        const d = new Date(c.starts_at), free = Math.max(0, c.capacity - c.booked);
-        const label = !c.online_booking ? '<span class="pill pill-muted">nur telefonisch</span>'
-          : free === 0 ? '<span class="pill pill-full">ausgebucht</span>'
-          : `<span class="pill ${free <= 3 ? "pill-warn" : ""}">${free <= 3 ? "nur " + free + " frei" : free + " frei"}</span>`;
+        const d = new Date(c.starts_at);
+        const label = !c.online_booking ? '<span class="pill pill-muted">nur telefonisch</span>' : EHFY.seatsPill(c);
         return `<a class="date-card" href="anmelden.html">
             <div class="day"><small>${fmt(d, { weekday: "short" }).replace(".", "").toUpperCase()}</small><b>${fmt(d, { day: "2-digit" })}</b><small>${fmt(d, { month: "short" }).replace(".", "").toUpperCase()}</small></div>
             <div><div class="where">${EHFY.esc(c.location)}</div><div class="when">${EHFY.fmtRange(c.starts_at, c.ends_at)}</div></div>
             ${label}</a>`;
       }).join("") : '<p class="muted">Aktuell sind keine Termine eingetragen. Melde dich gern telefonisch oder per WhatsApp.</p>';
-      const next = all.find(c => c.online_booking && c.booked < c.capacity);
+      const next = all.find(c => c.online_booking && EHFY.seatLevel(c) !== "voll");
       if (next) document.getElementById("dock-t").textContent = `${fmt(new Date(next.starts_at), { weekday: "short", day: "2-digit", month: "2-digit" })} · ${next.location}`;
       const mon = document.getElementById("next-course");
       if (next) {
-        const free = Math.max(0, next.capacity - next.booked);
         mon.querySelector(".monitor-date").textContent = fmt(new Date(next.starts_at), { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
         mon.insertAdjacentHTML("beforeend", `
           <div class="monitor-meta">${EHFY.esc(next.location)} · ${EHFY.fmtRange(next.starts_at, next.ends_at)}</div>
-          <div class="monitor-seats"><b>${free}</b><span>von ${next.capacity} Plätzen frei</span></div>
-          <div class="seat-bar"><i style="width:${Math.round(next.booked / next.capacity * 100)}%"></i></div>
+          <div class="monitor-seats"><span>${EHFY.seatText(next)}</span></div>
           <a class="btn" href="anmelden.html">Jetzt anmelden</a>`);
       } else {
         mon.querySelector(".monitor-date").textContent = "Neue Termine folgen";
