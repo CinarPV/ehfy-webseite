@@ -683,20 +683,6 @@
       <div class="att-body">${open ? attBody(list) : ""}</div></details>`;
   }
   const attBody = list => (list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
-  const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
-  const attGroup = (key, label, count, inner) => `<details class="att-folder att-group" data-folder="${key}" ${attOpen.has(key) ? "open" : ""}>
-    <summary>${label} <small>${count} ${count === 1 ? "Kurs" : "Kurse"}</small></summary><div class="att-body">${attOpen.has(key) ? inner() : ""}</div></details>`;
-  function archiveHtml(list) {
-    const years = new Map();
-    for (const c of list) {
-      const d = new Date(c.starts_at), y = d.getFullYear(), m = d.getMonth();
-      if (!years.has(y)) years.set(y, new Map());
-      if (!years.get(y).has(m)) years.get(y).set(m, []);
-      years.get(y).get(m).push(c);
-    }
-    return [...years].map(([y, months]) => attGroup(`y${y}`, String(y), [...months.values()].flat().length, () =>
-      [...months].map(([m, cs]) => attGroup(`m${y}-${m}`, MONTH_NAMES[m], cs.length, () => cs.map(attFolder).join(""))).join(""))).join("");
-  }
   function chanceRow(r) {
     const c = courseOf(r), f = followUp(r);
     let info, action = "";
@@ -713,18 +699,15 @@
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
     const today = localDate(new Date());
     const coming = courses.filter(c => c.status === "offen" && localDate(new Date(c.starts_at)) >= today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-    $("att-cards").innerHTML = coming.length ? coming.map(attFolder).join("") : '<p class="muted small">Keine kommenden Kurse.</p>';
+    // Der letzte Kurs bleibt sichtbar, bis der nächste Kurstag da ist (höchstens 14 Tage). Seine Daten bleiben unter „Schüler“.
+    const limit = new Date(); limit.setDate(limit.getDate() - 14);
+    const last = courses.filter(c => localDate(new Date(c.starts_at)) < today && new Date(c.starts_at) >= limit && c.status === "offen")
+      .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
+    const hasToday = coming.some(c => localDate(new Date(c.starts_at)) === today);
+    const folders = [...(last && !hasToday ? [last] : []), ...coming];
+    $("att-cards").innerHTML = folders.length ? folders.map(attFolder).join("") : '<p class="muted small">Keine aktuellen Kurse.</p>';
     const open = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
     $("att-chances").innerHTML = open.length ? `<article class="att-card"><h3>Zweite Chancen</h3>${open.map(chanceRow).join("")}</article>` : "";
-    const shown = new Set(coming.map(c => c.id));
-    const past = courses.filter(c => !shown.has(c.id)).sort((a, b) => b.starts_at.localeCompare(a.starts_at));
-    // Beim Suchen nur die Ordner mit Treffern zeigen, sonst nach Jahr und Monat geordnet
-    if (attWords().length) {
-      const hits = past.filter(c => attPeople(c).length);
-      $("att-archive").innerHTML = hits.length ? hits.map(attFolder).join("") : '<p class="muted small">Keine Treffer in früheren Kursen.</p>';
-    } else {
-      $("att-archive").innerHTML = past.length ? archiveHtml(past) : '<p class="muted small">Noch keine früheren Kurse.</p>';
-    }
   }
   // Ordner: Inhalt erst beim Öffnen aufbauen, Zustand merken
   $("att-section").addEventListener("toggle", ev => {
@@ -783,20 +766,12 @@
     await db.sendInvoiceMail({ to: r.email, subject: `Noch eine Chance: Ihr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body, textOnly: true });
     await db.updateRegistration(r.id, { fee_state: "chance", fee_state_at: new Date().toISOString(), chance_until: untilDay });
   }
-  $("att-section").addEventListener("click", async ev => {
-    const row = ev.target.closest("[data-att]");
-    if (!row) return;
-    const r = attRegs.find(x => x.id === row.dataset.att);
-    const err = $("att-error");
+  // Knöpfe für Anwesenheit und Ausfallgebühr, in beiden Bereichen dieselben
+  async function attendanceAction(target, r, err) {
     err.textContent = "";
-    const stBtn = ev.target.closest("[data-st]");
-    if (r && stBtn) {
-      try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { err.textContent = e.message; }
-      return;
-    }
-    const mark = ev.target.closest("[data-mark]");
-    const fee = ev.target.closest("[data-fee]");
-    if (!r || (!mark && !fee)) return;
+    const mark = target.closest("[data-mark]");
+    const fee = target.closest("[data-fee]");
+    if (!r || (!mark && !fee)) return false;
     const btn = mark || fee;
     btn.disabled = true;
     try {
@@ -804,26 +779,38 @@
         const value = r.status === mark.dataset.mark ? "angemeldet" : mark.dataset.mark;
         await db.updateRegistration(r.id, { status: value });
       } else if (fee.dataset.fee === "waive") {
-        if (!confirm(`Ausfallgebühr von ${r.first_name} ${r.last_name} gutschreiben?`)) return;
+        if (!confirm(`Ausfallgebühr von ${r.first_name} ${r.last_name} gutschreiben?`)) return true;
         await db.updateRegistration(r.id, { fee_state: "erlassen", fee_state_at: new Date().toISOString() });
       } else {
         if (!db.isOnline()) throw new Error("Zum Senden braucht es Internet.");
         await ensurePdf();
         if (fee.dataset.fee === "chance") {
-          if (!confirm(`Zweite Chance per E-Mail an ${r.email} senden?`)) return;
+          if (!confirm(`Zweite Chance per E-Mail an ${r.email} senden?`)) return true;
           await sendChance(r);
         } else if (fee.dataset.fee === "both") {
-          if (!confirm(`Zwei Rechnungen über je ${FEE} € an ${r.email} senden?`)) return;
+          if (!confirm(`Zwei Rechnungen über je ${FEE} € an ${r.email} senden?`)) return true;
           await sendFeeBill(chanceBefore(r));
           await sendFeeBill(r);
         } else {
-          if (!confirm(`Rechnung über ${FEE} € an ${r.email} senden?`)) return;
+          if (!confirm(`Rechnung über ${FEE} € an ${r.email} senden?`)) return true;
           await sendFeeBill(r);
         }
       }
       await loadCourses();
     } catch (e) { err.textContent = e.message; }
     finally { btn.disabled = false; }
+    return true;
+  }
+  $("att-section").addEventListener("click", async ev => {
+    const row = ev.target.closest("[data-att]");
+    if (!row) return;
+    const r = attRegs.find(x => x.id === row.dataset.att);
+    const stBtn = ev.target.closest("[data-st]");
+    if (r && stBtn) {
+      try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { $("att-error").textContent = e.message; }
+      return;
+    }
+    await attendanceAction(ev.target, r, $("att-error"));
   });
 
   // ---------- Schülerdatenbank: alle Anmeldungen aller Kurse, je Person zusammengefasst ----------
@@ -879,6 +866,11 @@
         <div><label for="sc-st-${r.id}">Sehtest am (leer = kein Sehtest)</label><input type="date" id="sc-st-${r.id}" data-sehtest value="${sehtestDay(r, c)}"></div>
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
+      ${c && r.status !== "storniert" ? `<div class="att-btns">
+        <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
+        <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
+      </div>` : ""}
+      ${c && absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
       ${sehtestControls(r, c)}
       ${off ? "" : `<div class="btn-row">
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
@@ -944,6 +936,11 @@
     const stBtn = ev.target.closest("[data-st]");
     if (stBtn) {
       try { await handleSehtest(stBtn, r, studentCourses[r.course_id]); await loadStudents(); } catch (e) { show(e.message); }
+      return;
+    }
+    if (ev.target.closest("[data-mark],[data-fee]")) {
+      await attendanceAction(ev.target, r, $("sc-error"));
+      await loadStudents();
       return;
     }
     const printKind = ev.target.closest("[data-sc-print]");

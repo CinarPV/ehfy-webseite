@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 21</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 22</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -60,13 +60,11 @@
           <div id="courses-view" data-section="termine">
             <section id="att-section" class="no-print" style="margin-bottom:22px" aria-label="Anwesenheit">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Anwesenheit</h2>
-              <p class="muted small" style="margin-bottom:12px">Jeder Kurstag ist ein Ordner: antippen zum Öffnen. Nichts wird verschickt, bevor du einen Mail-Knopf drückst und bestätigst.</p>
+              <p class="muted small" style="margin-bottom:12px">Jeder aktuelle Kurstag ist ein Ordner. Der letzte Kurs bleibt hier, bis der nächste Kurstag da ist. Alle Teilnehmer bleiben unter „Schüler“ gespeichert, dort kannst du auch später alles nachtragen.</p>
               <p class="form-error" id="att-error" role="alert"></p>
               <div class="field" style="margin:0 0 12px"><label for="att-filter">In der Anwesenheit nach Namen suchen</label><input id="att-filter" type="search" autocomplete="off" placeholder="z. B. Müller"></div>
               <div id="att-cards" class="att-list"></div>
               <div id="att-chances" style="margin-top:14px"></div>
-              <h3 style="margin:16px 0 8px;font-size:1.05rem" id="att-archive-title">Frühere Kurse</h3>
-              <div id="att-archive" class="att-list"></div>
             </section>
             <div class="card q-card no-print" style="margin-bottom:22px">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>

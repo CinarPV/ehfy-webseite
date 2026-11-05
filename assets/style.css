@@ -540,4 +540,3 @@ body.has-reminder { padding-bottom: 90px; }
 .att-folder > summary::after { margin-left: auto; }
 .att-folder > summary small { font-weight: 500; color: var(--muted, #5a6b78); }
 .att-body { padding: 0 16px 12px; }
-.att-group > .att-body { display: grid; gap: 10px; padding-top: 2px; }
