@@ -23,7 +23,7 @@
   const picked = new Set();
   const pickedTrips = new Set();
 
-  const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], fees: [], other: [], expenses: [], trips: [], routes: [] });
+  const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], fees: [], other: [], expenses: [], trips: [], routes: [], tripsDone: {} });
   const inYear = key => String(key || "").slice(0, 4) === String(year);
   const sum = (list, f) => round2(list.reduce((s, x) => s + num(f(x)), 0));
 
@@ -46,13 +46,38 @@
     return { count: here.length, amount: round2(here.reduce((s, r) => s + price(r), 0)) };
   }
   const coursesOfYear = () => courses
-    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k <= today(); })
+    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k <= today() && c.status !== "abgesagt"; })
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
 
   function locationNames() {
     const names = new Set((Array.isArray(settings.locations) ? settings.locations : cfg.locations).map(l => l.name));
     coursesOfYear().forEach(c => names.add(c.location));
     return [...names];
+  }
+
+  // Prüfwerte, Stand 2025. Für § 19 UStG zählt der Umsatz, nicht der Gewinn.
+  const LIMIT_REVENUE = 25000;
+  function incomeOfYear(y) {
+    const of = list => list.filter(x => String(x.date).slice(0, 4) === String(y));
+    return sum(Object.values(fin.incomes).filter(x => String(x.date).slice(0, 4) === String(y)), x => x.amount)
+      + sum(of(fin.aed), x => x.amount) + sum(of(fin.fees), x => x.amount) + sum(of(fin.other), x => x.amount);
+  }
+  function limitCard(totalIncome, totalOut) {
+    const profit = round2(totalIncome - totalOut);
+    const share = Math.min(100, Math.round(totalIncome / LIMIT_REVENUE * 100));
+    const warn = totalIncome > LIMIT_REVENUE ? "over" : share >= 80 ? "near" : "";
+    return `<div class="card fin-card">
+      <h3>Gewinn ${year}</h3>
+      <div class="fin-sumline"><span>Einnahmen gesamt</span><b>${eur(totalIncome)}</b></div>
+      <div class="fin-sumline"><span>Ausgaben gesamt</span><b>− ${eur(totalOut)}</b></div>
+      <div class="fin-sumline fin-profit"><span>Gewinn</span><b>${eur(profit)}</b></div>
+      <h4 style="margin:18px 0 6px">Kleinunternehmer-Grenze</h4>
+      <p class="small" style="margin:0 0 8px">Hier zählt der <strong>Umsatz</strong>, nicht der Gewinn: ${eur(totalIncome)} von ${eur(LIMIT_REVENUE)} (${share} %).</p>
+      <div class="fin-bar ${warn}"><i style="width:${share}%"></i></div>
+      ${warn === "over" ? '<p class="notice notice-danger small" style="margin-top:10px">Die Grenze ist überschritten. Sprich bitte mit deinem Steuerberater, denn ab dem Folgejahr kann die Regelung entfallen.</p>'
+        : warn === "near" ? '<p class="notice notice-warn small" style="margin-top:10px">Du näherst dich der Grenze. Sprich am besten rechtzeitig mit deinem Steuerberater.</p>' : ""}
+      <p class="small muted" style="margin:10px 0 0">Nur eine Orientierung nach deinen Einträgen, nach Stand 2025: Der Umsatz des Vorjahres darf höchstens 25.000 € betragen, der des laufenden Jahres höchstens 100.000 €. Überschreitest du 100.000 € im laufenden Jahr, entfällt die Regelung sofort.</p>
+    </div>`;
   }
 
   // ---------- Darstellung ----------
@@ -144,7 +169,8 @@
 
       <div class="card fin-card">
         <h3>Fahrtenbuch: ${kmTotal.toLocaleString("de-DE")} km</h3>
-        <p class="small muted">Pro Kurs werden drei Hin- und Rückfahrten angelegt: Vorbereitung am Vortag, Kurstag und Abbau am Folgetag. Trag dafür hier einmal deine Startadresse und die einfache Entfernung je Ort ein.</p>
+        <p class="small muted">Sobald bei einem Kurs jemand mit ✓ Da eingetragen ist, werden automatisch drei Hin- und Rückfahrten angelegt und als Fahrtkosten übernommen: Vorbereitung am Vortag, Kurstag und Abbau am Folgetag. Trag dafür hier einmal die einfache Entfernung je Ort ein.</p>
+        ${missingKm.length ? `<p class="form-error">Entfernung fehlt für: ${missingKm.map(esc).join(", ")}. Danach werden diese Fahrten übernommen.</p>` : ""}
         <form class="fin-form" id="fin-trip-settings">
           <label class="grow">Startadresse<input name="home" value="${esc(fin.home)}" placeholder="deine Adresse" maxlength="160"></label>
           <label>Euro pro km<input name="rate" inputmode="decimal" value="${String(fin.rate).replace(".", ",")}"></label>
@@ -169,7 +195,8 @@
             <td>${dateText(t.date)}</td><td>${esc(t.from || "")}</td><td>${esc(t.to)}</td><td>${esc(t.purpose || "")}</td>
             <td><input class="fin-input-sm" inputmode="decimal" data-trip="${t.id}" value="${String(t.km).replace(".", ",")}" aria-label="Kilometer"></td>
             <td>${removeBtn("trip", t.id)}</td></tr>`).join(""))}</div>` : ""}
-      </div>`;
+      </div>
+      ${limitCard(incomeOfYear(year), totalOut)}`;
   }
 
   function entryCard(kind, title, total, rows, hint) {
@@ -220,21 +247,26 @@
     if (!list.length) return fail("Bitte zuerst Kurstage anhaken.");
     const missing = [...new Set(list.map(c => c.location))].filter(n => !num(fin.km[n]));
     if (missing.length) return fail(`Bitte zuerst die Entfernung eintragen für: ${missing.join(", ")}.`);
-    for (const c of list) {
-      const key = dayKey(new Date(c.starts_at)), km = round2(num(fin.km[c.location]) * 2);
-      fin.trips = fin.trips.filter(t => t.courseId !== c.id);
-      [[-1, "Vorbereitung"], [0, "Kurstag"], [1, "Abbau"]].forEach(([shift, purpose]) => fin.trips.push({
-        id: newId(), courseId: c.id, date: shiftDay(key, shift), from: fin.home, to: `${c.location} und zurück`, purpose: `Erste-Hilfe-Kurs: ${purpose}`, km
-      }));
-    }
+    list.forEach(courseTrips);
+    [...new Set(list.map(c => dayKey(new Date(c.starts_at)).slice(0, 4)))].forEach(recalcTrips);
     await save();
   }
-  // Fahrten je Monat als Ausgabe: erneutes Drücken ersetzt die Beträge dieses Jahres
-  async function transferTrips() {
+  const courseTrips = c => {
+    const key = dayKey(new Date(c.starts_at)), km = round2(num(fin.km[c.location]) * 2);
+    fin.trips = fin.trips.filter(t => t.courseId !== c.id);
+    [[-1, "Vorbereitung"], [0, "Kurstag"], [1, "Abbau"]].forEach(([shift, purpose]) => fin.trips.push({
+      id: newId(), courseId: c.id, date: shiftDay(key, shift), from: fin.home, to: `${c.location} und zurück`, purpose: `Erste-Hilfe-Kurs: ${purpose}`, km
+    }));
+    fin.tripsDone[c.id] = true;
+  };
+  // Fahrten je Monat als Ausgabe: ersetzt die Fahrtkosten des Jahres
+  async function transferTrips() { recalcTrips(year); await save(); }
+  function recalcTrips(y) {
     const rate = num(fin.rate);
-    fin.expenses = fin.expenses.filter(x => !(x.source === "trips" && inYear(x.date)));
+    const ofYear = key => String(key).slice(0, 4) === String(y);
+    fin.expenses = fin.expenses.filter(x => !(x.source === "trips" && ofYear(x.date)));
     const months = new Map();
-    for (const t of fin.trips.filter(x => inYear(x.date))) {
+    for (const t of fin.trips.filter(x => ofYear(x.date))) {
       const m = t.date.slice(0, 7);
       months.set(m, (months.get(m) || 0) + num(t.km));
     }
@@ -242,7 +274,35 @@
       const last = new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate();
       fin.expenses.push({ id: newId(), source: "trips", date: `${m}-${pad(last)}`, category: "Fahrtkosten", text: `${round2(km).toLocaleString("de-DE")} km × ${rate.toLocaleString("de-DE")} €`, amount: round2(km * rate) });
     }
-    await save();
+  }
+  // Stattgefundene Kurse: mindestens ein ✓ Da und nicht abgesagt. Jeder Kurs wird nur einmal automatisch angelegt,
+  // damit von dir gelöschte oder geänderte Fahrten nicht wiederkommen. Alte Kurse aus der Mac-App bleiben außen vor.
+  let missingKm = [];
+  function applyAutoTrips() {
+    missingKm = [];
+    const years = new Set();
+    // Auf einem anderen Gerät gelöschte Kurse: ihre Daten ebenfalls entfernen
+    const known = new Set(courses.map(c => c.id));
+    if (courses.length) {
+      for (const id of Object.keys(fin.incomes)) if (!known.has(id)) { delete fin.incomes[id]; years.add(String(new Date().getFullYear())); }
+      for (const id of Object.keys(fin.tripsDone)) if (!known.has(id)) delete fin.tripsDone[id];
+      for (const t of fin.trips.filter(x => x.courseId && !known.has(x.courseId))) years.add(t.date.slice(0, 4));
+      fin.trips = fin.trips.filter(x => !x.courseId || known.has(x.courseId));
+    }
+    for (const c of courses) {
+      const key = dayKey(new Date(c.starts_at));
+      if (c.status === "abgesagt" || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !attendance(c).count) continue;
+      if (!num(fin.km[c.location])) { if (!missingKm.includes(c.location)) missingKm.push(c.location); continue; }
+      courseTrips(c);
+      years.add(key.slice(0, 4));
+    }
+    years.forEach(recalcTrips);
+    return years.size > 0;
+  }
+  async function load() {
+    settings = await db.getSettings().catch(() => ({}));
+    fin = { ...blank(), ...(settings.finance || {}) };
+    [courses, regs] = await Promise.all([db.listCourses(), db.listAllRegistrations()]);
   }
 
   // ---------- PDF ----------
@@ -300,6 +360,11 @@
       trips.forEach(t => { room(16); text(dateText(t.date), M, regular, 9); text(`${t.from ? t.from + " → " : ""}${t.to}${t.purpose ? " · " + t.purpose : ""}`, 150, regular, 9); right(`${num(t.km).toLocaleString("de-DE")} km`, W - M, regular, 9); y -= 13; });
       room(18); y -= 3; line(); y -= 3; text("Gesamt", M, bold); right(`${round2(trips.reduce((s, t) => s + num(t.km), 0)).toLocaleString("de-DE")} km`, W - M, bold); y -= 16;
     }
+    const allIncome = incomeOfYear(year), allOut = sum(expenses, x => x.amount);
+    heading("Gewinn");
+    [["Einnahmen gesamt", eur(allIncome)], ["Ausgaben gesamt", "− " + eur(allOut)], ["Gewinn", eur(round2(allIncome - allOut))]].forEach(([a, b], i) => {
+      room(18); const f = i === 2 ? bold : regular; text(a, M, f); right(b, W - M, f); y -= 16;
+    });
     return pdf.save();
   }
 
@@ -378,16 +443,37 @@
       fin.home = f.home.value.trim();
       fin.rate = num(f.rate.value);
       ev.target.querySelectorAll("[data-km]").forEach(i => { fin.km[i.dataset.km] = i.value.trim() ? num(i.value) : ""; });
+      applyAutoTrips();
     } else return;
     await save();
   });
 
   window.EHFYFinance = {
     async render() {
-      settings = await db.getSettings().catch(() => ({}));
-      fin = { ...blank(), ...(settings.finance || {}) };
-      [courses, regs] = await Promise.all([db.listCourses(), db.listAllRegistrations()]);
-      draw();
+      await load();
+      if (applyAutoTrips()) await save(); else draw();
+    },
+    // Nach ✓ Da: Fahrten eines stattgefundenen Kurses übernehmen
+    async autoTrips() {
+      await load();
+      if (applyAutoTrips()) {
+        settings = { ...(await db.getSettings()), finance: fin };
+        await db.saveSettings(settings);
+        if (window.EHFYAdmin) window.EHFYAdmin.settingsChanged();
+      }
+    },
+    // Abgesagter oder gelöschter Kurs: seine Einnahme und Fahrten aus der Rechnung nehmen
+    async courseCancelled(id) {
+      await load();
+      const affected = new Set(fin.trips.filter(t => t.courseId === id).map(t => t.date.slice(0, 4)));
+      if (!affected.size && !fin.incomes[id] && !fin.tripsDone[id]) return;
+      fin.trips = fin.trips.filter(t => t.courseId !== id);
+      delete fin.incomes[id];
+      delete fin.tripsDone[id];
+      affected.forEach(recalcTrips);
+      settings = { ...(await db.getSettings()), finance: fin };
+      await db.saveSettings(settings);
+      if (window.EHFYAdmin) window.EHFYAdmin.settingsChanged();
     }
   };
 })();

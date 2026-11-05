@@ -7,3 +7,5 @@ alter table public.registrations add column if not exists fee_state_at timestamp
 alter table public.registrations add column if not exists chance_until date;
 alter table public.registrations add column if not exists sehtest_passed boolean;
 alter table public.registrations add column if not exists sehtest_aid boolean;
+alter table public.courses add column if not exists cancel_reason text;
+alter table public.courses add column if not exists cancel_notified_at timestamptz;

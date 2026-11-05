@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 27</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 28</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -236,6 +236,15 @@
   </main>
 
   <!-- Rechnungs-Dialog -->
+  <dialog id="cancel-dialog" style="padding:22px">
+    <h3 style="margin-top:0">Kurs absagen</h3>
+    <p class="small" id="cc-info"></p>
+    <div class="field"><label for="cc-reason">Grund</label>
+      <select id="cc-reason"><option>Zu wenig Teilnehmer</option><option>Krankheitsfall</option><option>Sonstiger Grund</option></select></div>
+    <p class="small muted">Der Kurs verschwindet von der Webseite. Die Teilnehmer bleiben gespeichert. E-Mails gehen erst raus, wenn du danach „Teilnehmer informieren“ drückst.</p>
+    <div class="btn-row"><button class="btn" id="cc-ok" type="button">Kurs absagen</button><button class="btn btn-ghost" id="cc-no" type="button">Abbrechen</button></div>
+  </dialog>
+
   <!-- Erinnerung ans Synchronisieren -->
   <div class="sync-reminder hidden no-print" id="sync-reminder" role="status">
     <span id="sr-text"></span>

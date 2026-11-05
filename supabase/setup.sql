@@ -16,6 +16,8 @@ create table if not exists public.courses (
   note text,
   created_at timestamptz not null default now()
 );
+alter table public.courses add column if not exists cancel_reason text;
+alter table public.courses add column if not exists cancel_notified_at timestamptz;
 
 create table if not exists public.registrations (
   id uuid primary key default gen_random_uuid(),

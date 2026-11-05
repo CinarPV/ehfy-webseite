@@ -173,6 +173,7 @@ in der Fehlermeldung beim Senden bzw. unter Edge Functions → beleg-mail → Lo
 
 - `https://www.ehfy.de/admin.html` → mit deiner Supabase-E-Mail und deinem Passwort anmelden.
 - **Synchronisieren**: Beim Öffnen wird nichts abgeglichen. Änderungen bleiben auf dem Gerät, bis du „Synchronisieren“ drückst; das holt auch neue Anmeldungen. Eine Leiste erinnert dich daran, ebenso eine Nachfrage beim Zurückkehren oder Neuöffnen. Nur „Termin freigeben“ überträgt sofort.
+- **Kurs absagen**: Im Kursordner mit Grund absagen. Die Fahrten und die Einnahme des Kurses gehen aus der Rechnung, „Teilnehmer informieren“ verschickt die Absage per E-Mail.
 - **Anwesenheit**: Oben im Reiter Termine ist jeder aktuelle Kurstag ein Ordner. Der letzte Kurs bleibt, bis der nächste Kurstag da ist (höchstens 14 Tage). Alles Spätere erledigst du unter Schüler. Bei ✗ erscheinen die Knöpfe „Rechnung 50 € senden“ und „Zweite Chance senden“.
 - **Monat oder Jahr drucken**: Unter Rechnungen wählst du einen Monat. „Alles drucken“ öffnet alle Belege als eine PDF, „Herunterladen“ speichert sie, „Ganzes Jahr herunterladen“ speichert das Jahr.
 - **Einnahmen & Ausgaben**: Kurstage anhaken und übernehmen, Ausgaben, AED, Ausfallgebühren und sonstige Einnahmen eintragen, Strecken speichern, Fahrten je Kurs ins Fahrtenbuch holen und als Fahrtkosten übernehmen. Erneutes Übernehmen überschreibt. Das ist eine Übersicht und ersetzt nicht die Abgabe beim Finanzamt.

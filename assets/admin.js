@@ -138,7 +138,7 @@
         ? `Dieser Termin hat ${c.booked} Anmeldung(en). Termin UND alle Anmeldungen endgültig löschen?\n\nTipp: Stattdessen „Bearbeiten → Status: abgesagt“ wählen, dann bleiben die Daten erhalten.`
         : "Diesen Termin endgültig löschen?";
       if (!confirm(msg)) return;
-      try { await db.deleteCourse(c.id); await loadCourses(); } catch (e) { alert(e.message); }
+      try { await db.deleteCourse(c.id); await window.EHFYFinance.courseCancelled(c.id); await loadCourses(); } catch (e) { alert(e.message); }
     }
   });
 
@@ -686,9 +686,16 @@
     const list = attPeople(c);
     const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
     const open = attOpen.has(c.id) || attWords().length > 0;
+    const off = c.status === "abgesagt";
+    const withMail = list.filter(r => r.email && r.status !== "storniert").length;
+    const tools = off
+      ? `<div class="att-row" data-course="${c.id}"><span class="small"><strong>Abgesagt${c.cancel_reason ? ": " + esc(c.cancel_reason) : ""}</strong>${c.cancel_notified_at ? ` · informiert am ${shortDay(c.cancel_notified_at)}` : ""}</span>
+          <div class="att-btns">${withMail && !c.cancel_notified_at ? `<button class="btn btn-sm" type="button" data-course-act="notify">Teilnehmer informieren (${withMail})</button>` : ""}
+          <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
+      : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
     return `<details class="att-folder" data-folder="${c.id}" ${open ? "open" : ""}>
-      <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${list.length} angemeldet · ${yes} da · ${no} nicht da</small></summary>
-      <div class="att-body">${open ? attBody(list) : ""}</div></details>`;
+      <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${off ? "ABGESAGT" : `${list.length} angemeldet · ${yes} da · ${no} nicht da`}</small></summary>
+      <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list)) : ""}</div></details>`;
   }
   const attBody = list => (list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
   function chanceRow(r) {
@@ -706,10 +713,10 @@
     attRegs = regsAll;
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
     const today = localDate(new Date());
-    const coming = courses.filter(c => c.status === "offen" && localDate(new Date(c.starts_at)) >= today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const coming = courses.filter(c => localDate(new Date(c.starts_at)) >= today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     // Der letzte Kurs bleibt sichtbar, bis der nächste Kurstag da ist (höchstens 14 Tage). Seine Daten bleiben unter „Schüler“.
     const limit = new Date(); limit.setDate(limit.getDate() - 14);
-    const last = courses.filter(c => localDate(new Date(c.starts_at)) < today && new Date(c.starts_at) >= limit && c.status === "offen")
+    const last = courses.filter(c => localDate(new Date(c.starts_at)) < today && new Date(c.starts_at) >= limit)
       .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
     const hasToday = coming.some(c => localDate(new Date(c.starts_at)) === today);
     const folders = [...(last && !hasToday ? [last] : []), ...coming];
@@ -786,6 +793,7 @@
       if (mark) {
         const value = r.status === mark.dataset.mark ? "angemeldet" : mark.dataset.mark;
         await db.updateRegistration(r.id, { status: value });
+        await window.EHFYFinance.autoTrips();
       } else if (fee.dataset.fee === "waive") {
         if (!confirm(`Ausfallgebühr von ${r.first_name} ${r.last_name} gutschreiben?`)) return true;
         await db.updateRegistration(r.id, { fee_state: "erlassen", fee_state_at: new Date().toISOString() });
@@ -809,7 +817,63 @@
     finally { btn.disabled = false; }
     return true;
   }
+  // ---------- Kurs absagen ----------
+  let cancelCourse = null;
+  const reasonText = { "Zu wenig Teilnehmer": "wegen zu weniger Teilnehmer", "Krankheitsfall": "wegen eines Krankheitsfalls" };
+  $("cc-no").onclick = () => $("cancel-dialog").close();
+  $("cc-ok").onclick = async () => {
+    const c = cancelCourse;
+    $("cancel-dialog").close();
+    try {
+      await db.saveCourse({ ...c, status: "abgesagt", cancel_reason: $("cc-reason").value, cancel_notified_at: null });
+      await window.EHFYFinance.courseCancelled(c.id);
+      attOpen.add(c.id);
+      await loadCourses();
+    } catch (e) { $("att-error").textContent = e.message; }
+  };
+  async function notifyCancelled(c) {
+    const list = attRegs.filter(r => r.course_id === c.id && r.email && r.status !== "storniert");
+    if (!db.isOnline()) throw new Error("Zum Senden braucht es Internet.");
+    if (!confirm(`Absage per E-Mail an ${list.length} Teilnehmer senden?`)) return;
+    const link = new URL("anmelden.html", location.href).href;
+    const day = shortDay(c.starts_at);
+    let done = 0;
+    try {
+      for (const r of list) {
+        await db.sendInvoiceMail({
+          to: r.email, textOnly: true, subject: `Absage: Ihr Erste-Hilfe-Kurs am ${day}`,
+          text: [`Guten Tag ${r.first_name} ${r.last_name},`, "",
+            `leider müssen wir den Erste-Hilfe-Kurs am ${day} in ${c.location} ${reasonText[c.cancel_reason] || "absagen"}${reasonText[c.cancel_reason] ? " absagen" : ""}. Wir bitten um Entschuldigung.`, "",
+            "Für Sie entstehen dadurch keine Kosten.", "",
+            `Einen neuen Termin können Sie hier auswählen: ${link}`, "",
+            "Mit freundlichen Grüßen", cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`].join("\n")
+        });
+        done++;
+      }
+    } catch (e) { throw new Error(`Nur ${done} von ${list.length} E-Mails wurden gesendet. ${e.message}`); }
+    await db.saveCourse({ ...c, cancel_notified_at: new Date().toISOString() });
+    await loadCourses();
+  }
+
   $("att-section").addEventListener("click", async ev => {
+    const act = ev.target.closest("[data-course-act]");
+    if (act) {
+      const c = attById[act.closest("[data-course]").dataset.course];
+      $("att-error").textContent = "";
+      try {
+        if (act.dataset.courseAct === "cancel") {
+          cancelCourse = c;
+          $("cc-info").textContent = `${dayText(c.starts_at)} · ${c.location}`;
+          $("cancel-dialog").showModal();
+        }
+        if (act.dataset.courseAct === "reopen") {
+          await db.saveCourse({ ...c, status: "offen", cancel_reason: null, cancel_notified_at: null });
+          await loadCourses();
+        }
+        if (act.dataset.courseAct === "notify") await notifyCancelled(c);
+      } catch (e) { $("att-error").textContent = e.message; }
+      return;
+    }
     const row = ev.target.closest("[data-att]");
     if (!row) return;
     const r = attRegs.find(x => x.id === row.dataset.att);
@@ -867,14 +931,14 @@
   }
   function studentEntry(r) {
     const c = studentCourses[r.course_id];
-    const off = r.status === "storniert" || !c;
+    const off = r.status === "storniert" || !c || c.status === "abgesagt";
     return `<div class="sc-entry" data-reg="${r.id}">
       <div class="sc-facts">
-        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${courseDone(r)}</span></span></div>
+        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span></div>
         <div><label for="sc-st-${r.id}">Sehtest am (leer = kein Sehtest)</label><input type="date" id="sc-st-${r.id}" data-sehtest value="${sehtestDay(r, c)}"></div>
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
-      ${c && r.status !== "storniert" ? `<div class="att-btns">
+      ${!off ? `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>` : ""}

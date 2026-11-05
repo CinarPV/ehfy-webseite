@@ -564,3 +564,9 @@ body.has-reminder { padding-bottom: 90px; }
 .fin-routes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .fin-route { display: inline-flex; align-items: center; gap: 2px; }
 .fin-route-del { font: inherit; border: none; background: none; color: var(--danger); cursor: pointer; padding: 6px; }
+.fin-sumline { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.fin-profit { border-top: 2px solid var(--ink); font-weight: 800; font-size: 1.15rem; margin-top: 4px; padding-top: 10px; }
+.fin-bar { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; }
+.fin-bar i { display: block; height: 100%; background: var(--aid); }
+.fin-bar.near i { background: #e0a100; }
+.fin-bar.over i { background: var(--danger); }
