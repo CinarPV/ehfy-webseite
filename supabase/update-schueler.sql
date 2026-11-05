@@ -9,3 +9,5 @@ alter table public.registrations add column if not exists sehtest_passed boolean
 alter table public.registrations add column if not exists sehtest_aid boolean;
 alter table public.courses add column if not exists cancel_reason text;
 alter table public.courses add column if not exists cancel_notified_at timestamptz;
+alter table public.registrations add column if not exists discount numeric(10,2);
+alter table public.registrations add column if not exists discount_note text;

@@ -51,6 +51,8 @@ alter table public.registrations add column if not exists fee_state_at timestamp
 alter table public.registrations add column if not exists chance_until date;
 alter table public.registrations add column if not exists sehtest_passed boolean;
 alter table public.registrations add column if not exists sehtest_aid boolean;
+alter table public.registrations add column if not exists discount numeric(10,2);
+alter table public.registrations add column if not exists discount_note text;
 
 -- Wer hier eingetragen ist, darf die Verwaltung benutzen.
 create table if not exists public.admins (

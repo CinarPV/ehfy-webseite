@@ -43,7 +43,8 @@
       const p = cfg.packages.find(x => x.key === r.package);
       return p ? p.price : 0;
     };
-    return { count: here.length, amount: round2(here.reduce((s, r) => s + price(r), 0)) };
+    const off = r => Math.min(num(r.discount), price(r));
+    return { count: here.length, discount: round2(here.reduce((s, r) => s + off(r), 0)), amount: round2(here.reduce((s, r) => s + price(r) - off(r), 0)) };
   }
   const coursesOfYear = () => courses
     .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k <= today() && c.status !== "abgesagt"; })
@@ -137,17 +138,17 @@
           const key = dayKey(new Date(c.starts_at)), a = attendance(c), done = fin.incomes[c.id];
           return `<tr><td><input type="checkbox" data-pick="${c.id}" aria-label="${dateText(key)} auswählen" ${picked.has(c.id) ? "checked" : ""}></td>
             <td>${dateText(key)}</td><td>${esc(c.location)}</td><td class="fin-num">${a.count}</td><td class="fin-num">${eur(a.amount)}</td>
-            <td class="small">${done ? "übernommen" : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten" : ""}</td></tr>`;
+            <td class="small">${done ? (num(done.amount) !== a.amount || num(done.count) !== a.count ? "weicht ab, neu übernehmen?" : "übernommen") : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten" : ""}</td></tr>`;
         }).join(""))}</div>` : '<p class="muted small">In diesem Jahr gibt es noch keine vergangenen Kurstage.</p>'}
       </div>
 
       <div class="card fin-card">
         <h3>Einnahmen aus Kursen: ${eur(totalIn)}</h3>
-        ${incomes.length ? table(["Tag", "Ort", "Schüler", "Betrag", ""], monthGroups(incomes, x => `<tr>
-            <td>${dateText(x.date)}</td><td>${esc(x.location)}</td>
+        ${incomes.length ? table(["Tag", "Ort", "Gutscheine", "Personen", "Betrag", ""], monthGroups(incomes, x => `<tr>
+            <td>${dateText(x.date)}</td><td>${esc(x.location)}</td><td class="fin-num">${x.discount ? "− " + eur(x.discount) : "–"}</td>
             <td><input class="fin-input-sm" inputmode="numeric" data-income="${x.id}" data-field="count" value="${x.count}" aria-label="Schüler"></td>
             <td><input class="fin-input" inputmode="decimal" data-income="${x.id}" data-field="amount" value="${String(x.amount).replace(".", ",")}" aria-label="Betrag"></td>
-            <td>${removeBtn("income", x.id)}</td></tr>`, 5) + `<tr class="fin-total"><td colspan="3">Gesamt</td><td class="fin-num">${eur(totalIn)}</td><td></td></tr>`)
+            <td>${removeBtn("income", x.id)}</td></tr>`, 6) + `<tr class="fin-total"><td colspan="4">Gesamt</td><td class="fin-num">${eur(totalIn)}</td><td></td></tr>`)
           : '<p class="muted small">Noch keine Kurstage übernommen.</p>'}
       </div>
 
@@ -239,7 +240,7 @@
     if (!list.length) return fail("Bitte zuerst Kurstage anhaken.");
     for (const c of list) {
       const a = attendance(c);
-      fin.incomes[c.id] = { date: dayKey(new Date(c.starts_at)), location: c.location, count: a.count, amount: a.amount };
+      fin.incomes[c.id] = { date: dayKey(new Date(c.starts_at)), location: c.location, count: a.count, discount: a.discount, amount: a.amount };
     }
     await save();
   }
@@ -349,7 +350,22 @@
       }
       room(18); text("Gesamt", M, bold); right(eur(sum(list, x => x.amount)), W - M, bold); y -= 18;
     };
-    block("Einnahmen aus Kursen", incomes, x => `${x.location} · ${x.count} Schüler`);
+    // Kurstage: Tag, Ort, Personen, Gutscheine, Betrag
+    heading("Einnahmen aus Kursen");
+    if (!incomes.length) { text("Noch keine Kurstage übernommen.", M, regular, 9.5); y -= 16; }
+    else {
+      const row = (a, b, c, d, e, f = regular) => { room(16); text(a, M, f, 9); text(b, 150, f, 9); right(c, 330, f, 9); right(d, 420, f, 9); right(e, W - M, f, 9); y -= 14; };
+      row("Tag", "Ort", "Personen", "Gutscheine", "Betrag", bold); line(); y -= 3;
+      const months = new Map();
+      [...incomes].sort((a, b) => a.date.localeCompare(b.date)).forEach(x => { const m = x.date.slice(5, 7); months.set(m, [...(months.get(m) || []), x]); });
+      for (const [m, group] of months) {
+        room(32); text(MONTHS[Number(m) - 1], M, bold, 10); y -= 14;
+        group.forEach(x => row(dateText(x.date), x.location, String(x.count), x.discount ? "− " + eur(x.discount) : "–", eur(x.amount)));
+        line(); y -= 3;
+        row("Zwischensumme", "", String(group.reduce((s, x) => s + num(x.count), 0)), "", eur(sum(group, x => x.amount)), bold); y -= 3;
+      }
+      row("Gesamt", "", String(incomes.reduce((s, x) => s + num(x.count), 0)), "", eur(sum(incomes, x => x.amount)), bold); y -= 4;
+    }
     block("AED-Einweisung und Inbetriebnahme", aed, x => x.text);
     block("Ausfallgebühren", fees, x => x.text);
     block("Sonstige Einnahmen", other, x => x.text);

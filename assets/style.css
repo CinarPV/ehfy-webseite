@@ -570,3 +570,4 @@ body.has-reminder { padding-bottom: 90px; }
 .fin-bar i { display: block; height: 100%; background: var(--aid); }
 .fin-bar.near i { background: #e0a100; }
 .fin-bar.over i { background: var(--danger); }
+.disc-note { flex: 1 1 160px; min-width: 130px; padding: 6px 8px; }

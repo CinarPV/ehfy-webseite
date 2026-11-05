@@ -633,6 +633,23 @@
   }
   const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
 
+  // ---------- Gutschein oder Rabatt je Teilnehmer ----------
+  function discountControls(r) {
+    return `<div class="st-row"><span class="st-label">Gutschein:</span>
+      <input class="fin-input" data-discount inputmode="decimal" placeholder="0,00" value="${r.discount ? String(r.discount).replace(".", ",") : ""}" aria-label="Gutschein in Euro"> €
+      <input class="disc-note" data-discount-note maxlength="80" placeholder="z. B. Flyer Fahrschule" value="${esc(r.discount_note || "")}" aria-label="Grund für den Gutschein">
+    </div>`;
+  }
+  const discountField = target => target.closest("input[data-discount],input[data-discount-note]");
+  async function saveDiscount(input, id) {
+    const row = input.closest(".st-row");
+    const amount = parseFloat(row.querySelector("[data-discount]").value.replace(",", "."));
+    await db.updateRegistration(id, {
+      discount: Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : null,
+      discount_note: row.querySelector("[data-discount-note]").value.trim() || null
+    });
+  }
+
   // ---------- Anwesenheit, Ausfallgebühr und zweite Chance ----------
   const FEE = cfg.documents.noShowFee;
   let attRegs = [], attById = {};
@@ -674,6 +691,7 @@
       </div>`}
       ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
       ${!absent(r) && (r.package === "komplett" || sehtestDay(r, courseOf(r))) ? sehtestControls(r, courseOf(r)) : ""}
+      ${!absent(r) ? discountControls(r) : ""}
     </div>`;
   }
   const attWords = () => $("att-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
@@ -709,6 +727,8 @@
     return `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)} <span class="small muted">(Kurs ${shortDay(c.starts_at)})</span></div><div class="att-fee"><span class="small">${info}</span> ${action}</div></div>`;
   }
   async function renderAttendance() {
+    // Nicht neu aufbauen, solange du in einem Feld tippst
+    if (document.activeElement && document.activeElement.matches("#att-section input[data-discount],#att-section input[data-discount-note]")) return;
     const [regsAll] = await Promise.all([db.listAllRegistrations()]);
     attRegs = regsAll;
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
@@ -735,6 +755,13 @@
     } else attOpen.delete(key);
   }, true);
   $("att-filter").addEventListener("input", renderAttendance);
+  $("att-section").addEventListener("change", async ev => {
+    const input = discountField(ev.target);
+    if (!input) return;
+    input.blur();
+    try { await saveDiscount(input, input.closest("[data-att]").dataset.att); await loadCourses(); }
+    catch (e) { $("att-error").textContent = e.message; }
+  });
 
   const feeDate = r => shortDay(courseOf(r).starts_at);
   async function sendFeeBill(r) {
@@ -944,6 +971,7 @@
       </div>` : ""}
       ${c && absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
       ${sehtestControls(r, c)}
+      ${off ? "" : discountControls(r)}
       ${off ? "" : `<div class="btn-row">
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="quittung">Quittung</button>
@@ -991,6 +1019,13 @@
     } catch (e) { $("sc-error").textContent = e.message; }
   });
   $("sc-list").addEventListener("change", async ev => {
+    const disc = discountField(ev.target);
+    if (disc) {
+      disc.blur();
+      try { await saveDiscount(disc, disc.closest("[data-reg]").dataset.reg); await loadStudents(); }
+      catch (e) { $("sc-error").textContent = e.message; }
+      return;
+    }
     const input = ev.target.closest("input[data-sehtest]");
     if (!input) return;
     const id = input.closest("[data-reg]").dataset.reg;
@@ -1275,7 +1310,8 @@
           type, registration_id: r.id, status: cash ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
           issued_on: cash ? day : localDate(new Date()), service_date: day,
           recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "" },
-          items: EHFYDocs.receiptItems(r, course, cfg.packages)
+          items: [...EHFYDocs.receiptItems(r, course, cfg.packages),
+            ...(Number(r.discount) > 0 ? [{ text: `Gutschein${r.discount_note ? ": " + r.discount_note : ""}`, qty: 1, price: -Number(r.discount) }] : [])]
         });
       }
       // Ältere Belege kennen das Geburtsdatum noch nicht
