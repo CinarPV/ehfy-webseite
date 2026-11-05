@@ -209,6 +209,12 @@
     async deleteCourse(id) { await queue({ type: "course-del", id }); },
 
     // Teilnehmer
+    // Alles für die Sicherung; vorher den aktuellen Stand holen
+    async backupData() {
+      await ready;
+      if (isOnline()) await pull();
+      return { courses: state.courses, registrations: state.regs, invoices: state.invoices, settings: state.settings || {} };
+    },
     // Alte Teilnehmer direkt in die Datenbank; danach den neuen Stand holen
     async importLegacy(courses, regs, progress) {
       await ready;

@@ -1088,6 +1088,72 @@
     }
   });
 
+  // ---------- Sicherung ----------
+  const BK_KEY = "ehfy-letzte-sicherung";
+  function showLastBackup() {
+    let last = null;
+    try { last = localStorage.getItem(BK_KEY); } catch (e) { /* ohne Speicher */ }
+    $("bk-last").textContent = last ? `Letzte Sicherung auf diesem Gerät: ${new Date(last).toLocaleDateString("de-DE")}` : "Auf diesem Gerät wurde noch keine Sicherung gespeichert.";
+  }
+  showLastBackup();
+  $("bk-save").onclick = async ev => {
+    const btn = ev.target, label = btn.textContent;
+    $("bk-error").textContent = "";
+    btn.disabled = true; btn.textContent = "Wird erstellt …";
+    try {
+      const pending = db.status().pending;
+      if (pending && !confirm(`${pending} Änderung(en) sind noch nicht synchronisiert. Sie sind in der Sicherung enthalten, aber noch nicht online. Trotzdem sichern?`)) return;
+      const data = await db.backupData();
+      const now = new Date();
+      const file = JSON.stringify({ app: "ehfy", version: 1, created_at: now.toISOString(), ...data });
+      const url = URL.createObjectURL(new Blob([file], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = `EHfy-Sicherung-${localDate(now)}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      try { localStorage.setItem(BK_KEY, now.toISOString()); } catch (e) { /* ohne Speicher */ }
+      showLastBackup();
+    } catch (e) { $("bk-error").textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = label; }
+  };
+  let bkData = null;
+  $("bk-file").addEventListener("change", async ev => {
+    const file = ev.target.files[0];
+    bkData = null;
+    $("bk-error").textContent = ""; $("bk-preview").textContent = "";
+    $("bk-restore").classList.add("hidden");
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (data.app !== "ehfy" || !Array.isArray(data.courses) || !Array.isArray(data.registrations)) throw new Error("Das ist keine EHfy-Sicherung.");
+      bkData = data;
+      $("bk-preview").innerHTML = `<p>Sicherung vom ${new Date(data.created_at).toLocaleString("de-DE")}: <strong>${data.courses.length} Kurse</strong>, <strong>${data.registrations.length} Anmeldungen</strong>, ${(data.invoices || []).length} Belege.</p>
+        <p class="muted">Es werden nur fehlende Kurse und Anmeldungen ergänzt. Vorhandene Einträge bleiben unverändert. Belege lassen sich hier nicht einspielen, sie bleiben in der Datei.</p>`;
+      $("bk-restore").classList.remove("hidden");
+    } catch (e) { $("bk-error").textContent = e instanceof SyntaxError ? "Die Datei konnte nicht gelesen werden." : e.message; }
+  });
+  $("bk-restore").onclick = async ev => {
+    const d = bkData;
+    if (!d || !confirm(`Fehlende Daten aus dieser Sicherung ergänzen?`)) return;
+    ev.target.disabled = true;
+    $("bk-error").textContent = "";
+    try {
+      const courseRows = d.courses.map(({ booked, registrations, ...row }) => row);
+      await db.importLegacy(courseRows, d.registrations);
+      // Einstellungen: Vorhandenes hat Vorrang, Fehlendes kommt aus der Sicherung
+      const current = await db.getSettings();
+      const merged = { ...(d.settings || {}), ...current };
+      if (Object.keys(merged).length !== Object.keys(current).length) await db.saveSettings(merged);
+      bankData = null;
+      $("bk-preview").innerHTML = "<strong>Wiederherstellung fertig ✓</strong> Fehlende Einträge wurden ergänzt.";
+      $("bk-restore").classList.add("hidden");
+      $("bk-file").value = "";
+      bkData = null;
+      await loadCourses();
+    } catch (e) { $("bk-error").textContent = `Nicht abgeschlossen: ${e.message}`; }
+    ev.target.disabled = false;
+  };
+
   // ---------- Alte Teilnehmer importieren ----------
   let importPlan = null;
   const nameList = list => list.length ? `<ul>${list.map(x => `<li>${esc(x.who)}: ${esc(x.why)}</li>`).join("")}</ul>` : "";

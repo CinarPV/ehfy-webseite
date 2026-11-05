@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 31</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 32</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -208,6 +208,16 @@
             <h3 style="margin-top:8px">Vorlagen</h3>
             <p class="muted small" style="margin-bottom:14px">Deine leeren PDF-Vorlagen. Sie werden geschützt gespeichert und sind nicht öffentlich auf der Webseite.</p>
             <div class="grid grid-2" id="tpl-cards"></div>
+            <div class="card" style="margin-top:22px" id="backup-card">
+              <h3 style="margin-top:0">Sicherung</h3>
+              <p class="small muted">Speichert alle Kurse, Schüler, Belege und Einstellungen als Datei auf diesem Gerät. Die Datei enthält persönliche Daten und deine Bankdaten, bewahre sie also sicher auf. PDF-Vorlagen und Protokolle sind nicht enthalten.</p>
+              <p class="small" id="bk-last"></p>
+              <div class="btn-row"><button class="btn" id="bk-save" type="button">Sicherung herunterladen</button></div>
+              <div class="field" style="margin:16px 0 8px"><label for="bk-file">Aus einer Sicherung wiederherstellen</label><input type="file" id="bk-file" accept="application/json,.json"></div>
+              <div id="bk-preview" class="small" role="status"></div>
+              <div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost hidden" id="bk-restore" type="button">Fehlende Daten wiederherstellen</button></div>
+              <p class="form-error" id="bk-error" role="alert"></p>
+            </div>
             <div class="card" style="margin-top:22px" id="import-card">
               <h3 style="margin-top:0">Alte Teilnehmer importieren</h3>
               <p class="small muted">Datei <code>alte-teilnehmer-ehfy.json</code> auswählen. Es gehen keine Mails raus, und nichts wird doppelt angelegt.</p>
