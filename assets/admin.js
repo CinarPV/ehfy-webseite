@@ -627,7 +627,8 @@
 
   // ---------- Anwesenheit, Ausfallgebühr und zweite Chance ----------
   const FEE = cfg.documents.noShowFee;
-  let attRegs = [], attById = {}, attPastId = "";
+  let attRegs = [], attById = {};
+  const attOpen = new Set(); // geöffnete Ordner bleiben beim Aktualisieren offen
   const dayText = iso => new Date(iso).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
   const shortDay = s => new Date(s.length > 10 ? s : s + "T12:00").toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   const samePerson = (a, b) => (a.email && b.email && a.email.toLowerCase() === b.email.toLowerCase())
@@ -667,14 +668,34 @@
       ${!absent(r) && (r.package === "komplett" || sehtestDay(r, courseOf(r))) ? sehtestControls(r, courseOf(r)) : ""}
     </div>`;
   }
-  function attCard(c) {
-    const words = $("att-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
-    const list = attRegs.filter(r => r.course_id === c.id && (r.status !== "storniert" || lateCancel(r))
+  const attWords = () => $("att-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const attPeople = c => {
+    const words = attWords();
+    return attRegs.filter(r => r.course_id === c.id && (r.status !== "storniert" || lateCancel(r))
       && words.every(w => `${r.first_name} ${r.last_name}`.toLowerCase().includes(w))).sort(byName);
+  };
+  function attFolder(c) {
+    const list = attPeople(c);
     const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
-    return `<article class="att-card"><h3>${dayText(c.starts_at)} · ${esc(c.location)}</h3>
-      <p class="small muted" style="margin:0 0 6px">${list.length} angemeldet · ${yes} da · ${no} nicht da</p>
-      ${list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>'}</article>`;
+    const open = attOpen.has(c.id) || attWords().length > 0;
+    return `<details class="att-folder" data-folder="${c.id}" ${open ? "open" : ""}>
+      <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${list.length} angemeldet · ${yes} da · ${no} nicht da</small></summary>
+      <div class="att-body">${open ? attBody(list) : ""}</div></details>`;
+  }
+  const attBody = list => (list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
+  const MONTH_NAMES = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  const attGroup = (key, label, count, inner) => `<details class="att-folder att-group" data-folder="${key}" ${attOpen.has(key) ? "open" : ""}>
+    <summary>${label} <small>${count} ${count === 1 ? "Kurs" : "Kurse"}</small></summary><div class="att-body">${attOpen.has(key) ? inner() : ""}</div></details>`;
+  function archiveHtml(list) {
+    const years = new Map();
+    for (const c of list) {
+      const d = new Date(c.starts_at), y = d.getFullYear(), m = d.getMonth();
+      if (!years.has(y)) years.set(y, new Map());
+      if (!years.get(y).has(m)) years.get(y).set(m, []);
+      years.get(y).get(m).push(c);
+    }
+    return [...years].map(([y, months]) => attGroup(`y${y}`, String(y), [...months.values()].flat().length, () =>
+      [...months].map(([m, cs]) => attGroup(`m${y}-${m}`, MONTH_NAMES[m], cs.length, () => cs.map(attFolder).join(""))).join(""))).join("");
   }
   function chanceRow(r) {
     const c = courseOf(r), f = followUp(r);
@@ -692,17 +713,29 @@
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
     const today = localDate(new Date());
     const coming = courses.filter(c => c.status === "offen" && localDate(new Date(c.starts_at)) >= today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-    $("att-cards").innerHTML = coming.length ? coming.slice(0, 2).map(attCard).join("") : '<p class="muted small">Keine kommenden Kurse.</p>';
+    $("att-cards").innerHTML = coming.length ? coming.map(attFolder).join("") : '<p class="muted small">Keine kommenden Kurse.</p>';
     const open = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
     $("att-chances").innerHTML = open.length ? `<article class="att-card"><h3>Zweite Chancen</h3>${open.map(chanceRow).join("")}</article>` : "";
-    const shown = new Set(coming.slice(0, 2).map(c => c.id));
+    const shown = new Set(coming.map(c => c.id));
     const past = courses.filter(c => !shown.has(c.id)).sort((a, b) => b.starts_at.localeCompare(a.starts_at));
-    $("att-past").innerHTML = '<option value="">Bitte wählen …</option>' + past.map(c =>
-      `<option value="${c.id}" ${c.id === attPastId ? "selected" : ""}>${dayText(c.starts_at)} · ${esc(c.location)} · ${c.booked} Teilnehmer</option>`).join("");
-    const pick = attById[attPastId];
-    $("att-past-card").innerHTML = pick && !shown.has(pick.id) ? attCard(pick) : "";
+    // Beim Suchen nur die Ordner mit Treffern zeigen, sonst nach Jahr und Monat geordnet
+    if (attWords().length) {
+      const hits = past.filter(c => attPeople(c).length);
+      $("att-archive").innerHTML = hits.length ? hits.map(attFolder).join("") : '<p class="muted small">Keine Treffer in früheren Kursen.</p>';
+    } else {
+      $("att-archive").innerHTML = past.length ? archiveHtml(past) : '<p class="muted small">Noch keine früheren Kurse.</p>';
+    }
   }
-  $("att-past").addEventListener("change", ev => { attPastId = ev.target.value; renderAttendance(); });
+  // Ordner: Inhalt erst beim Öffnen aufbauen, Zustand merken
+  $("att-section").addEventListener("toggle", ev => {
+    const box = ev.target;
+    if (!box.matches || !box.matches("details[data-folder]") || attWords().length) return;
+    const key = box.dataset.folder;
+    if (box.open) {
+      attOpen.add(key);
+      if (!box.querySelector(":scope > .att-body").innerHTML.trim()) renderAttendance();
+    } else attOpen.delete(key);
+  }, true);
   $("att-filter").addEventListener("input", renderAttendance);
 
   const feeDate = r => shortDay(courseOf(r).starts_at);
