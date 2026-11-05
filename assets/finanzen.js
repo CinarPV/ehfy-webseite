@@ -23,7 +23,7 @@
   const picked = new Set();
   const pickedTrips = new Set();
 
-  const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], expenses: [], trips: [] });
+  const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], fees: [], other: [], expenses: [], trips: [], routes: [] });
   const inYear = key => String(key || "").slice(0, 4) === String(year);
   const sum = (list, f) => round2(list.reduce((s, x) => s + num(f(x)), 0));
 
@@ -74,10 +74,12 @@
   function draw() {
     const incomes = Object.entries(fin.incomes).map(([id, x]) => ({ id, ...x })).filter(x => inYear(x.date));
     const aed = fin.aed.filter(x => inYear(x.date));
+    const fees = fin.fees.filter(x => inYear(x.date));
+    const other = fin.other.filter(x => inYear(x.date));
     const expenses = fin.expenses.filter(x => inYear(x.date));
     const trips = fin.trips.filter(x => inYear(x.date)).sort((a, b) => a.date.localeCompare(b.date));
     const list = coursesOfYear();
-    const totalIn = sum(incomes, x => x.amount), totalAed = sum(aed, x => x.amount), totalOut = sum(expenses, x => x.amount);
+    const totalIn = sum(incomes, x => x.amount), totalAed = sum(aed, x => x.amount), totalFees = sum(fees, x => x.amount), totalOther = sum(other, x => x.amount), totalOut = sum(expenses, x => x.amount);
     const kmTotal = round2(trips.reduce((s, t) => s + num(t.km), 0));
 
     const years = [...new Set([new Date().getFullYear(), year, ...courses.map(c => new Date(c.starts_at).getFullYear())])].sort((a, b) => b - a);
@@ -90,7 +92,7 @@
 
       <div class="card fin-card">
         <h3>Ergebnis ${year}</h3>
-        ${resultTable(incomes, aed, expenses)}
+        ${resultTable(incomes, aed, fees, other, expenses)}
         <div class="btn-row" style="margin-top:12px">
           <button class="btn" type="button" id="fin-print">Drucken</button>
           <button class="btn btn-ghost" type="button" id="fin-download">Als PDF herunterladen</button>
@@ -124,16 +126,9 @@
           : '<p class="muted small">Noch keine Kurstage übernommen.</p>'}
       </div>
 
-      <div class="card fin-card">
-        <h3>AED-Einweisung und Inbetriebnahme: ${eur(totalAed)}</h3>
-        <form class="fin-form" id="fin-aed-form">
-          <label>Datum<input type="date" name="date" value="${today()}" required></label>
-          <label class="grow">Bezeichnung<input name="text" required maxlength="120" placeholder="z. B. Einweisung bei Firma Muster"></label>
-          <label>Betrag<input name="amount" inputmode="decimal" required placeholder="0,00"></label>
-          <button class="btn btn-sm" type="submit">Hinzufügen</button>
-        </form>
-        ${aed.length ? table(["Tag", "Bezeichnung", "Betrag", ""], monthGroups(aed, x => `<tr><td>${dateText(x.date)}</td><td>${esc(x.text)}</td><td class="fin-num">${eur(x.amount)}</td><td>${removeBtn("aed", x.id)}</td></tr>`, 4)) : ""}
-      </div>
+      ${entryCard("aed", "AED-Einweisung und Inbetriebnahme", totalAed, aed, "z. B. Einweisung bei Firma Muster")}
+      ${entryCard("fees", "Ausfallgebühren", totalFees, fees, "z. B. Ausfallgebühr Kurs vom 08.11.")}
+      ${entryCard("other", "Sonstige Einnahmen", totalOther, other, "z. B. Passbilder")}
 
       <div class="card fin-card">
         <h3>Ausgaben: ${eur(totalOut)}</h3>
@@ -159,12 +154,16 @@
         <div class="btn-row" style="margin:12px 0">
           <button class="btn btn-sm" type="button" id="fin-trips-transfer">Fahrtkosten in die Rechnung übernehmen</button>
         </div>
+        <h4 style="margin:14px 0 8px">Gefahrene Strecke eintragen</h4>
+        ${fin.routes.length ? `<div class="fin-routes" role="group" aria-label="Gespeicherte Strecken">${fin.routes.map(r => `<span class="fin-route"><button class="chip-btn" type="button" data-route="${r.id}">${esc(r.from)} → ${esc(r.to)} · ${String(r.km).replace(".", ",")} km</button><button class="fin-route-del" type="button" data-route-del="${r.id}" aria-label="Strecke ${esc(r.from)} nach ${esc(r.to)} löschen">✕</button></span>`).join("")}</div>` : ""}
         <form class="fin-form" id="fin-trip-form">
           <label>Datum<input type="date" name="date" value="${today()}" required></label>
-          <label class="grow">Ziel<input name="to" required maxlength="160" placeholder="z. B. Einkauf Verbandsmaterial"></label>
+          <label class="grow">Von<input name="from" required maxlength="160" placeholder="z. B. Siegen" value="${esc(fin.home)}"></label>
+          <label class="grow">Nach<input name="to" required maxlength="160" placeholder="z. B. Burbach"></label>
           <label>Zweck<input name="purpose" maxlength="80" placeholder="optional"></label>
-          <label>km gesamt<input name="km" inputmode="decimal" required placeholder="0"></label>
-          <button class="btn btn-sm btn-ghost" type="submit">Fahrt eintragen</button>
+          <label>Kilometer<input name="km" inputmode="decimal" required placeholder="0"></label>
+          <label class="check" style="flex-direction:row;align-items:center"><input type="checkbox" name="remember" checked><span>Strecke speichern</span></label>
+          <button class="btn btn-sm" type="submit">Fahrt eintragen</button>
         </form>
         ${trips.length ? `<div class="fin-scroll">${table(["Tag", "Von", "Nach", "Zweck", "km", ""], trips.map(t => `<tr>
             <td>${dateText(t.date)}</td><td>${esc(t.from || "")}</td><td>${esc(t.to)}</td><td>${esc(t.purpose || "")}</td>
@@ -173,21 +172,34 @@
       </div>`;
   }
 
-  function monthlyResult(incomes, aed, expenses) {
+  function entryCard(kind, title, total, rows, hint) {
+    return `<div class="card fin-card">
+        <h3>${title}: ${eur(total)}</h3>
+        <form class="fin-form" data-entry-form="${kind}">
+          <label>Datum<input type="date" name="date" value="${today()}" required></label>
+          <label class="grow">Bezeichnung<input name="text" required maxlength="120" placeholder="${hint}"></label>
+          <label>Betrag<input name="amount" inputmode="decimal" required placeholder="0,00"></label>
+          <button class="btn btn-sm" type="submit">Hinzufügen</button>
+        </form>
+        ${rows.length ? table(["Tag", "Bezeichnung", "Betrag", ""], monthGroups(rows, x => `<tr><td>${dateText(x.date)}</td><td>${esc(x.text)}</td><td class="fin-num">${eur(x.amount)}</td><td>${removeBtn(kind, x.id)}</td></tr>`, 4)) : ""}
+      </div>`;
+  }
+
+  function monthlyResult(incomes, aed, fees, other, expenses) {
     const rows = MONTHS.map((name, i) => {
       const m = pad(i + 1), of = list => sum(list.filter(x => x.date.slice(5, 7) === m), x => x.amount);
-      const a = of(incomes), b = of(aed), c = of(expenses);
-      return { name, a, b, c, r: round2(a + b - c) };
-    }).filter(x => x.a || x.b || x.c);
-    const t = rows.reduce((s, x) => ({ a: s.a + x.a, b: s.b + x.b, c: s.c + x.c, r: s.r + x.r }), { a: 0, b: 0, c: 0, r: 0 });
-    return { rows, total: { a: round2(t.a), b: round2(t.b), c: round2(t.c), r: round2(t.r) } };
+      const a = of(incomes), b = of(aed), f = of(fees), o = of(other), c = of(expenses);
+      return { name, a, b, f, o, c, r: round2(a + b + f + o - c) };
+    }).filter(x => x.a || x.b || x.f || x.o || x.c);
+    const add = key => round2(rows.reduce((s, x) => s + x[key], 0));
+    return { rows, total: { a: add("a"), b: add("b"), f: add("f"), o: add("o"), c: add("c"), r: add("r") } };
   }
-  function resultTable(incomes, aed, expenses) {
-    const { rows, total } = monthlyResult(incomes, aed, expenses);
+  function resultTable(incomes, aed, fees, other, expenses) {
+    const { rows, total } = monthlyResult(incomes, aed, fees, other, expenses);
     if (!rows.length) return '<p class="muted small">Noch keine Einträge in diesem Jahr.</p>';
-    return table(["Monat", "Kurse", "AED", "Ausgaben", "Überschuss"], rows.map(x =>
-      `<tr><td>${x.name}</td><td class="fin-num">${eur(x.a)}</td><td class="fin-num">${eur(x.b)}</td><td class="fin-num">${eur(x.c)}</td><td class="fin-num">${eur(x.r)}</td></tr>`).join("") +
-      `<tr class="fin-total"><td>Gesamt</td><td class="fin-num">${eur(total.a)}</td><td class="fin-num">${eur(total.b)}</td><td class="fin-num">${eur(total.c)}</td><td class="fin-num">${eur(total.r)}</td></tr>`);
+    return table(["Monat", "Kurse", "AED", "Ausfall", "Sonstige", "Ausgaben", "Überschuss"], rows.map(x =>
+      `<tr><td>${x.name}</td>${[x.a, x.b, x.f, x.o, x.c, x.r].map(v => `<td class="fin-num">${eur(v)}</td>`).join("")}</tr>`).join("") +
+      `<tr class="fin-total"><td>Gesamt</td>${[total.a, total.b, total.f, total.o, total.c, total.r].map(v => `<td class="fin-num">${eur(v)}</td>`).join("")}</tr>`);
   }
 
   // ---------- Übernehmen ----------
@@ -254,13 +266,15 @@
 
     const incomes = Object.values(fin.incomes).filter(x => inYear(x.date));
     const aed = fin.aed.filter(x => inYear(x.date));
+    const fees = fin.fees.filter(x => inYear(x.date));
+    const other = fin.other.filter(x => inYear(x.date));
     const expenses = fin.expenses.filter(x => inYear(x.date));
-    const { rows, total } = monthlyResult(incomes, aed, expenses);
+    const { rows, total } = monthlyResult(incomes, aed, fees, other, expenses);
     heading("Ergebnis");
-    const res = (a, b, c, d, e, f = regular) => { room(18); text(a, M, f); right(b, 300, f); right(c, 380, f); right(d, 465, f); right(e, W - M, f); y -= 16; };
-    res("Monat", "Kurse", "AED", "Ausgaben", "Überschuss", bold); line(); y -= 4;
-    rows.forEach(x => res(x.name, eur(x.a), eur(x.b), eur(x.c), eur(x.r)));
-    line(); y -= 4; res("Gesamt", eur(total.a), eur(total.b), eur(total.c), eur(total.r), bold);
+    const res = (cells, f = regular) => { room(18); text(cells[0], M, f, 9); [190, 250, 310, 370, 435, W - M].forEach((x, i) => right(cells[i + 1], x, f, 9)); y -= 16; };
+    res(["Monat", "Kurse", "AED", "Ausfall", "Sonstige", "Ausgaben", "Überschuss"], bold); line(); y -= 4;
+    rows.forEach(x => res([x.name, eur(x.a), eur(x.b), eur(x.f), eur(x.o), eur(x.c), eur(x.r)]));
+    line(); y -= 4; res(["Gesamt", eur(total.a), eur(total.b), eur(total.f), eur(total.o), eur(total.c), eur(total.r)], bold);
 
     const block = (title, list, label) => {
       if (!list.length) return;
@@ -276,12 +290,14 @@
     };
     block("Einnahmen aus Kursen", incomes, x => `${x.location} · ${x.count} Schüler`);
     block("AED-Einweisung und Inbetriebnahme", aed, x => x.text);
+    block("Ausfallgebühren", fees, x => x.text);
+    block("Sonstige Einnahmen", other, x => x.text);
     block("Ausgaben", expenses, x => [x.category, x.text].filter(Boolean).join(" · "));
 
     const trips = fin.trips.filter(x => inYear(x.date)).sort((a, b) => a.date.localeCompare(b.date));
     if (trips.length) {
       heading("Fahrtenbuch");
-      trips.forEach(t => { room(16); text(dateText(t.date), M, regular, 9); text(`${t.to}${t.purpose ? " · " + t.purpose : ""}`, 150, regular, 9); right(`${num(t.km).toLocaleString("de-DE")} km`, W - M, regular, 9); y -= 13; });
+      trips.forEach(t => { room(16); text(dateText(t.date), M, regular, 9); text(`${t.from ? t.from + " → " : ""}${t.to}${t.purpose ? " · " + t.purpose : ""}`, 150, regular, 9); right(`${num(t.km).toLocaleString("de-DE")} km`, W - M, regular, 9); y -= 13; });
       room(18); y -= 3; line(); y -= 3; text("Gesamt", M, bold); right(`${round2(trips.reduce((s, t) => s + num(t.km), 0)).toLocaleString("de-DE")} km`, W - M, bold); y -= 16;
     }
     return pdf.save();
@@ -310,9 +326,22 @@
       if (del) {
         const id = del.dataset.id, kind = del.dataset.finDel;
         if (kind === "income") delete fin.incomes[id];
-        if (kind === "aed") fin.aed = fin.aed.filter(x => x.id !== id);
+        if (["aed", "fees", "other"].includes(kind)) fin[kind] = fin[kind].filter(x => x.id !== id);
         if (kind === "expense") fin.expenses = fin.expenses.filter(x => x.id !== id);
         if (kind === "trip") fin.trips = fin.trips.filter(x => x.id !== id);
+        await save();
+        return;
+      }
+      const route = t.closest("[data-route]");
+      if (route) {
+        const r = fin.routes.find(x => x.id === route.dataset.route);
+        const f = document.getElementById("fin-trip-form").elements;
+        f.from.value = r.from; f.to.value = r.to; f.km.value = String(r.km).replace(".", ",");
+        f.purpose.focus();
+        return;
+      }
+      if (t.closest("[data-route-del]")) {
+        fin.routes = fin.routes.filter(x => x.id !== t.closest("[data-route-del]").dataset.routeDel);
         await save();
         return;
       }
@@ -332,12 +361,19 @@
   root.addEventListener("submit", async ev => {
     ev.preventDefault();
     const f = ev.target.elements;
-    if (ev.target.id === "fin-aed-form") {
-      fin.aed.push({ id: newId(), date: f.date.value, text: f.text.value.trim(), amount: round2(num(f.amount.value)) });
+    const kind = ev.target.dataset.entryForm;
+    if (kind) {
+      fin[kind].push({ id: newId(), date: f.date.value, text: f.text.value.trim(), amount: round2(num(f.amount.value)) });
     } else if (ev.target.id === "fin-expense-form") {
       fin.expenses.push({ id: newId(), date: f.date.value, category: f.category.value, text: f.text.value.trim(), amount: round2(num(f.amount.value)) });
     } else if (ev.target.id === "fin-trip-form") {
-      fin.trips.push({ id: newId(), date: f.date.value, from: fin.home, to: f.to.value.trim(), purpose: f.purpose.value.trim(), km: round2(num(f.km.value)) });
+      const from = f.from.value.trim(), to = f.to.value.trim(), km = round2(num(f.km.value));
+      fin.trips.push({ id: newId(), date: f.date.value, from, to, purpose: f.purpose.value.trim(), km });
+      // Strecke merken; ist sie schon gespeichert, werden die Kilometer aktualisiert
+      if (f.remember.checked) {
+        const known = fin.routes.find(r => r.from.toLowerCase() === from.toLowerCase() && r.to.toLowerCase() === to.toLowerCase());
+        if (known) known.km = km; else fin.routes.push({ id: newId(), from, to, km });
+      }
     } else if (ev.target.id === "fin-trip-settings") {
       fin.home = f.home.value.trim();
       fin.rate = num(f.rate.value);

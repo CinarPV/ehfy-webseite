@@ -561,3 +561,6 @@ body.has-reminder { padding-bottom: 90px; }
 .fin-input { width: 96px; }
 .fin-input-sm { width: 64px; }
 .fin-scroll { max-height: 420px; overflow: auto; }
+.fin-routes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.fin-route { display: inline-flex; align-items: center; gap: 2px; }
+.fin-route-del { font: inherit; border: none; background: none; color: var(--danger); cursor: pointer; padding: 6px; }
