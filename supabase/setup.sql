@@ -53,6 +53,8 @@ alter table public.registrations add column if not exists sehtest_passed boolean
 alter table public.registrations add column if not exists sehtest_aid boolean;
 alter table public.registrations add column if not exists discount numeric(10,2);
 alter table public.registrations add column if not exists discount_note text;
+alter table public.registrations alter column course_id drop not null;
+alter table public.registrations add column if not exists legacy_course_date date;
 
 -- Wer hier eingetragen ist, darf die Verwaltung benutzen.
 create table if not exists public.admins (

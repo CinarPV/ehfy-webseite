@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 32</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 33</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -52,22 +52,26 @@
             <input id="sc-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
           <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
             <button data-view="termine" class="active">Termine</button>
+            <button data-view="anwesenheit">Anwesenheit</button>
             <button data-view="schueler">Schüler</button>
             <button data-view="rechnungen">Rechnungen</button>
             <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
             <button data-view="vorlagen">Einstellungen</button>
           </div>
 
-          <div id="courses-view" data-section="termine">
+          <div id="attendance-view" class="hidden" data-section="anwesenheit">
             <section id="att-section" class="no-print" style="margin-bottom:22px" aria-label="Anwesenheit">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Anwesenheit</h2>
-              <p class="muted small" style="margin-bottom:12px">Jeder aktuelle Kurstag ist ein Ordner. Der letzte Kurs bleibt hier, bis der nächste Kurstag da ist. Alle Teilnehmer bleiben unter „Schüler“ gespeichert, dort kannst du auch später alles nachtragen.</p>
+              <p class="muted small" style="margin-bottom:12px">Kurstag antippen, dann ✓ oder ✗ bei jedem Namen.</p>
               <p class="form-error" id="att-error" role="alert"></p>
               <div class="field" style="margin:0 0 12px"><label for="att-filter">In der Anwesenheit nach Namen suchen</label><input id="att-filter" type="search" autocomplete="off" placeholder="z. B. Müller"></div>
               <div id="att-cards" class="att-list"></div>
               <div id="att-chances" style="margin-top:14px"></div>
               <div id="att-unchecked" style="margin-top:14px"></div>
             </section>
+          </div>
+
+          <div id="courses-view" data-section="termine">
             <div class="card q-card no-print" style="margin-bottom:22px">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>
               <p class="muted small" id="q-hint"></p>
@@ -219,9 +223,9 @@
               <p class="form-error" id="bk-error" role="alert"></p>
             </div>
             <div class="card" style="margin-top:22px" id="import-card">
-              <h3 style="margin-top:0">Alte Teilnehmer importieren</h3>
-              <p class="small muted">Datei <code>alte-teilnehmer-ehfy.json</code> auswählen. Es gehen keine Mails raus, und nichts wird doppelt angelegt.</p>
-              <div class="field" style="margin:12px 0"><label for="im-file">Datei auswählen</label><input type="file" id="im-file" accept="application/json,.json"></div>
+              <h3 style="margin-top:0">Teilnehmer importieren</h3>
+              <p class="small muted">WordPress-Datei (<code>.csv</code>) oder alte App (<code>.json</code>) auswählen. Es gehen keine Mails raus, und vorhandene Einträge bleiben unverändert.</p>
+              <div class="field" style="margin:12px 0"><label for="im-file">Datei auswählen</label><input type="file" id="im-file" accept="application/json,.json,text/csv,.csv"></div>
               <div id="im-preview" class="small" role="status"></div>
               <div class="btn-row" style="margin-top:10px"><button class="btn hidden" id="im-start" type="button">Import starten</button></div>
               <p class="form-error" id="im-error" role="alert"></p>

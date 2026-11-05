@@ -11,3 +11,5 @@ alter table public.courses add column if not exists cancel_reason text;
 alter table public.courses add column if not exists cancel_notified_at timestamptz;
 alter table public.registrations add column if not exists discount numeric(10,2);
 alter table public.registrations add column if not exists discount_note text;
+alter table public.registrations alter column course_id drop not null;
+alter table public.registrations add column if not exists legacy_course_date date;

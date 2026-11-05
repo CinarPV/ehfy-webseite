@@ -584,7 +584,7 @@
     const view = JSON.stringify([db.status().lastSync, db.status().pending, db.status().newRegs]);
     if (view === lastView) return;
     lastView = view;
-    if (!$("courses-view").classList.contains("hidden")) loadCourses();
+    if (!$("courses-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden")) loadCourses();
     if (!$("participants-view").classList.contains("hidden") && current) loadRegs();
     if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
     if (!$("students-view").classList.contains("hidden")) loadStudents();
@@ -601,6 +601,7 @@
     [...$("main-tabs").children].forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
+    if (b.dataset.view === "anwesenheit") { $("attendance-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
@@ -690,8 +691,9 @@
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>`}
       ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
-      ${!absent(r) && (r.package === "komplett" || sehtestDay(r, courseOf(r))) ? sehtestControls(r, courseOf(r)) : ""}
-      ${!absent(r) ? discountControls(r) : ""}
+      ${!absent(r) ? `<details class="att-more"><summary>Sehtest und Gutschein</summary>
+        ${r.package === "komplett" || sehtestDay(r, courseOf(r)) ? sehtestControls(r, courseOf(r)) : '<p class="small muted">Ohne Sehtest gebucht.</p>'}
+        ${discountControls(r)}</details>` : ""}
     </div>`;
   }
   const attWords = () => $("att-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
@@ -758,8 +760,13 @@
     if (!box.matches || !box.matches("details[data-folder]") || attWords().length) return;
     const key = box.dataset.folder;
     if (box.open) {
+      if (attOpen.has(key)) return; // beim Neuaufbau bleibt alles, wie es ist
+      attOpen.clear();
       attOpen.add(key);
-      if (!box.querySelector(":scope > .att-body").innerHTML.trim()) renderAttendance();
+      renderAttendance().then(() => {
+        const now = document.querySelector(`details[data-folder="${key}"]`);
+        if (now) { now.scrollIntoView({ block: "start" }); window.scrollBy(0, -90); }
+      });
     } else attOpen.delete(key);
   }, true);
   $("att-filter").addEventListener("input", renderAttendance);
@@ -931,6 +938,10 @@
     if (r.package === "komplett" && r.status === "teilgenommen" && c) return dayOf(c.starts_at);
     return "";
   };
+  // Einträge aus der Schülerkartei ohne angelegten Kurs (WordPress): nur Datum
+  const courseFor = r => studentCourses[r.course_id] || (r.legacy_course_date
+    ? { id: null, virtual: true, starts_at: new Date(`${r.legacy_course_date}T10:00:00`).toISOString(), ends_at: new Date(`${r.legacy_course_date}T17:30:00`).toISOString(), location: "Ort unbekannt", status: "offen" }
+    : null);
   async function loadStudents() {
     const [regsAll, list] = await Promise.all([db.listAllRegistrations(), db.listCourses()]);
     studentRegs = regsAll;
@@ -942,14 +953,14 @@
     const words = $("sc-search").value.toLowerCase().split(/\s+/).filter(Boolean);
     const people = new Map();
     for (const r of studentRegs) {
-      const c = studentCourses[r.course_id];
+      const c = courseFor(r);
       const hay = [r.first_name, r.last_name, birthText(r.birth_date), r.email, r.phone, c && c.location].join(" ").toLowerCase();
       if (!words.every(w => hay.includes(w))) continue;
       const key = `${r.last_name}|${r.first_name}|${r.birth_date || ""}`.toLowerCase();
       if (!people.has(key)) people.set(key, []);
       people.get(key).push(r);
     }
-    const when = r => (studentCourses[r.course_id] ? studentCourses[r.course_id].starts_at : "");
+    const when = r => { const c = courseFor(r); return c ? c.starts_at : ""; };
     const sorted = [...people.values()].map(l => l.sort((a, b) => when(b).localeCompare(when(a))))
       .sort((a, b) => when(b[0]).localeCompare(when(a[0])));
     $("sc-count").textContent = `${sorted.length} ${sorted.length === 1 ? "Person" : "Personen"} · Stand vom letzten Synchronisieren`;
@@ -965,19 +976,19 @@
       : '<p class="muted">Keine Schüler gefunden.</p>';
   }
   function studentEntry(r) {
-    const c = studentCourses[r.course_id];
+    const c = courseFor(r);
     const off = r.status === "storniert" || !c || c.status === "abgesagt";
     return `<div class="sc-entry" data-reg="${r.id}">
       <div class="sc-facts">
-        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span></div>
+        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : "Termin gelöscht"}</strong><br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.virtual ? "nicht belegt, nur angemeldet" : c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span></div>
         <div><label for="sc-st-${r.id}">Sehtest am (leer = kein Sehtest)</label><input type="date" id="sc-st-${r.id}" data-sehtest value="${sehtestDay(r, c)}"></div>
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
-      ${!off ? `<div class="att-btns">
+      ${!off && !c.virtual ? `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>` : ""}
-      ${c && absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
+      ${c && !c.virtual && absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
       ${sehtestControls(r, c)}
       ${off ? "" : discountControls(r)}
       ${off ? "" : `<div class="btn-row">
@@ -1050,7 +1061,7 @@
     const show = msg => { $("sc-error").textContent = msg; };
     const stBtn = ev.target.closest("[data-st]");
     if (stBtn) {
-      try { await handleSehtest(stBtn, r, studentCourses[r.course_id]); await loadStudents(); } catch (e) { show(e.message); }
+      try { await handleSehtest(stBtn, r, courseFor(r)); await loadStudents(); } catch (e) { show(e.message); }
       return;
     }
     if (ev.target.closest("[data-mark],[data-fee]")) {
@@ -1059,7 +1070,7 @@
       return;
     }
     const printKind = ev.target.closest("[data-sc-print]");
-    if (printKind) return runDoc(printKind.dataset.scPrint, [r], studentCourses[r.course_id], show);
+    if (printKind) return runDoc(printKind.dataset.scPrint, [r], courseFor(r), show);
     if (ev.target.closest("[data-sc-del]")) {
       if (!confirm(`${r.first_name} ${r.last_name} endgültig aus der Liste löschen?`)) return;
       try { await removeRegistration(r); await loadStudents(); } catch (e) { show(e.message); }
@@ -1165,27 +1176,42 @@
     importPlan = null;
     if (!file) return;
     try {
-      const rows = JSON.parse(await file.text());
-      if (!Array.isArray(rows)) throw new Error("Das ist nicht die erwartete Datei.");
-      importPlan = await EHFYImport.plan(rows, { siegenAddress: cfg.defaultAddress });
-      const p = importPlan;
-      $("im-preview").innerHTML = `<p><strong>${p.regs.length} Teilnehmer in ${p.courses.length} Kursen</strong> werden übernommen.
-        ${p.merged} doppelte Einträge werden zusammengelegt, ${p.skipped.length} nicht übernommen.</p>
-        ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped)}` : ""}
-        ${p.check.length ? `<p><strong>Werden übernommen, bitte prüfen:</strong></p>${nameList(p.check)}` : ""}`;
+      if (/\.csv$/i.test(file.name)) {
+        // WordPress: oft Windows-Zeichensatz
+        const bytes = await file.arrayBuffer();
+        let text;
+        try { text = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch (x) { text = new TextDecoder("windows-1252").decode(bytes); }
+        importPlan = await EHFYImport.planWordpress(EHFYImport.parseCsv(text), { existing: await db.listAllRegistrations(), courses, siegenAddress: cfg.defaultAddress });
+        const p = importPlan;
+        const days = [...new Set(p.courses.map(c => new Date(c.starts_at).toLocaleDateString("de-DE")))];
+        $("im-preview").innerHTML = `<p><strong>${p.card} Personen</strong> kommen in die Schülerkartei, <strong>${p.coming}</strong> auf kommende Kurse.
+          ${p.duplicates} Doppelte bleiben unverändert, ${p.skipped.length} werden nicht übernommen.</p>
+          ${days.length ? `<p><strong>Neue Kurse werden angelegt (Siegen, 10:00 bis 17:30):</strong> ${days.join(", ")}</p>` : ""}
+          ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped.slice(0, 30))}` : ""}
+          ${p.check.length ? `<p><strong>Werden übernommen, bitte prüfen (${p.check.length}):</strong></p>${nameList(p.check.slice(0, 30))}` : ""}`;
+      } else {
+        const rows = JSON.parse(await file.text());
+        if (!Array.isArray(rows)) throw new Error("Das ist nicht die erwartete Datei.");
+        importPlan = await EHFYImport.plan(rows, { siegenAddress: cfg.defaultAddress });
+        const p = importPlan;
+        $("im-preview").innerHTML = `<p><strong>${p.regs.length} Teilnehmer in ${p.courses.length} Kursen</strong> werden übernommen.
+          ${p.merged} doppelte Einträge werden zusammengelegt, ${p.skipped.length} nicht übernommen.</p>
+          ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped)}` : ""}
+          ${p.check.length ? `<p><strong>Werden übernommen, bitte prüfen:</strong></p>${nameList(p.check)}` : ""}`;
+      }
       $("im-start").classList.remove("hidden");
     } catch (e) { $("im-error").textContent = e instanceof SyntaxError ? "Die Datei konnte nicht gelesen werden." : e.message; }
   });
   $("im-start").onclick = async () => {
     const p = importPlan;
-    if (!p || !confirm(`${p.regs.length} alte Teilnehmer jetzt übernehmen?`)) return;
+    if (!p || !confirm(`${p.regs.length} Teilnehmer jetzt übernehmen?`)) return;
     $("im-start").disabled = true;
     $("im-error").textContent = "";
     const note = document.createElement("p");
     $("im-preview").prepend(note);
     try {
       await db.importLegacy(p.courses, p.regs, n => { note.textContent = `${n} von ${p.regs.length} übertragen …`; });
-      note.innerHTML = "<strong>Import fertig ✓</strong> Die alten Teilnehmer stehen jetzt im Bereich Schüler. Bitte lösche danach die Datei von deinem Schreibtisch.";
+      note.innerHTML = "<strong>Import fertig ✓</strong> Die Teilnehmer stehen jetzt im Bereich Schüler. Bitte speichere eine neue Sicherung und lösche danach die Importdatei.";
       $("im-start").classList.add("hidden");
       $("im-file").value = "";
       importPlan = null;
