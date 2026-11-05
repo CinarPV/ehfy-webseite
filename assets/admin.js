@@ -199,7 +199,11 @@
   // Die Orte liegen in den privaten Einstellungen und gelten damit auf jedem Gerät
   async function loadLocations() {
     const saved = (await db.getSettings().catch(() => ({}))).locations;
-    const list = Array.isArray(saved) ? saved.filter(l => l.name) : cfg.locations;
+    // Gespeicherte Orte ohne echte Adresse bekommen die Adresse aus den Grundeinstellungen
+    const known = name => cfg.locations.find(l => l.name === name);
+    const list = Array.isArray(saved)
+      ? saved.filter(l => l.name).map(l => (!l.address || l.address.startsWith("Adresse folgt")) && known(l.name) ? { ...l, address: known(l.name).address } : l)
+      : cfg.locations;
     const selected = qIndex >= 0 && qList[qIndex] ? qList[qIndex].name : null;
     const changed = JSON.stringify(list) !== JSON.stringify(qList);
     qList = list;
