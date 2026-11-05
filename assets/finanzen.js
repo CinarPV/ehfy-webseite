@@ -151,9 +151,9 @@
           : '<p class="muted small">Noch keine Kurstage übernommen.</p>'}
       </div>
 
-      ${entryCard("aed", "AED-Einweisung und Inbetriebnahme", totalAed, aed, "z. B. Einweisung bei Firma Muster")}
-      ${entryCard("fees", "Ausfallgebühren", totalFees, fees, "z. B. Ausfallgebühr Kurs vom 08.11.")}
-      ${entryCard("other", "Sonstige Einnahmen", totalOther, other, "z. B. Passbilder")}
+      ${entryCard("aed", "AED-Einweisung und Inbetriebnahme", totalAed, aed, { hint: "z. B. Einweisung bei Firma Muster" })}
+      ${entryCard("fees", "Ausfallgebühren", totalFees, fees, { text: "Ausfallgebühr wegen Erste-Hilfe-Kurs", amount: "50,00" })}
+      ${entryCard("other", "Sonstige Einnahmen", totalOther, other, { choices: ["Passbilder", "Ersatzbescheinigung", "Sonstiges"], hint: "Ergänzung, optional" })}
 
       <div class="card fin-card">
         <h3>Ausgaben: ${eur(totalOut)}</h3>
@@ -199,13 +199,14 @@
       ${limitCard(incomeOfYear(year), totalOut)}`;
   }
 
-  function entryCard(kind, title, total, rows, hint) {
+  function entryCard(kind, title, total, rows, { hint = "", text = "", amount = "", choices = null }) {
     return `<div class="card fin-card">
         <h3>${title}: ${eur(total)}</h3>
         <form class="fin-form" data-entry-form="${kind}">
           <label>Datum<input type="date" name="date" value="${today()}" required></label>
-          <label class="grow">Bezeichnung<input name="text" required maxlength="120" placeholder="${hint}"></label>
-          <label>Betrag<input name="amount" inputmode="decimal" required placeholder="0,00"></label>
+          ${choices ? `<label>Art<select name="choice" data-choice>${choices.map(c => `<option>${c}</option>`).join("")}</select></label>` : ""}
+          <label class="grow">Bezeichnung<input name="text" ${choices ? "" : "required"} maxlength="120" placeholder="${hint}" value="${esc(text)}"></label>
+          <label>Betrag<input name="amount" inputmode="decimal" required placeholder="0,00" value="${amount}"></label>
           <button class="btn btn-sm" type="submit">Hinzufügen</button>
         </form>
         ${rows.length ? table(["Tag", "Bezeichnung", "Betrag", ""], monthGroups(rows, x => `<tr><td>${dateText(x.date)}</td><td>${esc(x.text)}</td><td class="fin-num">${eur(x.amount)}</td><td>${removeBtn(kind, x.id)}</td></tr>`, 4)) : ""}
@@ -371,6 +372,13 @@
   // ---------- Bedienung ----------
   root.addEventListener("change", async ev => {
     const t = ev.target;
+    // Ersatzbescheinigung kostet 20 €: Betrag vorschlagen
+    if (t.dataset.choice !== undefined) {
+      const amount = t.form.elements.amount;
+      if (t.value === "Ersatzbescheinigung") amount.value = "20,00";
+      else if (amount.value === "20,00") amount.value = "";
+      return;
+    }
     if (t.id === "fin-year") { year = Number(t.value); picked.clear(); draw(); return; }
     if (t.dataset.pick) { t.checked ? picked.add(t.dataset.pick) : picked.delete(t.dataset.pick); draw(); return; }
     if (t.dataset.income) {
@@ -428,7 +436,9 @@
     const f = ev.target.elements;
     const kind = ev.target.dataset.entryForm;
     if (kind) {
-      fin[kind].push({ id: newId(), date: f.date.value, text: f.text.value.trim(), amount: round2(num(f.amount.value)) });
+      const note = f.text.value.trim();
+      const label = f.choice ? (f.choice.value === "Sonstiges" && note ? note : [f.choice.value, note].filter(Boolean).join(" · ")) : note;
+      fin[kind].push({ id: newId(), date: f.date.value, text: label, amount: round2(num(f.amount.value)) });
     } else if (ev.target.id === "fin-expense-form") {
       fin.expenses.push({ id: newId(), date: f.date.value, category: f.category.value, text: f.text.value.trim(), amount: round2(num(f.amount.value)) });
     } else if (ev.target.id === "fin-trip-form") {

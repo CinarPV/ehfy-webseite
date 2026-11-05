@@ -75,7 +75,8 @@
       centered(page, fmtDate(course.starts_at), CERT.date, f.bold);
       // Die Anschrift der Ausbildungsstelle (Siegen) steht fest in der Vorlage und bleibt immer gleich
       if (opts.infoLeafletHanded) text(page, "X", { x: CERT.infoYes.x - 4.6, y: CERT.infoYes.y - 3.6, size: 10 }, f.bold);
-      centered(page, fmtDate(course.starts_at), CERT.issued, f.bold);
+      // Oben steht der Kurstag, unten das Ausstellungsdatum (Tag des Ausdrucks)
+      centered(page, fmtDate(new Date()), CERT.issued, f.bold);
     });
   }
 
