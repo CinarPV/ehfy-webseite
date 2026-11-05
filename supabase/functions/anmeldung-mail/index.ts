@@ -119,6 +119,7 @@ function buildConfirmation(reg, course, opts = {}) {
       <p style="margin:20px 0 6px;font-size:15px"><strong>Stimmt dein Name nicht genau mit deinem Ausweis überein?</strong> Dann melde dich bitte vor dem Kurs bei uns, denn deine Bescheinigung wird vorab ausgestellt.</p>
       <p style="margin:20px 0 6px;font-size:15px"><strong>Bitte mitbringen:</strong></p>
       <ul style="margin:0;padding-left:20px;font-size:15px">${bring.map(b => `<li>${esc(b)}</li>`).join("")}</ul>
+      <p style="margin:20px 0 6px;font-size:15px"><strong>Bezahlung:</strong> Bitte bezahle am Kurstag direkt vor Ort, am liebsten bar oder per PayPal.</p>
       <p style="margin:20px 0 10px;font-size:15px"><strong>Du kannst nicht kommen?</strong> Bitte melde dich mindestens 48 Stunden vor Kursbeginn ab:</p>
       <p style="margin:0"><a href="${esc(cancel)}" style="display:inline-block;background:#0a2540;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:10px">Anmeldung absagen</a></p>
       <p style="margin:20px 0 0;font-size:15px">Fragen? Antworte einfach auf diese E-Mail.</p>
@@ -136,6 +137,7 @@ function buildConfirmation(reg, course, opts = {}) {
     `Name auf der Bescheinigung: ${fullName}`, "",
     "Stimmt dein Name nicht genau mit deinem Ausweis überein? Dann melde dich bitte vor dem Kurs bei uns, denn deine Bescheinigung wird vorab ausgestellt.", "",
     "Bitte mitbringen:", ...bring.map(b => `- ${b}`), "",
+    "Bezahlung: Bitte bezahle am Kurstag direkt vor Ort, am liebsten bar oder per PayPal.", "",
     "Du kannst nicht kommen? Bitte melde dich mindestens 48 Stunden vor Kursbeginn ab:", cancel, "",
     "Fragen? Antworte einfach auf diese E-Mail.", "",
     "Bis bald", "Erste Hilfe for you"
