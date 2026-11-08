@@ -5,12 +5,12 @@
   // U = unten, UL = unten links, L = links, OL = oben links
   const VISUS = ["0,32", "0,7", "0,7", "1,0", "1,0"];
   const TESTS = [
-    { n: 1, title: "Test 1 (monokular – rechts)", short: "rechts", rows: ["R L OL U", "O UR OR R OL", "OL U L UL R", "L OL O OR UL", "O OR R U UR"] },
-    { n: 2, title: "Test 2 (monokular – links)", short: "links", rows: ["R L OL U", "OR UL U O L", "UL R UR U L", "U OR L UR R", "OL L UR O UL"] },
-    { n: 3, title: "Test 3 (binokular)", short: "beide Augen", rows: ["R L OL U", "O UL UR OR R", "UL R OL U L", "O OR L UR UL", "R OL U OR L"] },
-    { n: 4, title: "Test 4 (monokular – rechts)", short: "rechts", rows: ["R L UL O", "U OR UR R UL", "UL O L OL R", "L UL U UR OL", "U UR R O OR"] },
-    { n: 5, title: "Test 5 (monokular – links)", short: "links", rows: ["R L UL O", "OL R OR U UL", "U OR O UL L", "O UR L OR R", "UL L OR U OL"] },
-    { n: 6, title: "Test 6 (binokular)", short: "beide Augen", rows: ["R L UL O", "U OL O UR OR", "OL R UL O L", "U UR L OR OL", "R UL O UR L"] }
+    { n: 1, title: "Test 1 (monokular – rechts)", short: "rechts", rows: ["OR L OL U", "O UR OR R OL", "OL U L UL R", "L OL O OR UL", "O OR R U UR"] },
+    { n: 2, title: "Test 2 (monokular – links)", short: "links", rows: ["OR L OL U", "OR UL U O OL", "UL R UR U L", "U OR L UR R", "OL L UR O UL"] },
+    { n: 3, title: "Test 3 (binokular)", short: "beide Augen", rows: ["OR L OL U", "O UL U OR UR", "UL R OL U L", "O OR L UR UL", "R OL U OR L"] },
+    { n: 4, title: "Test 4 (monokular – rechts)", short: "rechts", rows: ["UR L UL O", "U OR UR R UL", "UL O L OL R", "L UL U UR OL", "U UR R O OR"] },
+    { n: 5, title: "Test 5 (monokular – links)", short: "links", rows: ["UR L UL O", "OL R OR U UL", "U OR O UR L", "O UR L OR R", "UL L OR U OL"] },
+    { n: 6, title: "Test 6 (binokular)", short: "beide Augen", rows: ["UR L UL O", "U OL O UR OR", "OL R UL O L", "U UR L OR OL", "R UL O UR L"] }
   ].map(t => ({ ...t, rings: t.rows.map((r, row) => r.split(" ").map(dir => ({ dir, row }))).flat() }));
   const DIR = { R: 0, OR: 45, O: 90, OL: 135, L: 180, UL: 225, U: 270, UR: 315 };
   const STRAIGHT = new Set(["O", "U", "L", "R"]);

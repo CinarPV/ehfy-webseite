@@ -101,9 +101,10 @@
           <td><div class="btn-row">
             <button class="btn btn-sm" data-act="people" data-id="${c.id}">Teilnehmerliste</button>
             ${c.booked ? `<button class="btn btn-sm btn-teal" data-act="print" data-id="${c.id}" title="Datenblätter, Bescheinigungen und Quittungen für alle Teilnehmer">Kursmappe drucken</button>` : ""}
-            <button class="btn btn-sm btn-outline" data-act="edit" data-id="${c.id}">Bearbeiten</button>
-            <button class="btn btn-sm btn-outline" data-act="copy" data-id="${c.id}" title="Gleicher Termin eine Woche später">+1 Woche</button>
-            <button class="btn btn-sm btn-outline" data-act="del" data-id="${c.id}" title="Löschen">✕</button>
+            <details class="row-more"><summary class="btn btn-sm btn-ghost">Mehr</summary><div class="row-more-box">
+              <button class="btn btn-sm btn-outline" data-act="edit" data-id="${c.id}">Bearbeiten</button>
+              <button class="btn btn-sm btn-outline" data-act="copy" data-id="${c.id}" title="Gleicher Termin eine Woche später">+1 Woche kopieren</button>
+              <button class="btn btn-sm btn-outline" data-act="del" data-id="${c.id}" style="color:var(--danger)">Termin löschen</button></div></details>
           </div></td>
         </tr>`;
     }).join("") : '<tr><td colspan="6" class="muted">Keine Termine vorhanden. Lege mit „+ Neuer Termin“ einen an.</td></tr>';
@@ -122,7 +123,7 @@
     if (!b) {
       // Antippen der Zeile öffnet die Teilnehmerliste
       const tr = ev.target.closest("tr[data-open]");
-      if (tr && !ev.target.closest("a,input,select")) openParticipants(courses.find(x => x.id === tr.dataset.open));
+      if (tr && !ev.target.closest("a,input,select,details")) openParticipants(courses.find(x => x.id === tr.dataset.open));
       return;
     }
     const c = courses.find(x => x.id === b.dataset.id);
@@ -564,6 +565,7 @@
     $("sync-btn").disabled = !st.online || st.syncing;
     $("sync-btn").textContent = st.syncing ? "Wird übertragen …" : st.pending ? `Synchronisieren (${st.pending})` : "Synchronisieren";
     renderReminder(st);
+    if (courses.length) renderStart();
   }
   const runSync = () => { db.clearNew(); return db.sync().catch(() => {}); };
   $("sync-btn").onclick = runSync;
@@ -624,7 +626,7 @@
     const view = JSON.stringify([db.status().lastSync, db.status().pending, db.status().newRegs]);
     if (view === lastView) return;
     lastView = view;
-    if (!$("courses-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden") || !$("fee-view").classList.contains("hidden")) loadCourses();
+    if (!$("start-view").classList.contains("hidden") || !$("courses-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden") || !$("fee-view").classList.contains("hidden")) loadCourses();
     if (!$("participants-view").classList.contains("hidden") && current) loadRegs();
     if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
     if (!$("students-view").classList.contains("hidden")) loadStudents();
@@ -641,6 +643,10 @@
     if (was && was !== b && !navRestoring) window.EHFYNav.push(() => { navRestoring = true; was.click(); navRestoring = false; });
     $("main-tabs").querySelectorAll("button[data-view]").forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
+    $("nav-more").classList.toggle("hidden", !b.closest("#nav-more"));
+    $("nav-more-btn").setAttribute("aria-expanded", String(!$("nav-more").classList.contains("hidden")));
+    $("nav-more-btn").classList.toggle("active", Boolean(b.closest("#nav-more")));
+    if (b.dataset.view === "start") { $("start-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "anwesenheit") { $("attendance-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
@@ -649,6 +655,68 @@
     if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
+  });
+
+  $("nav-more-btn").onclick = () => {
+    const open = $("nav-more").classList.toggle("hidden");
+    $("nav-more-btn").setAttribute("aria-expanded", String(!open));
+  };
+
+  // ---------- Start: heute, zu erledigen, nächste Kurse ----------
+  let uncheckedCount = 0, feeTotal = 0;
+  const goView = v => document.querySelector(`#main-tabs [data-view="${v}"]`).click();
+  function goCourse(id) {
+    const c = courses.find(x => x.id === id);
+    if (!c) return;
+    goView("termine");
+    openParticipants(c);
+  }
+  function renderStart() {
+    if (!$("start-today")) return;
+    const today = localDate(new Date()), day = c => localDate(new Date(c.starts_at));
+    $("start-date").textContent = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    const todays = courses.filter(c => day(c) === today);
+    const upcoming = courses.filter(c => day(c) > today && c.status !== "abgesagt").sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const people = c => attRegs.filter(r => r.course_id === c.id && r.status !== "storniert");
+    $("start-today").innerHTML = `<h2>Heute</h2>` + (todays.length ? todays.map(c => {
+      const list = people(c), da = list.filter(r => r.status === "teilgenommen").length;
+      const seh = list.filter(r => r.package === "komplett" || r.sehtest_passed != null), sehDone = seh.filter(r => r.sehtest_passed != null).length;
+      return `<p class="start-big">${esc(c.location)} · ${fmtRange(c.starts_at, c.ends_at)}${c.status === "abgesagt" ? " · ABGESAGT" : ""}</p>
+        <p class="small muted">${list.length} angemeldet · ${da} da${seh.length ? ` · Sehtests ${sehDone} von ${seh.length}` : ""}</p>
+        <div class="btn-row"><button class="btn" type="button" data-go="anwesenheit">Kurstag öffnen</button><button class="btn btn-ghost" type="button" data-open="${c.id}">Teilnehmerliste</button></div>`;
+    }).join("") : `<p class="start-big">Heute ist kein Kurs.</p>${upcoming[0] ? `<p class="small muted">Nächster Kurs: ${dayText(upcoming[0].starts_at)} in ${esc(upcoming[0].location)}</p>` : ""}`);
+    const st = db.status();
+    const todo = [
+      [uncheckedCount, uncheckedCount === 1 ? "Schüler noch nicht abgehakt" : "Schüler noch nicht abgehakt", 'data-unchecked'],
+      [feeTotal, feeTotal === 1 ? "Ausfallgebühr offen" : "Ausfallgebühren offen", 'data-go="gebuehren"'],
+      [st.pending, st.pending === 1 ? "Änderung nicht synchronisiert" : "Änderungen nicht synchronisiert", "data-sync"]
+    ].filter(x => x[0]);
+    $("start-todo").innerHTML = `<h2>Zu erledigen</h2>` + (todo.length
+      ? todo.map(([n, text, attr]) => `<button class="todo-item" type="button" ${attr}><b>${n}</b><span>${text}</span><span aria-hidden="true">›</span></button>`).join("")
+      : '<p class="start-big">✓ Alles erledigt</p>');
+    $("start-next").innerHTML = (upcoming.length ? upcoming.slice(0, 5).map(c => `<button class="next-row" type="button" data-open="${c.id}">
+        <strong>${dayText(c.starts_at)}</strong><span>${esc(c.location)} · ${fmtRange(c.starts_at, c.ends_at)}</span><span class="next-cap">${c.booked} / ${c.capacity}</span></button>`).join("")
+      : '<p class="muted">Keine kommenden Kurse.</p>') + '<button class="btn btn-ghost" type="button" data-go="termine" style="margin-top:8px">Alle Termine und neuen Termin freigeben</button>';
+  }
+  $("start-view").addEventListener("click", ev => {
+    const go = ev.target.closest("[data-go]"), open = ev.target.closest("[data-open]");
+    if (go) return goView(go.dataset.go);
+    if (open) return goCourse(open.dataset.open);
+    if (ev.target.closest("[data-sync]")) return runSync();
+    if (ev.target.closest("[data-unchecked]")) {
+      const d = $("att-unchecked").querySelector("details");
+      if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    }
+  });
+  $("start-search").addEventListener("keydown", ev => { if (ev.key === "Enter") ev.preventDefault(); });
+  $("start-search").addEventListener("input", () => {
+    const v = $("start-search").value;
+    if (!v.trim()) return;
+    $("start-search").value = "";
+    goView("schueler");
+    $("sc-search").value = v;
+    $("sc-search").focus();
+    $("sc-search").dispatchEvent(new Event("input"));
   });
 
   // ---------- Sehtest abhaken: gemacht, Ergebnis, Verlauf, Sehhilfe, Ausweis, Protokoll ----------
@@ -957,7 +1025,7 @@
       </div>`}
       ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
       ${!absent(r) ? sehtestQuick(r) : ""}
-      ${!absent(r) ? `<details class="att-more"><summary>Sehtest und Gutschein</summary>
+      ${!absent(r) ? `<details class="att-more"><summary>Mehr: Sehtest von Hand, Gutschein</summary>
         ${r.package === "komplett" || sehtestDay(r, courseOf(r)) ? sehtestControls(r, courseOf(r)) : '<p class="small muted">Ohne Sehtest gebucht.</p>'}
         ${discountControls(r)}</details>` : ""}
     </div>`;
@@ -1016,9 +1084,11 @@
     const unchecked = attRegs.filter(r => r.status === "angemeldet" && courseOf(r)
       && courseOf(r).status !== "abgesagt" && localDate(new Date(courseOf(r).starts_at)) < today)
       .sort((a, b) => courseOf(b).starts_at.localeCompare(courseOf(a).starts_at));
+    uncheckedCount = unchecked.length;
     $("att-unchecked").innerHTML = unchecked.length ? `<details class="card att-card" style="margin-bottom:18px"><summary><strong>Noch nicht abgehakt (${unchecked.length})</strong> <span class="small muted">– bitte eintragen, wer da war</span></summary>
       ${unchecked.slice(0, 40).map(r => `<div class="small muted" style="margin-top:8px">Kurs ${shortDay(courseOf(r).starts_at)} · ${esc(courseOf(r).location)}</div>${attRow(r)}`).join("")}</details>` : "";
     renderFees();
+    renderStart();
   }
 
   // ---------- Rubrik „Ausfallgebühren“: wer nicht da war, bis bezahlt oder erledigt ----------
@@ -1029,6 +1099,8 @@
     const chances = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
     const bills = attRegs.filter(r => r.fee_state === "rechnung" && courseOf(r));
     const total = notYet.length + chances.length + bills.length;
+    feeTotal = total;
+    $("nav-more-btn").innerHTML = `<span class="dots" aria-hidden="true">•••</span>Mehr${total ? ` <span class="nav-badge">${total}</span>` : ""}`;
     const tab = document.querySelector('#main-tabs [data-view="gebuehren"]');
     if (tab) tab.innerHTML = `Ausfallgebühren${total ? ` <span class="nav-badge">${total}</span>` : ""}`;
     const byDay = (a, b) => courseOf(b).starts_at.localeCompare(courseOf(a).starts_at);

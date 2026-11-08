@@ -39,36 +39,51 @@
 
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
-          <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 43</span></h1>
-            <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
+          <div class="admin-top no-print">
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 44</span></h1>
+            <div class="sync-mini" id="sync-bar" role="status">
+              <span class="sync-dot" id="sync-dot"></span>
+              <span id="sync-text" class="small"></span>
+              <button class="btn btn-sm" id="sync-btn" type="button">Synchronisieren</button>
+            </div>
           </div>
-          <div class="sync-bar no-print" id="sync-bar" role="status">
-            <span class="sync-dot" id="sync-dot"></span>
-            <span id="sync-text"></span>
-            <button class="btn btn-sm" id="sync-btn" type="button">Synchronisieren</button>
-          </div>
-          <div class="field no-print" style="margin:0 0 14px"><label for="sc-search">Schüler suchen</label>
-            <input id="sc-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
           <nav class="main-nav no-print" id="main-tabs" aria-label="Bereiche">
             <div class="nav-main">
-              <button data-view="termine" class="active"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#uhr"/></svg>Termine</button>
-              <button data-view="anwesenheit"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#gruppe"/></svg>Anwesenheit</button>
+              <button data-view="start" class="active"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#herz"/></svg>Start</button>
+              <button data-view="anwesenheit"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#gruppe"/></svg>Kurstag</button>
+              <button data-view="termine"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#uhr"/></svg>Termine</button>
               <button data-view="schueler"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#urkunde"/></svg>Schüler</button>
               <button data-view="sehtests"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#auge"/></svg>Sehtests</button>
+              <button type="button" id="nav-more-btn" class="nav-more-btn" aria-expanded="false"><span class="dots" aria-hidden="true">•••</span>Mehr</button>
             </div>
-            <div class="nav-more">
+            <div class="nav-more hidden" id="nav-more">
               <button data-view="gebuehren">Ausfallgebühren</button>
               <button data-view="rechnungen">Rechnungen</button>
               <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
               <button data-view="vorlagen">Einstellungen</button>
+              <button type="button" id="logout">Abmelden</button>
             </div>
           </nav>
 
+          <!-- Start: was heute ansteht und was zu erledigen ist -->
+          <div id="start-view" class="no-print" data-section="start">
+            <p class="start-date" id="start-date"></p>
+            <div class="start-grid">
+              <article class="card start-card" id="start-today"></article>
+              <article class="card start-card" id="start-todo"></article>
+            </div>
+            <div class="field" style="margin:18px 0 10px"><label for="start-search">Schüler suchen</label>
+              <input id="start-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
+            <h2 class="start-h">Nächste Kurse</h2>
+            <div id="start-next" class="start-next"></div>
+            <p class="form-error" id="start-error" role="alert"></p>
+            <div id="att-unchecked" data-err="start-error"></div>
+          </div>
+
           <div id="attendance-view" class="hidden" data-section="anwesenheit">
             <section id="att-section" class="no-print" style="margin-bottom:22px" aria-label="Anwesenheit">
-              <h2 style="margin:0 0 4px;font-size:1.3rem">Anwesenheit</h2>
-              <p class="muted small" style="margin-bottom:12px">Nur am Kurstag: wer ist da, Sehtests machen. Danach abhaken unter „Termine“ → Kurs antippen.</p>
+              <h2 style="margin:0 0 4px;font-size:1.3rem">Kurstag</h2>
+              <p class="muted small" style="margin-bottom:12px">Heute: wer ist da, Sehtests machen, Schüler nachtragen. Ältere Kurse: unter „Termine“ den Kurs antippen.</p>
               <p class="form-error" id="att-error" role="alert"></p>
               <div class="field" style="margin:0 0 12px"><label for="att-filter">In der Anwesenheit nach Namen suchen</label><input id="att-filter" type="search" autocomplete="off" placeholder="z. B. Müller"></div>
               <div id="att-cards" class="att-list"></div>
@@ -82,10 +97,9 @@
             <div id="fee-list" data-err="fee-error"></div>
           </div>
 
-          <div id="courses-view" data-section="termine">
-            <div id="att-unchecked" class="no-print" data-err="q-error"></div>
-            <div class="card q-card no-print" style="margin-bottom:22px">
-              <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>
+          <div id="courses-view" class="hidden" data-section="termine">
+            <details class="card q-card no-print" id="q-box" style="margin-bottom:22px">
+              <summary class="q-sum">+ Neuen Termin freigeben</summary>
               <p class="muted small" id="q-hint"></p>
               <div class="chips" id="q-locs" role="group" aria-label="Kursort"></div>
               <div class="quick-grid">
@@ -110,9 +124,9 @@
                   </details>
                 </div>
               </div>
-            </div>
+            </details>
             <h2 style="margin:0 0 14px;font-size:1.3rem">Alle Termine</h2>
-            <div class="stat-row" id="stats"></div>
+            <div class="stat-row hidden" id="stats"></div>
             <div class="tabs no-print" id="filter">
               <button data-f="upcoming" class="active">Kommende</button>
               <button data-f="past">Vergangene</button>
@@ -170,16 +184,18 @@
           <div id="students-view" class="hidden" data-section="schueler">
             <h2 style="margin:0 0 4px;font-size:1.4rem">Schüler</h2>
             <p class="muted small" id="sc-count"></p>
+            <div class="field no-print" style="margin:0 0 14px"><label for="sc-search">Schüler suchen</label>
+              <input id="sc-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
             <p class="form-error" id="sc-error" role="alert"></p>
-            <div class="card" style="margin-bottom:18px" id="import-card">
-              <h3 style="margin-top:0">Teilnehmer importieren</h3>
+            <div id="sc-list" class="sc-list"></div>
+            <details class="card" style="margin-top:22px" id="import-card">
+              <summary class="small"><strong>Teilnehmer importieren</strong> (WordPress oder alte App, selten gebraucht)</summary>
               <p class="small muted">WordPress-Datei (<code>.csv</code>) oder alte App (<code>.json</code>) auswählen. Es gehen keine Mails raus, und vorhandene Einträge bleiben unverändert.</p>
               <div class="field" style="margin:12px 0"><label for="im-file">Datei auswählen</label><input type="file" id="im-file" accept="application/json,.json,text/csv,.csv"></div>
               <div id="im-preview" class="small" role="status"></div>
               <div class="btn-row" style="margin-top:10px"><button class="btn hidden" id="im-start" type="button">Import starten</button></div>
               <p class="form-error" id="im-error" role="alert"></p>
-            </div>
-            <div id="sc-list" class="sc-list"></div>
+            </details>
             <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">
           </div>
 
