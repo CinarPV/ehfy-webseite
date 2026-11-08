@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 41</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 42</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -50,29 +50,40 @@
           </div>
           <div class="field no-print" style="margin:0 0 14px"><label for="sc-search">Schüler suchen</label>
             <input id="sc-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
-          <div class="tabs no-print" id="main-tabs" style="margin-bottom:28px">
-            <button data-view="termine" class="active">Termine</button>
-            <button data-view="anwesenheit">Anwesenheit</button>
-            <button data-view="schueler">Schüler</button>
-            <button data-view="sehtests">Sehtests</button>
-            <button data-view="rechnungen">Rechnungen</button>
-            <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
-            <button data-view="vorlagen">Einstellungen</button>
-          </div>
+          <nav class="main-nav no-print" id="main-tabs" aria-label="Bereiche">
+            <div class="nav-main">
+              <button data-view="termine" class="active"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#uhr"/></svg>Termine</button>
+              <button data-view="anwesenheit"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#gruppe"/></svg>Anwesenheit</button>
+              <button data-view="schueler"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#urkunde"/></svg>Schüler</button>
+              <button data-view="sehtests"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#auge"/></svg>Sehtests</button>
+            </div>
+            <div class="nav-more">
+              <button data-view="gebuehren">Ausfallgebühren</button>
+              <button data-view="rechnungen">Rechnungen</button>
+              <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
+              <button data-view="vorlagen">Einstellungen</button>
+            </div>
+          </nav>
 
           <div id="attendance-view" class="hidden" data-section="anwesenheit">
             <section id="att-section" class="no-print" style="margin-bottom:22px" aria-label="Anwesenheit">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Anwesenheit</h2>
-              <p class="muted small" style="margin-bottom:12px">Kurstag antippen, dann ✓ oder ✗ bei jedem Namen.</p>
+              <p class="muted small" style="margin-bottom:12px">Nur am Kurstag: wer ist da, Sehtests machen. Danach abhaken unter „Termine“ → Kurs antippen.</p>
               <p class="form-error" id="att-error" role="alert"></p>
               <div class="field" style="margin:0 0 12px"><label for="att-filter">In der Anwesenheit nach Namen suchen</label><input id="att-filter" type="search" autocomplete="off" placeholder="z. B. Müller"></div>
               <div id="att-cards" class="att-list"></div>
-              <div id="att-chances" style="margin-top:14px"></div>
-              <div id="att-unchecked" style="margin-top:14px"></div>
             </section>
           </div>
 
+          <div id="fee-view" class="hidden no-print" data-section="gebuehren">
+            <h2 style="margin:0 0 4px;font-size:1.4rem">Ausfallgebühren</h2>
+            <p class="muted small" style="margin-bottom:12px">Wer nicht zum Kurs gekommen ist. Die Personen bleiben hier, bis du „Bezahlt“ oder „Erledigt“ drückst.</p>
+            <p class="form-error" id="fee-error" role="alert"></p>
+            <div id="fee-list" data-err="fee-error"></div>
+          </div>
+
           <div id="courses-view" data-section="termine">
+            <div id="att-unchecked" class="no-print" data-err="q-error"></div>
             <div class="card q-card no-print" style="margin-bottom:22px">
               <h2 style="margin:0 0 4px;font-size:1.3rem">Termin freigeben</h2>
               <p class="muted small" id="q-hint"></p>
@@ -121,6 +132,7 @@
                 <button class="btn btn-sm btn-outline no-print" id="back">← Zurück zu den Terminen</button>
                 <h2 style="margin:14px 0 4px" id="p-title"></h2>
                 <p class="muted" style="margin:0" id="p-sub"></p>
+                <div id="p-tools" class="no-print" data-err="doc-error" style="margin-top:8px"></div>
                 <p class="cap no-print" style="margin:10px 0 0">Max. Teilnehmer:
                   <button class="cap-btn" id="p-cap-down" type="button" aria-label="Ein Platz weniger">−</button>
                   <b id="p-cap-value"></b>
@@ -148,8 +160,8 @@
             </div>
             <div class="table-wrap">
               <table>
-                <thead><tr><th>#</th><th>Name</th><th>Geburtsdatum</th><th>Paket</th><th>Anschrift / Kontakt</th><th>Nachricht</th><th>Status</th><th class="no-print">Drucken</th><th class="no-print"></th></tr></thead>
-                <tbody id="p-rows"></tbody>
+                <thead><tr><th>#</th><th>Name</th><th>Geburtsdatum</th><th>Paket</th><th>Anschrift / Kontakt</th><th>Nachricht</th><th class="no-print">Da? · Sehtest</th><th>Status</th><th class="no-print">Drucken</th><th class="no-print"></th></tr></thead>
+                <tbody id="p-rows" data-err="doc-error"></tbody>
               </table>
             </div>
           </div>

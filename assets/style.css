@@ -649,3 +649,22 @@ body.has-reminder { padding-bottom: 90px; }
 .st-warn { color: #a5560b; margin: 6px 0 0; font-weight: 600; }
 #sd-idno { padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; min-width: 0; width: 220px; max-width: 100%; }
 .st-set { flex-wrap: wrap; } .st-set strong { white-space: nowrap; }
+
+/* ---------- Hauptnavigation: große Hauptbereiche, kleine Nebenbereiche ---------- */
+.main-nav { margin-bottom: 26px; }
+.nav-main { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.nav-main button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 84px; padding: 12px 8px; font: inherit; font-weight: 800; font-size: 1.02rem; border: 2px solid var(--line); border-radius: 18px; background: #fff; color: var(--ink); cursor: pointer; }
+.nav-main button .sym { width: 28px; height: 28px; color: var(--teal, #29b4b6); }
+.nav-main button.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+.nav-main button.active .sym { color: #7fdadb; }
+.nav-more { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.nav-more button { font: inherit; font-size: .88rem; font-weight: 700; border: none; background: none; color: var(--muted); padding: 6px 2px; cursor: pointer; }
+.nav-more button.active { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.nav-badge { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: .75rem; text-align: center; }
+.row-link { cursor: pointer; }
+.row-link:hover td { background: #f4f9f9; }
+.p-att { display: grid; gap: 6px; min-width: 210px; }
+@media (max-width: 640px) {
+  .nav-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nav-main button { min-height: 72px; }
+}

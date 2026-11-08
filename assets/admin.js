@@ -60,7 +60,12 @@
     renderStats();
     renderCourses();
     setupPanel();
-    renderAttendance();
+    await renderAttendance();
+    // Ist gerade eine Teilnehmerliste offen, diese mit auffrischen
+    if (current && !$("participants-view").classList.contains("hidden")) {
+      current = courses.find(c => c.id === current.id) || current;
+      await loadRegs();
+    }
   }
 
   function renderStats() {
@@ -84,7 +89,7 @@
         : !c.online_booking ? '<span class="pill pill-muted">nur telefonisch</span>'
         : '<span class="pill pill-ok">offen</span>';
       return `
-        <tr class="${isPast(c) ? "is-past" : ""}">
+        <tr class="${isPast(c) ? "is-past" : ""} row-link" data-open="${c.id}" title="Teilnehmerliste öffnen">
           <td><strong>${fmtShortDate(c.starts_at)}</strong></td>
           <td>${fmtRange(c.starts_at, c.ends_at)}</td>
           <td>${esc(c.location)}</td>
@@ -94,7 +99,7 @@
             <button class="cap-btn" data-act="cap-up" data-id="${c.id}" aria-label="Ein Platz mehr">+</button></span></td>
           <td>${pill}${db.isPending(c.id) ? '<br><span class="small muted">noch nicht online</span>' : ""}</td>
           <td><div class="btn-row">
-            <button class="btn btn-sm" data-act="people" data-id="${c.id}">Teilnehmer</button>
+            <button class="btn btn-sm" data-act="people" data-id="${c.id}">Teilnehmerliste</button>
             ${c.booked ? `<button class="btn btn-sm btn-teal" data-act="print" data-id="${c.id}" title="Datenblätter, Bescheinigungen und Quittungen für alle Teilnehmer">Kursmappe drucken</button>` : ""}
             <button class="btn btn-sm btn-outline" data-act="edit" data-id="${c.id}">Bearbeiten</button>
             <button class="btn btn-sm btn-outline" data-act="copy" data-id="${c.id}" title="Gleicher Termin eine Woche später">+1 Woche</button>
@@ -114,7 +119,12 @@
 
   $("course-rows").addEventListener("click", async ev => {
     const b = ev.target.closest("button[data-act]");
-    if (!b) return;
+    if (!b) {
+      // Antippen der Zeile öffnet die Teilnehmerliste
+      const tr = ev.target.closest("tr[data-open]");
+      if (tr && !ev.target.closest("a,input,select")) openParticipants(courses.find(x => x.id === tr.dataset.open));
+      return;
+    }
     const c = courses.find(x => x.id === b.dataset.id);
     if (b.dataset.act === "edit") openCourseDialog(c);
     if (b.dataset.act === "people") openParticipants(c);
@@ -407,6 +417,7 @@
     $("p-sub").textContent = `${fmtRange(current.starts_at, current.ends_at)} · ${current.location} · ${active.length} von ${current.capacity} Plätzen belegt` +
       (current.status === "abgesagt" ? " · TERMIN ABGESAGT" : "");
     $("p-cap-value").textContent = current.capacity;
+    $("p-tools").innerHTML = courseTools(current);
     $("p-mail").href = mailtoAll(regs, current, false);
     const sorted = [...active.sort(byName), ...regs.filter(r => r.status === "storniert").sort(byName)];
     let n = 0;
@@ -418,13 +429,18 @@
         <td>${pkgLabel(r.package)}</td>
         <td class="small">${r.street ? `${esc(r.street)}<br>${esc(r.zip || "")} ${esc(r.city || "")}<br>` : ""}${r.email ? `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` : ""}${r.phone ? `<br><a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : ""}</td>
         <td class="small">${esc(r.message || "")}</td>
+        <td class="no-print">${r.status === "storniert" && !lateCancel(r) ? "" : `<div data-att="${r.id}" class="p-att">
+          ${lateCancel(r) ? '<span class="small muted">zu spät abgesagt</span>' : `<div class="att-btns">
+            <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
+            <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button></div>`}
+          ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : sehtestQuick(r)}</div>`}</td>
         <td><select data-id="${r.id}" aria-label="Status">${Object.entries(STATUS).map(([k, v]) =>
           `<option value="${k}" ${k === r.status ? "selected" : ""}>${v}</option>`).join("")}</select></td>
         <td class="no-print">${r.status === "storniert" ? "" : `<select data-print="${r.id}" aria-label="Dokument drucken">
           <option value="">Drucken …</option><option value="alles">Alles für diese Person</option><option value="bescheinigung">Bescheinigung</option><option value="datenblatt">Datenblatt</option><option value="quittung">Quittung</option><option value="rechnung">Rechnung</option>
           <option value="quittung-mail">Quittung per E-Mail senden</option><option value="rechnung-mail">Rechnung per E-Mail senden</option></select>`}</td>
         <td class="no-print"><button class="btn btn-sm btn-outline" data-del="${r.id}" title="Eintrag löschen">✕</button></td>
-      </tr>`).join("") : '<tr><td colspan="9" class="muted">Noch keine Anmeldungen.</td></tr>';
+      </tr>`).join("") : '<tr><td colspan="10" class="muted">Noch keine Anmeldungen.</td></tr>';
   }
   const byName = (a, b) => a.last_name.localeCompare(b.last_name, "de") || a.first_name.localeCompare(b.first_name, "de");
 
@@ -584,7 +600,7 @@
     const view = JSON.stringify([db.status().lastSync, db.status().pending, db.status().newRegs]);
     if (view === lastView) return;
     lastView = view;
-    if (!$("courses-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden")) loadCourses();
+    if (!$("courses-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden") || !$("fee-view").classList.contains("hidden")) loadCourses();
     if (!$("participants-view").classList.contains("hidden") && current) loadRegs();
     if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
     if (!$("students-view").classList.contains("hidden")) loadStudents();
@@ -599,12 +615,13 @@
     // Für den Zurück-Knopf merken, woher du kommst
     const was = $("main-tabs").querySelector("button.active");
     if (was && was !== b && !navRestoring) window.EHFYNav.push(() => { navRestoring = true; was.click(); navRestoring = false; });
-    [...$("main-tabs").children].forEach(x => x.classList.toggle("active", x === b));
+    $("main-tabs").querySelectorAll("button[data-view]").forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "anwesenheit") { $("attendance-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "sehtests") { $("sehtest-view").classList.remove("hidden"); loadSehtests(); }
+    if (b.dataset.view === "gebuehren") { $("fee-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
@@ -897,6 +914,8 @@
   function feeControls(r) {
     if (r.fee_state === "rechnung") return `<span class="small">Rechnung gesendet am ${shortDay(r.fee_state_at)}</span>`;
     if (r.fee_state === "erlassen") return '<span class="small">Ausfallgebühr gutgeschrieben</span>';
+    if (r.fee_state === "bezahlt") return `<span class="small">Ausfallgebühr bezahlt${r.fee_state_at ? " am " + shortDay(r.fee_state_at) : ""}</span>`;
+    if (r.fee_state === "erledigt") return '<span class="small">Als erledigt abgehakt</span>';
     if (!r.email) return '<span class="small muted">Keine E-Mail hinterlegt</span>';
     const before = chanceBefore(r);
     if (before) return `<span class="small">Zweite Chance nicht genutzt.</span> <button class="btn btn-sm" type="button" data-fee="both">Rechnungen senden: 2 × ${FEE} €</button>`;
@@ -925,17 +944,22 @@
     return attRegs.filter(r => r.course_id === c.id && (r.status !== "storniert" || lateCancel(r))
       && words.every(w => `${r.first_name} ${r.last_name}`.toLowerCase().includes(w))).sort(byName);
   };
-  function attFolder(c) {
-    const list = attPeople(c);
-    const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
-    const open = attOpen.has(c.id) || attWords().length > 0;
+  // Kurs absagen, Absage aufheben, Teilnehmer informieren (in Anwesenheit und Teilnehmerliste)
+  function courseTools(c) {
     const off = c.status === "abgesagt";
-    const withMail = list.filter(r => r.email && r.status !== "storniert").length;
-    const tools = off
+    const withMail = attRegs.filter(r => r.course_id === c.id && r.email && r.status !== "storniert").length;
+    return off
       ? `<div class="att-row" data-course="${c.id}"><span class="small"><strong>Abgesagt${c.cancel_reason ? ": " + esc(c.cancel_reason) : ""}</strong>${c.cancel_notified_at ? ` · informiert am ${shortDay(c.cancel_notified_at)}` : ""}</span>
           <div class="att-btns">${withMail && !c.cancel_notified_at ? `<button class="btn btn-sm" type="button" data-course-act="notify">Teilnehmer informieren (${withMail})</button>` : ""}
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
       : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
+  }
+  function attFolder(c) {
+    const list = attPeople(c);
+    const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
+    const open = true; // Am Kurstag ist die Liste immer offen
+    const off = c.status === "abgesagt";
+    const tools = courseTools(c);
     return `<details class="att-folder" data-folder="${c.id}" ${open ? "open" : ""}>
       <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${off ? "ABGESAGT" : `${list.length} angemeldet · ${yes} da · ${no} nicht da`}</small></summary>
       <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list)) : ""}</div></details>`;
@@ -958,25 +982,44 @@
     attRegs = regsAll;
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
     const today = localDate(new Date());
-    const coming = courses.filter(c => localDate(new Date(c.starts_at)) >= today).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-    // Der letzte Kurs bleibt sichtbar, bis der nächste Kurstag da ist (höchstens 14 Tage). Seine Daten bleiben unter „Schüler“.
-    const limit = new Date(); limit.setDate(limit.getDate() - 14);
-    const last = courses.filter(c => localDate(new Date(c.starts_at)) < today && new Date(c.starts_at) >= limit)
-      .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
-    const hasToday = coming.some(c => localDate(new Date(c.starts_at)) === today);
-    const folders = [...(last && !hasToday ? [last] : []), ...coming];
-    $("att-cards").innerHTML = folders.length ? folders.map(attFolder).join("") : '<p class="muted small">Keine aktuellen Kurse.</p>';
-    // Ältere Kurse ohne Häkchen: Sie bleiben gespeichert, bis du ✓ Da oder ✗ Nicht da setzt
-    const shownIds = new Set(folders.map(c => c.id));
-    const unchecked = attRegs.filter(r => r.status === "angemeldet" && courseOf(r) && !shownIds.has(r.course_id)
+    // Die Anwesenheit zeigt nur den Kurstag. Abgehakt wird danach unter „Termine“.
+    const folders = courses.filter(c => localDate(new Date(c.starts_at)) === today);
+    const next = courses.filter(c => localDate(new Date(c.starts_at)) > today && c.status !== "abgesagt").sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
+    $("att-cards").innerHTML = folders.length ? folders.map(attFolder).join("")
+      : `<p class="muted">Heute ist kein Kurs.${next ? ` Nächster Kurs: <strong>${dayText(next.starts_at)} in ${esc(next.location)}</strong>.` : ""} Teilnehmer abhaken und Sehtests machen geht jederzeit unter „Termine“ → Kurs antippen.</p>`;
+    // Ältere Kurse ohne Häkchen: stehen unter „Termine“, bis ✓ Da oder ✗ Nicht da gesetzt ist
+    const unchecked = attRegs.filter(r => r.status === "angemeldet" && courseOf(r)
       && courseOf(r).status !== "abgesagt" && localDate(new Date(courseOf(r).starts_at)) < today)
       .sort((a, b) => courseOf(b).starts_at.localeCompare(courseOf(a).starts_at));
-    $("att-unchecked").innerHTML = unchecked.length ? `<article class="att-card"><h3>Noch nicht abgehakt (${unchecked.length})</h3>
-      <p class="small muted" style="margin:0 0 6px">Bitte eintragen, ob diese Personen da waren. Wer da war, bleibt unter „Schüler“ gespeichert.</p>
-      ${unchecked.slice(0, 30).map(r => `<div class="small muted" style="margin-top:8px">Kurs ${shortDay(courseOf(r).starts_at)} · ${esc(courseOf(r).location)}</div>${attRow(r)}`).join("")}</article>` : "";
-    const open = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
-    $("att-chances").innerHTML = open.length ? `<article class="att-card"><h3>Zweite Chancen</h3>${open.map(chanceRow).join("")}</article>` : "";
+    $("att-unchecked").innerHTML = unchecked.length ? `<details class="card att-card" style="margin-bottom:18px"><summary><strong>Noch nicht abgehakt (${unchecked.length})</strong> <span class="small muted">– bitte eintragen, wer da war</span></summary>
+      ${unchecked.slice(0, 40).map(r => `<div class="small muted" style="margin-top:8px">Kurs ${shortDay(courseOf(r).starts_at)} · ${esc(courseOf(r).location)}</div>${attRow(r)}`).join("")}</details>` : "";
+    renderFees();
   }
+
+  // ---------- Rubrik „Ausfallgebühren“: wer nicht da war, bis bezahlt oder erledigt ----------
+  function renderFees() {
+    const today = localDate(new Date());
+    const past = r => courseOf(r) && localDate(new Date(courseOf(r).starts_at)) < today;
+    const notYet = attRegs.filter(r => absent(r) && past(r) && !r.fee_state && !followUpOf(r));
+    const chances = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
+    const bills = attRegs.filter(r => r.fee_state === "rechnung" && courseOf(r));
+    const total = notYet.length + chances.length + bills.length;
+    const tab = document.querySelector('#main-tabs [data-view="gebuehren"]');
+    if (tab) tab.innerHTML = `Ausfallgebühren${total ? ` <span class="nav-badge">${total}</span>` : ""}`;
+    const byDay = (a, b) => courseOf(b).starts_at.localeCompare(courseOf(a).starts_at);
+    const done = '<button class="btn btn-sm btn-ghost" type="button" data-fee="done">Erledigt, aus der Liste</button>';
+    const row = (r, inner) => `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)} <span class="small muted">(Kurs ${shortDay(courseOf(r).starts_at)})</span></div><div class="att-fee">${inner}</div></div>`;
+    const section = (title, hint, list, html) => `<article class="card att-card" style="margin-bottom:14px"><h3 style="margin-top:0">${title} (${list.length})</h3><p class="small muted" style="margin:0 0 6px">${hint}</p>${list.length ? list.sort(byDay).map(html).join("") : '<p class="small muted">Niemand.</p>'}</article>`;
+    $("fee-list").innerHTML =
+      section("Rechnung gesendet – Zahlung offen", "Wenn bezahlt ist: „Bezahlt“ drücken. Dann verschwindet die Person aus der Liste, und die Rechnung steht auf bezahlt.", bills,
+        r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Bezahlt</button>`))
+      + section("Zweite Chance läuft", "Die Person darf sich innerhalb der Frist für einen neuen Kurs anmelden.", chances, r => chanceRow(r).replace('<div class="att-fee">', `<div class="att-fee">`))
+      + section("Nicht erschienen – noch nicht angeschrieben", "Rechnung oder zweite Chance per E-Mail senden. Ohne E-Mail-Adresse: anrufen und danach „Erledigt“.", notYet,
+        r => row(r, `${feeControls(r)} ${done}`));
+  }
+  // Wurde für einen Nicht-Erschienenen schon ein Nachholtermin gebucht (ohne zweite Chance)? Dann nicht anmahnen.
+  const followUpOf = r => attRegs.find(x => x.id !== r.id && x.status !== "storniert" && samePerson(x, r) && courseOf(x) && courseOf(x).starts_at > courseOf(r).starts_at);
+
   // Ordner: Inhalt erst beim Öffnen aufbauen, Zustand merken
   $("att-section").addEventListener("toggle", ev => {
     const box = ev.target;
@@ -1059,6 +1102,15 @@
         const value = r.status === mark.dataset.mark ? "angemeldet" : mark.dataset.mark;
         await db.updateRegistration(r.id, { status: value });
         await window.EHFYFinance.autoTrips();
+      } else if (fee.dataset.fee === "paid") {
+        if (!confirm(`Ausfallgebühr von ${r.first_name} ${r.last_name} ist bezahlt?`)) return true;
+        await db.updateRegistration(r.id, { fee_state: "bezahlt", fee_state_at: new Date().toISOString() });
+        for (const inv of await db.invoicesForRegistrations([r.id])) {
+          if (inv.type === "rechnung" && inv.status === "offen" && String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) await db.setInvoiceStatus(inv.id, "bezahlt");
+        }
+      } else if (fee.dataset.fee === "done") {
+        if (!confirm(`${r.first_name} ${r.last_name} als erledigt aus der Liste nehmen?`)) return true;
+        await db.updateRegistration(r.id, { fee_state: "erledigt", fee_state_at: new Date().toISOString() });
       } else if (fee.dataset.fee === "waive") {
         if (!confirm(`Ausfallgebühr von ${r.first_name} ${r.last_name} gutschreiben?`)) return true;
         await db.updateRegistration(r.id, { fee_state: "erlassen", fee_state_at: new Date().toISOString() });
@@ -1120,11 +1172,12 @@
     await loadCourses();
   }
 
-  $("att-section").addEventListener("click", async ev => {
+  async function attClick(ev) {
+    const errBox = $(ev.currentTarget.dataset.err || "att-error");
     const act = ev.target.closest("[data-course-act]");
     if (act) {
       const c = attById[act.closest("[data-course]").dataset.course];
-      $("att-error").textContent = "";
+      errBox.textContent = "";
       try {
         if (act.dataset.courseAct === "cancel") {
           cancelCourse = c;
@@ -1136,22 +1189,23 @@
           await loadCourses();
         }
         if (act.dataset.courseAct === "notify") await notifyCancelled(c);
-      } catch (e) { $("att-error").textContent = e.message; }
+      } catch (e) { errBox.textContent = e.message; }
       return;
     }
     const row = ev.target.closest("[data-att]");
     if (!row) return;
-    const r = attRegs.find(x => x.id === row.dataset.att);
-    if (r && ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseOf(r), msg => { $("att-error").textContent = msg; });
-    if (r && ev.target.closest("[data-st-run]")) return openSehtest(r, courseOf(r), loadCourses).catch(e => { $("att-error").textContent = e.message; });
-    if (r && ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadCourses).catch(e => { $("att-error").textContent = e.message; });
+    const r = attRegs.find(x => x.id === row.dataset.att) || regs.find(x => x.id === row.dataset.att);
+    if (r && ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseOf(r), msg => { errBox.textContent = msg; });
+    if (r && ev.target.closest("[data-st-run]")) return openSehtest(r, courseOf(r), loadCourses).catch(e => { errBox.textContent = e.message; });
+    if (r && ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
     const stBtn = ev.target.closest("[data-st]");
     if (r && stBtn) {
-      try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { $("att-error").textContent = e.message; }
+      try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { errBox.textContent = e.message; }
       return;
     }
-    await attendanceAction(ev.target, r, $("att-error"));
-  });
+    await attendanceAction(ev.target, r, errBox);
+  }
+  ["att-section", "att-unchecked", "fee-list", "p-tools", "p-rows"].forEach(id => $(id).addEventListener("click", attClick));
 
   // ---------- Schülerdatenbank: alle Anmeldungen aller Kurse, je Person zusammengefasst ----------
   let studentRegs = [], studentCourses = {};
