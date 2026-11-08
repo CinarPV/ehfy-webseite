@@ -724,3 +724,8 @@ body[data-page="admin"] #site-footer { display: none; }
 }
 body[data-page="admin"] .site-header { position: static; }
 body[data-page="admin"] .section { padding-top: 22px; }
+
+/* iPhone/Android: Eingabefelder mit mindestens 16 px, sonst zoomt der Browser beim Tippen hinein und bleibt groß */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}

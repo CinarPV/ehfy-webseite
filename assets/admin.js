@@ -468,6 +468,7 @@
   $("p-cap-up").onclick = () => changeCapacity(1);
 
   $("back").onclick = async () => {
+    askToSync(true);
     window.EHFYNav.remove(participantsStep);
     $("participants-view").classList.add("hidden");
     $("courses-view").classList.remove("hidden");
@@ -564,6 +565,7 @@
     $("sync-text").style.color = st.error ? "var(--danger)" : "";
     $("sync-btn").disabled = !st.online || st.syncing;
     $("sync-btn").textContent = st.syncing ? "Wird übertragen …" : st.pending ? `Synchronisieren (${st.pending})` : "Synchronisieren";
+    if (!st.pending) askedAt = 0;
     renderReminder(st);
     if (courses.length) renderStart();
   }
@@ -574,19 +576,21 @@
   let shownPending = 0;
   function renderReminder(st) {
     const bar = $("sync-reminder");
-    bar.classList.toggle("hidden", !st.pending || $("app-view").classList.contains("hidden"));
+    // Nicht bei jeder Eingabe stören: Die Leiste erscheint nur ohne Internet. Gefragt wird beim Wechseln oder Verlassen.
+    bar.classList.toggle("hidden", !st.pending || st.online || $("app-view").classList.contains("hidden"));
     document.body.classList.toggle("has-reminder", !bar.classList.contains("hidden"));
     $("sr-text").textContent = st.online ? `${changes(st.pending)} noch nicht synchronisiert` : `${changes(st.pending)} warten auf Internet`;
     $("sr-btn").disabled = !st.online || st.syncing;
     $("sr-btn").textContent = st.syncing ? "Wird übertragen …" : "Jetzt synchronisieren";
-    // Nach jeder neuen Eingabe kurz aufleuchten
-    if (st.pending > shownPending) { bar.classList.remove("pulse"); void bar.offsetWidth; bar.classList.add("pulse"); }
     shownPending = st.pending;
   }
   $("sr-btn").onclick = runSync;
 
-  function askToSync() {
+  var askedAt = 0; // Bei so vielen offenen Änderungen wurde zuletzt gefragt
+  function askToSync(onlyNew) {
     const st = db.status();
+    if (onlyNew && st.pending <= askedAt) return;
+    askedAt = st.pending;
     if (!st.pending || $("app-view").classList.contains("hidden") || document.querySelector("dialog[open]")) return;
     $("rm-text").textContent = `${changes(st.pending)} ${st.pending === 1 ? "ist" : "sind"} noch nicht synchronisiert. Teilnehmer und deine anderen Geräte sehen sie erst danach.`;
     $("rm-sync").disabled = !st.online;
@@ -640,6 +644,8 @@
     if (!b) return;
     // Für den Zurück-Knopf merken, woher du kommst
     const was = $("main-tabs").querySelector("button.active");
+    // Beim Wechsel in einen anderen Bereich einmal fragen, ob synchronisiert werden soll
+    if (was && was !== b) askToSync(true);
     if (was && was !== b && !navRestoring) window.EHFYNav.push(() => { navRestoring = true; was.click(); navRestoring = false; });
     $("main-tabs").querySelectorAll("button[data-view]").forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
