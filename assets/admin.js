@@ -504,23 +504,47 @@
   // Teilnehmer manuell eintragen
   const rdlg = $("reg-dialog");
   EHFY.birthField($("rd-birth"));
-  $("p-add").onclick = () => { $("reg-form").reset(); $("rd-error").textContent = ""; rdlg.showModal(); };
+  let addCourse = null, addId = null;
+  function openAdd(c) {
+    addCourse = c; addId = null;
+    $("reg-form").reset(); $("rd-error").textContent = ""; $("rd-idinfo").innerHTML = "";
+    $("rd-course").textContent = `Kurs: ${dayText(c.starts_at)} · ${c.location}`;
+    // Am Kurstag oder danach: gleich als „da“ eintragen
+    const started = localDate(new Date(c.starts_at)) <= localDate(new Date());
+    $("rd-here-box").classList.toggle("hidden", !started);
+    $("rd-here").checked = started;
+    rdlg.showModal();
+  }
+  $("p-add").onclick = () => openAdd(current);
+  $("rd-scan").onclick = () => scanId($("rd-idinfo"), res => {
+    addId = res;
+    $("rd-first").value = res.firstName; $("rd-last").value = res.lastName;
+    if (res.birth) $("rd-birth").value = birthText(res.birth);
+    return `Übernommen: ${esc(res.firstName)} ${esc(res.lastName)} · geb. ${res.birth ? birthText(res.birth) : "?"} · Ausweis-Nr. ${esc(res.docNumber)}. Bitte die Namen kurz prüfen: Umlaute stehen im Ausweis als AE/OE/UE.`;
+  });
   $("reg-form").addEventListener("submit", async ev => {
-    if (ev.submitter?.value !== "save") return;
+    const mode = ev.submitter?.value;
+    if (mode !== "save" && mode !== "sehtest") return;
     ev.preventDefault();
     const birth = EHFY.parseBirth($("rd-birth").value);
     if ($("rd-birth").value.trim() && !birth) { $("rd-error").textContent = "Bitte das Geburtsdatum so eingeben: TT.MM.JJJJ."; return; }
     try {
-      await db.addRegistration({
-        course_id: current.id,
+      const c = addCourse || current;
+      const row = await db.addRegistration({
+        course_id: c.id,
         first_name: $("rd-first").value.trim(), last_name: $("rd-last").value.trim(),
-        birth_date: birth, package: $("rd-pkg").value,
+        birth_date: birth, package: mode === "sehtest" ? "komplett" : $("rd-pkg").value,
+        ...(!$("rd-here-box").classList.contains("hidden") && $("rd-here").checked ? { status: "teilgenommen" } : {}),
+        ...(addId ? { sehtest_id_doc: addId.idDoc, sehtest_id_no: addId.docNumber } : {}),
         email: $("rd-email").value.trim() || null, phone: $("rd-phone").value.trim() || null,
         street: $("rd-street").value.trim() || null, zip: $("rd-zip").value.trim() || null, city: $("rd-city").value.trim() || null,
         message: "manuell eingetragen"
       });
       rdlg.close();
-      await loadRegs();
+      // Liste neu laden, wo du gerade bist (Teilnehmerliste oder Anwesenheit)
+      const refresh = async () => { if (current && current.id === c.id && !$("participants-view").classList.contains("hidden")) await loadRegs(); await loadCourses(); };
+      await refresh();
+      if (mode === "sehtest") await openSehtest(row || {}, c, refresh);
     } catch (e) { $("rd-error").textContent = e.message; }
   });
 
@@ -952,7 +976,8 @@
       ? `<div class="att-row" data-course="${c.id}"><span class="small"><strong>Abgesagt${c.cancel_reason ? ": " + esc(c.cancel_reason) : ""}</strong>${c.cancel_notified_at ? ` · informiert am ${shortDay(c.cancel_notified_at)}` : ""}</span>
           <div class="att-btns">${withMail && !c.cancel_notified_at ? `<button class="btn btn-sm" type="button" data-course-act="notify">Teilnehmer informieren (${withMail})</button>` : ""}
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
-      : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
+      : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm btn-teal" type="button" data-course-act="add">+ Schüler nachträglich eintragen</button>
+          <button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
   }
   function attFolder(c) {
     const list = attPeople(c);
@@ -1189,6 +1214,7 @@
           await loadCourses();
         }
         if (act.dataset.courseAct === "notify") await notifyCancelled(c);
+        if (act.dataset.courseAct === "add") openAdd(c);
       } catch (e) { errBox.textContent = e.message; }
       return;
     }
@@ -1383,37 +1409,96 @@
   });
 
   // ---------- Reiter „Sehtests“: alle Sehtests mit Nummer und Datum, Personen nur für den Sehtest ----------
-  let seRegs = [], seCourses = {};
+  let seRegs = [], seCourses = {}, seOld = false;
+  const seOpen = new Set(), seShut = new Set();
   const seCourse = r => seCourses[r.course_id] || null;
+  // Gehört in die Sehtest-Liste: gebucht, nur Sehtest oder schon angefangen
+  const seRelevant = r => r.sehtest_only || r.package === "komplett" || r.sehtest_nr || r.sehtest_passed != null
+    || (r.sehtest_marks && Object.keys(r.sehtest_marks).length) || sehtestDay(r, seCourse(r));
   async function loadSehtests() {
     const [regsAll, list] = await Promise.all([db.listAllRegistrations(), db.listCourses()]);
     seCourses = Object.fromEntries(list.map(c => [c.id, c]));
-    seRegs = regsAll.filter(r => r.status !== "storniert" && (r.sehtest_only || r.sehtest_nr || r.sehtest_passed != null
-      || (r.sehtest_marks && Object.keys(r.sehtest_marks).length) || sehtestDay(r, seCourse(r))));
+    // Auch die übrigen Kursteilnehmer laden: Sie stehen im Ordner unter „Weitere“, falls jemand spontan den Sehtest macht
+    seRegs = regsAll.filter(r => r.status !== "storniert" && (seRelevant(r) || seCourse(r)));
     renderSehtests();
   }
-  function renderSehtests() {
-    const words = $("se-search").value.toLowerCase().split(/\s+/).filter(Boolean);
-    const day = r => sehtestDay(r, seCourse(r)) || "";
-    const list = seRegs.filter(r => {
-      const hay = [r.first_name, r.last_name, r.sehtest_nr, birthText(r.birth_date), r.phone, r.email, day(r) && birthText(day(r))].join(" ").toLowerCase();
-      return words.every(w => hay.includes(w));
-    }).sort((a, b) => (b.sehtest_nr || "").localeCompare(a.sehtest_nr || "", "de", { numeric: true }) || day(b).localeCompare(day(a)));
-    $("se-count").textContent = `${list.length} ${list.length === 1 ? "Sehtest" : "Sehtests"}`;
-    $("se-list").innerHTML = list.length ? list.slice(0, 200).map(r => {
-      const c = seCourse(r), state = sehtestState(r);
-      return `<article class="se-row" data-se="${r.id}">
+  function seRow(r) {
+    const c = seCourse(r), state = sehtestState(r), day = sehtestDay(r, c);
+    return `<article class="se-row" data-se="${r.id}">
         <div class="se-nr">${r.sehtest_nr ? esc(r.sehtest_nr) : '<span class="muted">ohne Nr.</span>'}</div>
-        <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)} · ${c ? `Kurs ${shortDay(c.starts_at)}` : r.sehtest_only ? "nur Sehtest" : "ohne Kurs"}</span></div>
-        <div class="se-day small">${day(r) ? birthText(day(r)) : "–"}</div>
+        <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
+        <div class="se-day small">${day ? birthText(day) : "–"}</div>
         <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${state || "noch offen"}</div>
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>
           <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>
           ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button>' : ""}
           ${r.sehtest_only ? '<button class="btn btn-sm btn-ghost" type="button" data-se-del style="color:var(--danger)">Löschen</button>' : ""}</div>
       </article>`;
-    }).join("") : '<p class="muted">Noch keine Sehtests gefunden.</p>';
   }
+  // Ordner: ein Kurs (Kursdatum) oder ein Tag mit Personen nur für den Sehtest
+  function seGroups(list) {
+    const today = localDate(new Date()), map = new Map();
+    for (const r of list) {
+      const c = seCourse(r), day = c ? dayOf(c.starts_at) : (sehtestDay(r, null) || "");
+      const key = c ? c.id : `nur-${day}`;
+      if (!map.has(key)) map.set(key, { key, c, day, main: [], more: [] });
+      map.get(key)[seRelevant(r) ? "main" : "more"].push(r);
+    }
+    // Kurse ohne Sehtest-Buchung nur zeigen, wenn heute Kurs ist (für spontane Sehtests)
+    const groups = [...map.values()].filter(g => g.main.length || g.day === today);
+    const now = groups.filter(g => g.day >= today).sort((a, b) => a.day.localeCompare(b.day) || (a.c ? 0 : 1));
+    const past = groups.filter(g => g.day < today).sort((a, b) => b.day.localeCompare(a.day));
+    return { now, past, today };
+  }
+  function seFolder(g, open) {
+    const done = g.main.filter(r => r.sehtest_passed != null), ok = g.main.filter(r => r.sehtest_passed === true).length;
+    const title = g.c ? `${dayText(g.c.starts_at)} · ${esc(g.c.location)}${g.c.status === "abgesagt" ? " · ABGESAGT" : ""}`
+      : `Nur Sehtest · ${g.day ? dayText(g.day + "T12:00") : "ohne Datum"}`;
+    const info = `${g.main.length} Sehtest${g.main.length === 1 ? "" : "s"} · ${ok} bestanden${done.length - ok ? ` · ${done.length - ok} nicht bestanden` : ""}${g.main.length - done.length ? ` · ${g.main.length - done.length} offen` : ""}`;
+    return `<details class="att-folder se-folder" data-se-folder="${g.key}" ${open ? "open" : ""}>
+      <summary>${title} <small>${info}</small></summary>
+      <div class="att-body">${open ? seFolderBody(g) : ""}</div></details>`;
+  }
+  function seFolderBody(g) {
+    const main = g.main.slice().sort(byName), more = g.more.slice().sort(byName);
+    return `<div class="se-list">${main.length ? main.map(seRow).join("") : '<p class="small muted">Niemand hat den Sehtest gebucht.</p>'}</div>
+      ${more.length ? `<details class="se-more"${seSearching() ? " open" : ""}><summary class="small">Weitere Kursteilnehmer ohne gebuchten Sehtest (${more.length})</summary><div class="se-list">${more.map(seRow).join("")}</div></details>` : ""}`;
+  }
+  const seWords = () => $("se-search").value.toLowerCase().split(/\s+/).filter(Boolean);
+  const seSearching = () => seWords().length > 0;
+  let seLast = { now: [], past: [] };
+  function renderSehtests() {
+    const words = seWords();
+    const day = r => sehtestDay(r, seCourse(r)) || "";
+    const list = seRegs.filter(r => {
+      const c = seCourse(r);
+      const hay = [r.first_name, r.last_name, r.sehtest_nr, birthText(r.birth_date), r.phone, r.email, day(r) && birthText(day(r)), c && birthText(dayOf(c.starts_at)), c && c.location].join(" ").toLowerCase();
+      return words.every(w => hay.includes(w));
+    });
+    const relevant = list.filter(seRelevant);
+    $("se-count").textContent = `${relevant.length} ${relevant.length === 1 ? "Sehtest" : "Sehtests"} · nach Kurstag in Ordnern. Ordner antippen, dann nacheinander testen.`;
+    const { now, past, today } = seGroups(list);
+    seLast = { now, past };
+    // Offen: heutiger Kurs; beim Suchen alle Treffer
+    const isOpen = g => words.length > 0 || seOpen.has(g.key) || (g.day === today && !seShut.has(g.key));
+    const pastShown = words.length || seOld ? past : past.slice(0, 12);
+    $("se-list").innerHTML = (now.length || past.length)
+      ? (now.length ? `<h3 class="se-head">Heute und demnächst</h3>${now.map(g => seFolder(g, isOpen(g))).join("")}` : "")
+        + (pastShown.length ? `<h3 class="se-head">Frühere Kurse</h3>${pastShown.map(g => seFolder(g, isOpen(g))).join("")}` : "")
+        + (pastShown.length < past.length ? `<button class="btn btn-ghost" type="button" data-se-old>Ältere Kurse zeigen (${past.length - pastShown.length})</button>` : "")
+      : `<p class="muted">${words.length ? "Nichts gefunden." : "Noch keine Sehtests."}</p>`;
+  }
+  // Ordner beim Öffnen füllen und Zustand merken
+  $("se-list").addEventListener("toggle", ev => {
+    const f = ev.target.closest && ev.target.closest("[data-se-folder]");
+    if (!f || ev.target !== f) return;
+    const key = f.dataset.seFolder;
+    if (f.open) { seOpen.add(key); seShut.delete(key); } else { seOpen.delete(key); seShut.add(key); }
+    if (f.open) {
+      const g = [...seLast.now, ...seLast.past].find(x => x.key === key);
+      if (g) f.querySelector(".att-body").innerHTML = seFolderBody(g);
+    }
+  }, true);
   $("se-search").addEventListener("input", renderSehtests);
   let seId = null; // gelesene Ausweisdaten für die neue Person
   $("se-new").onclick = () => { seId = null; $("se-idinfo").innerHTML = ""; $("se-form").classList.remove("hidden"); $("se-first").focus(); };
@@ -1451,6 +1536,7 @@
     } catch (e) { if (win) win.close(); $("se-error").textContent = e.message; }
   };
   $("se-list").addEventListener("click", async ev => {
+    if (ev.target.closest("[data-se-old]")) { seOld = true; renderSehtests(); return; }
     const box = ev.target.closest("[data-se]");
     if (!box) return;
     const r = seRegs.find(x => x.id === box.dataset.se), c = seCourse(r), show = msg => { $("se-error").textContent = msg; };

@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 42</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 43</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -139,7 +139,7 @@
                   <button class="cap-btn" id="p-cap-up" type="button" aria-label="Ein Platz mehr">+</button></p>
               </div>
               <div class="btn-row no-print">
-                <button class="btn btn-sm btn-teal" id="p-add">+ Teilnehmer eintragen</button>
+                <button class="btn btn-sm btn-teal" id="p-add">+ Schüler nachträglich eintragen</button>
                 <button class="btn btn-sm btn-outline" id="p-print">Liste drucken</button>
                 <button class="btn btn-sm btn-outline" id="p-csv">Excel/CSV</button>
                 <a class="btn btn-sm btn-outline" id="p-mail" href="#">E-Mail an alle</a>
@@ -395,8 +395,11 @@
   <!-- Teilnehmer-Dialog -->
   <dialog id="reg-dialog">
     <form method="dialog" class="dialog-body" id="reg-form">
-      <h2 style="margin-top:0">Teilnehmer eintragen</h2>
-      <p class="muted small">Für telefonische Anmeldungen oder Teilnehmer ohne Voranmeldung.</p>
+      <h2 style="margin-top:0">Schüler nachträglich eintragen</h2>
+      <p class="small" style="margin:0 0 4px"><strong id="rd-course"></strong></p>
+      <p class="muted small">Für telefonische Anmeldungen oder Schüler ohne Voranmeldung. Es geht keine Anmelde-Mail raus. Danach geht alles wie bei den anderen: abhaken, Sehtest, Bescheinigung, Quittung und Rechnung.</p>
+      <div class="btn-row" style="margin-bottom:4px"><button class="btn btn-sm" type="button" id="rd-scan">📷 Ausweis fotografieren</button></div>
+      <p class="small" id="rd-idinfo" role="status"></p>
       <div class="form-grid">
         <div class="field"><label for="rd-first">Vorname *</label><input id="rd-first" required></div>
         <div class="field"><label for="rd-last">Nachname *</label><input id="rd-last" required></div>
@@ -408,9 +411,11 @@
         <div class="field"><label for="rd-zip">PLZ</label><input id="rd-zip" inputmode="numeric" maxlength="5"></div>
         <div class="field"><label for="rd-city">Ort</label><input id="rd-city"></div>
       </div>
+      <label class="check-line" id="rd-here-box"><input type="checkbox" id="rd-here"> Ist da (gleich als „✓ Da“ eintragen)</label>
       <p class="form-error" id="rd-error"></p>
       <div class="btn-row">
         <button class="btn" value="save">Eintragen</button>
+        <button class="btn btn-teal" value="sehtest">Eintragen und Sehtest starten</button>
         <button class="btn btn-outline" value="cancel" formnovalidate>Abbrechen</button>
       </div>
     </form>

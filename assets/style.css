@@ -668,3 +668,15 @@ body.has-reminder { padding-bottom: 90px; }
   .nav-main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nav-main button { min-height: 72px; }
 }
+
+/* Sehtests in Ordnern je Kurstag */
+.se-head { font-size: 1rem; margin: 18px 0 8px; color: var(--muted, #5a6b78); }
+.se-folder { margin-bottom: 10px; }
+.se-folder .att-body { padding: 0 12px 12px; }
+.se-more { margin-top: 10px; }
+.se-more > summary { cursor: pointer; padding: 6px 0; }
+.check-line { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; font-weight: 600; }
+.se-more > summary { display: flex; align-items: center; list-style: none; }
+.se-more > summary::-webkit-details-marker { display: none; }
+.se-more > summary::after { margin-left: auto; }
+.se-more:not([open]) > summary::after { transform: none; }
