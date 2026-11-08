@@ -103,6 +103,9 @@
         return check(await sb.from("registrations").update(patch).eq("id", id).select("id, sehtest_nr, sehtest_nr_at").maybeSingle());
       },
       async deleteRegistration(id) { check(await sb.from("registrations").delete().eq("id", id)); },
+      // Nächste Sehtest-Protokoll-Nummer (frei wählbare Startnummer)
+      async getNextSehtestNr() { return check(await sb.rpc("get_next_sehtest_nr")); },
+      async setNextSehtestNr(nr) { return check(await sb.rpc("set_next_sehtest_nr", { p_next: nr })); },
       // Bankverbindung und Steuernummer (nur für das Verwaltungs-Konto lesbar)
       async getSettings() {
         const row = check(await sb.from("app_settings").select("value").eq("key", "issuer").maybeSingle());
@@ -151,6 +154,19 @@
         return data;
       }
     };
+  }
+
+  // Nummer weiterzählen: Ziffern am Ende hochzählen, Vorsatz und führende Nullen bleiben (S26-009 → S26-010)
+  const nrPlus = nr => nr.replace(/(\d+)$/, d => String(Number(d) + 1).padStart(d.length, "0"));
+
+  // Demo: nächste Nummer wie in der Datenbank (eingestellte Startnummer, sonst S26-…)
+  function demoNextNr(db) {
+    let next = null;
+    try { next = localStorage.getItem("ehfy-demo-sehtest-next"); } catch (e) { /* egal */ }
+    if (!next) return `S${String(new Date().getFullYear()).slice(2)}-${String(db.regs.filter(x => x.sehtest_nr).length + 1).padStart(3, "0")}`;
+    while (db.regs.some(x => x.sehtest_nr === next)) next = nrPlus(next);
+    try { localStorage.setItem("ehfy-demo-sehtest-next", nrPlus(next)); } catch (e) { /* egal */ }
+    return next;
   }
 
   // ---------- Demo (localStorage) ----------
@@ -237,7 +253,7 @@
         if (i >= 0) db.regs[i] = { ...db.regs[i], ...row }; else db.regs.push(full);
         // Wie in der Datenbank: Sehtest-Nummer beim ersten Ergebnis
         const r = db.regs.find(x => x.id === row.id);
-        if (r.sehtest_passed != null && !r.sehtest_nr) r.sehtest_nr = `S${String(new Date().getFullYear()).slice(2)}-${String(db.regs.filter(x => x.sehtest_nr).length + 1).padStart(3, "0")}`;
+        if (r.sehtest_passed != null && !r.sehtest_nr) r.sehtest_nr = demoNextNr(db);
         save();
       },
       async listAllRegistrations() { return load().regs.map(r => ({ ...r })); },
@@ -259,16 +275,28 @@
         const first = r.sehtest_passed == null;
         Object.assign(r, patch);
         // Wie in der Datenbank: Nummer erst beim ersten Ergebnis
-        if (r.sehtest_passed != null && !r.sehtest_nr && first) {
-          const n = db.regs.filter(x => x.sehtest_nr).length + 1;
-          r.sehtest_nr = `S${String(new Date().getFullYear()).slice(2)}-${String(n).padStart(3, "0")}`;
-        }
+        if (r.sehtest_passed != null && !r.sehtest_nr && first) r.sehtest_nr = demoNextNr(db);
         save();
         return { id, sehtest_nr: r.sehtest_nr || null };
       },
       async deleteRegistration(id) { const db = load(); db.regs = db.regs.filter(r => r.id !== id); save(); },
       async getSettings() {
         try { return JSON.parse(localStorage.getItem("ehfy-demo-settings")) || {}; } catch (e) { return {}; }
+      },
+      async getNextSehtestNr() {
+        let next = null;
+        try { next = localStorage.getItem("ehfy-demo-sehtest-next"); } catch (e) { /* egal */ }
+        if (!next) return null;
+        const db = load();
+        while (db.regs.some(x => x.sehtest_nr === next)) next = nrPlus(next);
+        return next;
+      },
+      async setNextSehtestNr(nr) {
+        nr = String(nr || "").trim();
+        if (!/\d$/.test(nr)) throw new Error("Die Nummer muss mit einer Zahl enden, z. B. 1250 oder S26-045.");
+        if (load().regs.some(x => x.sehtest_nr === nr)) throw new Error(`Die Nummer ${nr} ist schon vergeben.`);
+        try { localStorage.setItem("ehfy-demo-sehtest-next", nr); } catch (e) { /* egal */ }
+        return nr;
       },
       async saveSettings(value) {
         try { localStorage.setItem("ehfy-demo-settings", JSON.stringify(value)); } catch (e) { /* nur für diese Sitzung */ }

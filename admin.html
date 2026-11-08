@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-top no-print">
-            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 48</span></h1>
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 49</span></h1>
             <div class="sync-mini" id="sync-bar" role="status">
               <span class="sync-dot" id="sync-dot"></span>
               <span id="sync-text" class="small"></span>
@@ -204,6 +204,11 @@
             <p class="muted small" id="se-count"></p>
             <div class="card" style="margin-bottom:14px">
               <div class="field" style="margin:0 0 10px"><label for="se-search">Suchen (Name, Protokoll-Nr., Geburtsdatum, Telefon)</label><input id="se-search" type="search" placeholder="z. B. Müller oder S26-012" autocomplete="off"></div>
+              <details class="se-nextbox" style="margin:0 0 12px"><summary class="small"><strong>Fortlaufende Nummer</strong> · <span id="se-next-info">…</span></summary>
+                <p class="small muted" style="margin:8px 0">Die Protokoll-Nummer ist auch die Bescheinigungsnummer. Sie wird erst vergeben, wenn ein Sehtest bestätigt ist, und dann fortlaufend weitergezählt. Hier die <strong>nächste</strong> Nummer eintragen, z. B. 1250 oder S26-045.</p>
+                <div class="btn-row" style="align-items:center"><input id="se-next" autocomplete="off" style="max-width:180px;padding:10px 12px;border:2px solid var(--line);border-radius:12px;font:inherit" aria-label="Nächste Protokoll-Nummer"><button class="btn btn-sm" type="button" id="se-next-save">Als nächste Nummer speichern</button></div>
+                <p class="small" id="se-next-msg" role="status"></p>
+              </details>
               <div class="btn-row"><button class="btn" type="button" id="se-new">+ Person nur für Sehtest anlegen</button><button class="btn btn-ghost" type="button" id="se-blank">Leeres Protokoll drucken</button></div>
               <form id="se-form" class="hidden" style="margin-top:14px">
                 <div class="btn-row" style="margin-bottom:6px"><button class="btn btn-sm" type="button" id="se-scan">📷 Ausweis fotografieren</button></div>

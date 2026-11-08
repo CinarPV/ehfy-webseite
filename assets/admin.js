@@ -792,12 +792,28 @@
   }
   // Nächste Protokoll-Nummer, nur als Vorschau. Die endgültige vergibt die Datenbank beim Ergebnis.
   async function draftNr() {
+    // Eingestellte Startnummer (aus der Datenbank), sonst wie bisher S26-…
+    try { const next = await db.getNextSehtestNr(); if (next) return next; } catch (e) { /* offline: Schätzung unten */ }
     const yy = String(new Date().getFullYear()).slice(2);
     const used = (await db.listAllRegistrations()).map(x => (String(x.sehtest_nr || "").match(new RegExp(`^S${yy}-(\\d+)$`)) || [])[1]).filter(Boolean).map(Number);
     return `S${yy}-${String((used.length ? Math.max(...used) : 0) + 1).padStart(3, "0")}`;
   }
   const nrTaken = async (nr, id) => (await db.listAllRegistrations()).some(x => x.id !== id && x.sehtest_nr === nr);
   const nrError = (e, nr) => (/duplicate|unique/i.test(e.message || "") ? new Error(`Die Protokoll-Nummer ${nr} ist schon vergeben.`) : e);
+  // Sehtest wiederholen: neuer Eintrag „nur Sehtest“ mit denselben Personendaten.
+  // Er bekommt beim Ergebnis die nächste Nummer, das alte Protokoll mit seiner Nummer bleibt erhalten.
+  async function againSehtest(r, done) {
+    if (!confirm(`Neuen Sehtest für ${r.first_name} ${r.last_name} anlegen?\n\nEr bekommt beim Ergebnis die nächste fortlaufende Nummer. Das bisherige Protokoll${r.sehtest_nr ? ` (Nr. ${r.sehtest_nr})` : ""} bleibt erhalten.`)) return;
+    const row = await db.addRegistration({
+      course_id: null, first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date || null,
+      phone: r.phone || null, email: r.email || null, street: r.street || null, zip: r.zip || null, city: r.city || null,
+      package: "kurs", sehtest_only: true, sehtest_on: localDate(new Date()), sehtest_none: false,
+      sehtest_id_doc: r.sehtest_id_doc || null, sehtest_id_no: r.sehtest_id_no || null,
+      message: "manuell eingetragen" // keine Anmelde-Mail
+    });
+    if (done) await done();
+    await openSehtest(row, null, done);
+  }
   async function changeNr(r) {
     const nr = (prompt("Neue Protokoll-Nummer (jede Nummer gibt es nur einmal):", r.sehtest_nr) || "").trim();
     if (!nr || nr === r.sehtest_nr) return;
@@ -996,7 +1012,7 @@
     if (r.sehtest_passed === false) return `nicht bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
     return r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen" : "";
   }
-  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span> <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>` : ""}</div>`;
+  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span> <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>` : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
   const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
 
   // ---------- Gutschein oder Rabatt je Teilnehmer ----------
@@ -1329,6 +1345,7 @@
     const r = attRegs.find(x => x.id === row.dataset.att) || regs.find(x => x.id === row.dataset.att);
     if (r && ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseOf(r), msg => { errBox.textContent = msg; });
     if (r && ev.target.closest("[data-st-run]")) return openSehtest(r, courseOf(r), loadCourses).catch(e => { errBox.textContent = e.message; });
+    if (r && ev.target.closest("[data-st-again]")) return againSehtest(r, loadCourses).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
     const stBtn = ev.target.closest("[data-st]");
     if (r && stBtn) {
@@ -1473,6 +1490,7 @@
     const show = msg => { $("sc-error").textContent = msg; };
     if (ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseFor(r), show);
     if (ev.target.closest("[data-st-run]")) return openSehtest(r, courseFor(r), loadStudents).catch(e => show(e.message));
+    if (ev.target.closest("[data-st-again]")) return againSehtest(r, loadStudents).catch(e => show(e.message));
     if (ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadStudents).catch(e => show(e.message));
     const stBtn = ev.target.closest("[data-st]");
     if (stBtn) {
@@ -1521,7 +1539,24 @@
   // Gehört in die Sehtest-Liste: gebucht, nur Sehtest oder schon angefangen
   const seRelevant = r => r.sehtest_only || r.package === "komplett" || r.sehtest_nr || r.sehtest_passed != null
     || (r.sehtest_marks && Object.keys(r.sehtest_marks).length) || sehtestDay(r, seCourse(r));
+  async function showNextNr() {
+    $("se-next-msg").textContent = "";
+    try {
+      const next = await db.getNextSehtestNr();
+      $("se-next").value = next || "";
+      $("se-next-info").textContent = next ? `Der nächste bestätigte Sehtest bekommt die Nummer ${next}.` : `Noch keine Startnummer eingestellt. Ohne Startnummer: ${await draftNr()}.`;
+    } catch (e) { $("se-next-info").textContent = "Die nächste Nummer kann nur mit Internet angezeigt werden."; }
+  }
+  $("se-next-save").onclick = async () => {
+    const nr = $("se-next").value.trim();
+    $("se-next-msg").textContent = "";
+    if (!nr) { $("se-next-msg").textContent = "Bitte eine Nummer eintragen."; return; }
+    if (!confirm(`Ab jetzt bekommt der nächste bestätigte Sehtest die Nummer ${nr}, danach geht es fortlaufend weiter. Speichern?`)) return;
+    try { await db.setNextSehtestNr(nr); await showNextNr(); $("se-next-msg").textContent = "✓ Gespeichert."; }
+    catch (e) { $("se-next-msg").textContent = e.message; }
+  };
   async function loadSehtests() {
+    showNextNr();
     const [regsAll, list] = await Promise.all([db.listAllRegistrations(), db.listCourses()]);
     seCourses = Object.fromEntries(list.map(c => [c.id, c]));
     // Auch die übrigen Kursteilnehmer laden: Sie stehen im Ordner unter „Weitere“, falls jemand spontan den Sehtest macht
@@ -1537,7 +1572,7 @@
         <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${state || "noch offen"}</div>
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>
           <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>
-          ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button>' : ""}
+          ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}
           ${r.sehtest_only ? '<button class="btn btn-sm btn-ghost" type="button" data-se-del style="color:var(--danger)">Löschen</button>' : ""}</div>
       </article>`;
   }
@@ -1648,6 +1683,7 @@
     const r = seRegs.find(x => x.id === box.dataset.se), c = seCourse(r), show = msg => { $("se-error").textContent = msg; };
     show("");
     if (ev.target.closest("[data-st-run]")) return openSehtest(r, c, loadSehtests).catch(e => show(e.message));
+    if (ev.target.closest("[data-st-again]")) return againSehtest(r, loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-st-print]")) return sehtestPdf(r, c, show);
     if (ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-se-del]")) {

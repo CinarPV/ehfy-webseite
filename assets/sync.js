@@ -164,6 +164,9 @@
     status, sync, isOnline, pull,
     clearNew() { newRegs = 0; notify(); },
     savePushSubscription: (s, d) => remote.savePushSubscription(s, d),
+    // Nächste Sehtest-Nummer: nur mit Internet (die Datenbank vergibt die Nummern)
+    getNextSehtestNr: () => remote.getNextSehtestNr(),
+    setNextSehtestNr: nr => remote.setNextSehtestNr(nr),
     removePushSubscription: e => remote.removePushSubscription(e),
     isPending: id => outbox.some(o => (o.row && o.row.id === id) || o.id === id || (o.row && o.row.course_id === id)),
 
