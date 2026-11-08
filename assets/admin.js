@@ -740,7 +740,8 @@
         <svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="${S.ringPath(20, dir)}"/></svg><span>${mk === "r" ? "✓" : mk === "f" ? "✗" : ""}</span></button>`;
     }).join("")}</div>`).join("");
     const ev = S.evaluate(marks, test), all = S.overall(marks);
-    $("sd-sum").innerHTML = `<p class="small" style="margin:10px 0 4px">${t.title}: ${ev.straight} gerade und ${ev.oblique} schräge Fehler in den 0,7-Zeilen${ev.open ? `, ${ev.open} Ringe offen` : ""}. Nicht bestanden ab 3 geraden oder 3 schrägen Fehlern oder mehr als 4 insgesamt.</p>
+    const warn = ev.state !== "nicht" && (ev.row1 === 2 || ev.row2 === 2) ? " Achtung: In einer 0,7-Zeile sind schon 2 Fehler – ein weiterer dort, und der Test ist nicht bestanden." : "";
+    $("sd-sum").innerHTML = `<p class="small" style="margin:10px 0 4px">${t.title}: erste 0,7-Zeile ${ev.row1} Fehler, zweite 0,7-Zeile ${ev.row2} Fehler${ev.open ? ` (${ev.open} Ringe noch offen)` : ""}. Nicht bestanden ab 3 Fehlern in einer 0,7-Zeile.${warn}</p>
       <p class="st-result is-${all.state}">${RESULT_TEXT[all.state]}</p>`;
     document.querySelectorAll("#st-dialog [data-flow]").forEach(b => { const on = b.dataset.flow === stRun.flow; b.classList.toggle("on-yes", on); b.setAttribute("aria-pressed", on); });
     $("sd-save").disabled = all.state === "offen";

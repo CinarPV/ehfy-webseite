@@ -20,21 +20,23 @@
   // Kreuze je Test: Text mit einem Zeichen je Ring: "r" = richtig, "f" = falsch, "." = noch offen
   const marksOf = (marks, n) => String((marks && marks[n]) || "").padEnd(test(n).rings.length, ".");
 
-  // Ein Test ist nicht bestanden bei mehr als 2 falschen geraden ODER mehr als 2 falschen schrägen Ringen
-  // ODER mehr als 4 Fehlern insgesamt (gezählt in den beiden 0,7-Zeilen)
+  // Je Test werden die beiden 0,7-Zeilen (je 5 Ringe) gewertet.
+  // Nicht bestanden, sobald in einer 0,7-Zeile mehr als 2 Fehler sind (also höchstens 2 + 2 = 4 Fehler).
+  // Bestanden erst, wenn beide 0,7-Zeilen vollständig abgefragt sind.
   function evaluate(marks, n) {
     const m = marksOf(marks, n);
-    let straight = 0, oblique = 0, open = 0, touched = false;
+    const rows = { 1: 0, 2: 0 };
+    let open = 0, touched = false;
     test(n).rings.forEach((ring, i) => {
       if (m[i] !== ".") touched = true;
       if (!COUNTED_ROWS.has(ring.row)) return;
       if (m[i] === ".") open++;
-      if (m[i] === "f") STRAIGHT.has(ring.dir) ? straight++ : oblique++;
+      if (m[i] === "f") rows[ring.row]++;
     });
-    const wrong = straight + oblique;
-    const failed = straight > 2 || oblique > 2 || wrong > 4;
+    const wrong = rows[1] + rows[2];
+    const failed = rows[1] > 2 || rows[2] > 2 || wrong > 4;
     const state = failed ? "nicht" : open ? (touched ? "offen" : "leer") : "bestanden";
-    return { state, straight, oblique, wrong, open };
+    return { state, row1: rows[1], row2: rows[2], wrong, open };
   }
 
   // Gesamtergebnis: Test 1, 2 und 3 müssen bestanden sein. Die Wiederholung (4, 5, 6) ersetzt einen nicht bestandenen Test.
