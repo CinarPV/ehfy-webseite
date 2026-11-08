@@ -695,9 +695,9 @@
       <div class="st-head"><div><h3 id="sd-name"></h3><p class="small muted" id="sd-birth"></p></div>
         <div class="field st-nr"><label for="sd-nr">Protokoll-Nr. <span class="small muted" id="sd-nr-hint"></span></label><input id="sd-nr" autocomplete="off"></div></div>
       <div class="st-tabs" id="sd-tabs" role="tablist"></div>
-      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden die beiden 0,7-Zeilen.</p>
+      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen; die Verwaltung erkennt das selbst.</p>
       <div id="sd-grid" class="st-grid"></div>
-      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-ghost" type="button" id="sd-rest">Übrige Ringe dieses Tests als richtig</button><button class="btn btn-sm btn-ghost" type="button" id="sd-clear">Test leeren</button></div>
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-ghost" type="button" id="sd-rest">Übrige Ringe der abgefragten Zeilen als richtig</button><button class="btn btn-sm btn-ghost" type="button" id="sd-clear">Test leeren</button></div>
       <div class="st-sum" id="sd-sum"></div>
       <div class="st-group" style="margin-top:8px"><span class="st-label">Verlauf:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-flow="fluessig">Flüssig</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-flow="zoegerlich">Zögerlich</button></div>
       <p class="small" id="sd-error" style="color:var(--danger)"></p>
@@ -718,7 +718,11 @@
       const flow = ev.target.closest("[data-flow]");
       if (flow) { stRun.flow = stRun.flow === flow.dataset.flow ? null : flow.dataset.flow; return stRender(); }
     });
-    $("sd-rest").onclick = () => { stRun.marks[stRun.test] = S.marksOf(stRun.marks, stRun.test).replace(/\./g, "r"); stRender(); };
+    $("sd-rest").onclick = () => {
+      const rows = S.rowsToFill(stRun.marks, stRun.test), t = S.test(stRun.test);
+      stRun.marks[stRun.test] = S.marksOf(stRun.marks, stRun.test).split("").map((x, i) => (x === "." && rows.includes(t.rings[i].row) ? "r" : x)).join("");
+      stRender();
+    };
     $("sd-clear").onclick = () => { delete stRun.marks[stRun.test]; stRender(); };
     $("sd-close").onclick = () => d.close();
     $("sd-keep").onclick = () => stSave(false);
@@ -734,14 +738,15 @@
         <strong>Test ${x.n}</strong><span>${x.n > 3 ? "Wiederh. · " : ""}${x.short}</span><em>${STATE_TEXT[ev.state]}</em></button>`;
     }).join("");
     let i = 0;
-    $("sd-grid").innerHTML = t.rows.map((row, k) => `<div class="st-line ${k === 1 || k === 2 ? "counted" : ""}"><span class="st-visus">${S.VISUS[k]}</span>${row.split(" ").map(dir => {
+    $("sd-grid").innerHTML = t.rows.map((row, k) => `<div class="st-line ${k === 0 ? "ignored" : "counted"}"><span class="st-visus">${S.VISUS[k]}</span>${row.split(" ").map(dir => {
       const idx = i++, mk = m[idx];
       return `<button type="button" class="st-ring m-${mk === "." ? "leer" : mk}" data-ring="${idx}" aria-label="Ring ${idx + 1}: ${mk === "r" ? "richtig" : mk === "f" ? "falsch" : "offen"}">
         <svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="${S.ringPath(20, dir)}"/></svg><span>${mk === "r" ? "✓" : mk === "f" ? "✗" : ""}</span></button>`;
     }).join("")}</div>`).join("");
     const ev = S.evaluate(marks, test), all = S.overall(marks);
-    const warn = ev.state !== "nicht" && (ev.row1 === 2 || ev.row2 === 2) ? " Achtung: In einer 0,7-Zeile sind schon 2 Fehler – ein weiterer dort, und der Test ist nicht bestanden." : "";
-    $("sd-sum").innerHTML = `<p class="small" style="margin:10px 0 4px">${t.title}: erste 0,7-Zeile ${ev.row1} Fehler, zweite 0,7-Zeile ${ev.row2} Fehler${ev.open ? ` (${ev.open} Ringe noch offen)` : ""}. Nicht bestanden ab 3 Fehlern in einer 0,7-Zeile.${warn}</p>
+    const groupText = g => `${g.visus}-Zeilen: ${g.rowErr[0]} + ${g.rowErr[1]} Fehler${g.open ? ` (${g.open} offen)` : ""} → ${STATE_TEXT[g.state]}`;
+    const warn = ev.used.some(g => g.state === "offen" && g.rowErr.includes(2)) ? " Achtung: In einer Zeile sind schon 2 Fehler – ein weiterer dort, und der Test ist nicht bestanden." : "";
+    $("sd-sum").innerHTML = `<p class="small" style="margin:10px 0 4px">${t.title}: ${ev.used.length ? ev.used.map(groupText).join(" · ") : "Frag entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen ab"}. Nicht bestanden ab 3 Fehlern in einer Zeile. Die 0,32-Zeile zählt nicht.${warn}</p>
       <p class="st-result is-${all.state}">${RESULT_TEXT[all.state]}</p>`;
     document.querySelectorAll("#st-dialog [data-flow]").forEach(b => { const on = b.dataset.flow === stRun.flow; b.classList.toggle("on-yes", on); b.setAttribute("aria-pressed", on); });
     $("sd-save").disabled = all.state === "offen";

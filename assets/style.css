@@ -617,3 +617,4 @@ body.has-reminder { padding-bottom: 90px; }
   .st-ring { height: 46px; }
   .st-ring svg { width: 26px; height: 26px; }
 }
+.st-line.ignored { opacity: .55; }

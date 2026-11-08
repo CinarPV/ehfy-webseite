@@ -14,29 +14,35 @@
   ].map(t => ({ ...t, rings: t.rows.map((r, row) => r.split(" ").map(dir => ({ dir, row }))).flat() }));
   const DIR = { R: 0, OR: 45, O: 90, OL: 135, L: 180, UL: 225, U: 270, UR: 315 };
   const STRAIGHT = new Set(["O", "U", "L", "R"]);
-  const COUNTED_ROWS = new Set([1, 2]); // die beiden 0,7-Zeilen
+  // Gewertet wird je Test entweder das Paar 0,7-Zeilen oder das Paar 1,0-Zeilen (die 0,32-Zeile zählt nicht)
+  const GROUPS = [{ visus: "0,7", rows: [1, 2] }, { visus: "1,0", rows: [3, 4] }];
   const test = n => TESTS.find(t => t.n === n);
 
   // Kreuze je Test: Text mit einem Zeichen je Ring: "r" = richtig, "f" = falsch, "." = noch offen
   const marksOf = (marks, n) => String((marks && marks[n]) || "").padEnd(test(n).rings.length, ".");
 
-  // Je Test werden die beiden 0,7-Zeilen (je 5 Ringe) gewertet.
-  // Nicht bestanden, sobald in einer 0,7-Zeile mehr als 2 Fehler sind (also höchstens 2 + 2 = 4 Fehler).
-  // Bestanden erst, wenn beide 0,7-Zeilen vollständig abgefragt sind.
+  // Ein Paar (zweimal 5 Ringe) ist nicht bestanden, sobald in einer Zeile mehr als 2 Fehler sind
+  // (höchstens 2 + 2 = 4). Bestanden erst, wenn beide Zeilen vollständig abgefragt sind.
+  // Die Verwaltung erkennt am Ankreuzen, welches Paar abgefragt wurde. Sind beide angefangen, gilt:
+  // eines nicht bestanden = nicht bestanden, eines noch offen = läuft.
   function evaluate(marks, n) {
-    const m = marksOf(marks, n);
-    const rows = { 1: 0, 2: 0 };
-    let open = 0, touched = false;
-    test(n).rings.forEach((ring, i) => {
-      if (m[i] !== ".") touched = true;
-      if (!COUNTED_ROWS.has(ring.row)) return;
-      if (m[i] === ".") open++;
-      if (m[i] === "f") rows[ring.row]++;
+    const m = marksOf(marks, n), rings = test(n).rings;
+    const groups = GROUPS.map(g => {
+      const rowErr = g.rows.map(row => rings.reduce((k, ring, i) => k + (ring.row === row && m[i] === "f" ? 1 : 0), 0));
+      const cells = rings.map((ring, i) => (g.rows.includes(ring.row) ? m[i] : null)).filter(x => x !== null);
+      const open = cells.filter(x => x === ".").length, started = open < cells.length;
+      const failed = rowErr.some(e => e > 2);
+      return { visus: g.visus, rows: g.rows, rowErr, open, started, wrong: rowErr[0] + rowErr[1], state: !started ? "leer" : failed ? "nicht" : open ? "offen" : "bestanden" };
     });
-    const wrong = rows[1] + rows[2];
-    const failed = rows[1] > 2 || rows[2] > 2 || wrong > 4;
-    const state = failed ? "nicht" : open ? (touched ? "offen" : "leer") : "bestanden";
-    return { state, row1: rows[1], row2: rows[2], wrong, open };
+    const used = groups.filter(g => g.started);
+    const state = !used.length ? (m.replace(/\./g, "") ? "offen" : "leer")
+      : used.some(g => g.state === "nicht") ? "nicht" : used.some(g => g.state === "offen") ? "offen" : "bestanden";
+    return { state, groups, used, wrong: used.reduce((k, g) => k + g.wrong, 0) };
+  }
+  // Zeilen, die „Übrige als richtig“ füllen soll: die angefangenen Paare, sonst das 0,7-Paar
+  function rowsToFill(marks, n) {
+    const used = evaluate(marks, n).used;
+    return (used.length ? used : [GROUPS[0]]).flatMap(g => g.rows);
   }
 
   // Gesamtergebnis: Test 1, 2 und 3 müssen bestanden sein. Die Wiederholung (4, 5, 6) ersetzt einen nicht bestandenen Test.
@@ -66,5 +72,5 @@
   const ringPath = (d, dir, cx = 0, cy = 0) =>
     ringPoints(d, dir).map(([x, y], i) => `${i ? "L" : "M"}${(cx + x).toFixed(2)} ${(cy - y).toFixed(2)}`).join(" ") + " Z";
 
-  root.EHFYSehtest = { VISUS, TESTS, test, marksOf, evaluate, overall, ringPath, STRAIGHT };
+  root.EHFYSehtest = { VISUS, TESTS, GROUPS, test, marksOf, evaluate, rowsToFill, overall, ringPath, STRAIGHT };
 })(typeof window !== "undefined" ? window : globalThis);
