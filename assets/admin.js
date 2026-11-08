@@ -49,6 +49,32 @@
     askToSync(); // Noch offene Änderungen vom letzten Mal
   }
 
+  // ---------- Uhrzeit-Felder: vier Ziffern, danach fängt die nächste Ziffer von vorne an ----------
+  function timeField(el) {
+    el.type = "text"; el.inputMode = "numeric"; el.placeholder = "HH:MM"; el.maxLength = 5; el.autocomplete = "off";
+    el.pattern = "[0-2][0-9]:[0-5][0-9]"; el.title = "Uhrzeit, z. B. 09:30";
+    const fmt = d => (d.length > 2 ? d.slice(0, 2) + ":" + d.slice(2) : d);
+    // Beim Antippen alles markieren: die erste Ziffer ersetzt die alte Uhrzeit
+    el.addEventListener("focus", () => setTimeout(() => el.select(), 0));
+    el.addEventListener("beforeinput", ev => {
+      if (ev.inputType !== "insertText") return;
+      const typed = (ev.data || "").replace(/\D/g, "");
+      if (!typed) { ev.preventDefault(); return; } // nur Ziffern
+      const full = el.value.replace(/\D/g, "").length >= 4, selected = el.selectionEnd > el.selectionStart;
+      if (full && !selected) { ev.preventDefault(); el.value = fmt(typed.slice(0, 4)); }
+    });
+    el.addEventListener("input", () => { el.value = fmt(el.value.replace(/\D/g, "").slice(0, 4)); });
+    // Kurze Eingaben ergänzen: 9 → 09:00, 930 → 09:30
+    el.addEventListener("blur", () => {
+      const d = el.value.replace(/\D/g, "");
+      if (!d) return;
+      const [h, m] = d.length <= 2 ? [d, "0"] : d.length === 3 ? [d.slice(0, 1), d.slice(1)] : [d.slice(0, 2), d.slice(2)];
+      el.value = String(Math.min(23, +h)).padStart(2, "0") + ":" + String(Math.min(59, +m)).padStart(2, "0");
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+  ["q-start", "q-end", "cd-start", "cd-end"].forEach(id => $(id) && timeField($(id)));
+
   // ---------- Terminübersicht ----------
   async function loadCourses() {
     try {
