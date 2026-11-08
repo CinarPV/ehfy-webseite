@@ -527,7 +527,7 @@ body.has-reminder { padding-bottom: 90px; }
 
 /* Sehtest abhaken */
 .st-row { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: .86rem; }
-.st-group { display: flex; align-items: center; gap: 4px; }
+.st-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .st-label { color: var(--muted, #5a6b78); }
 .sc-done { font-weight: 800; }
 

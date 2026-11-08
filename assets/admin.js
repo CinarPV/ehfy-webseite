@@ -608,29 +608,57 @@
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
   });
 
-  // ---------- Sehtest abhaken: gemacht, bestanden, Sehhilfe ----------
+  // ---------- Sehtest abhaken: gemacht, Ergebnis, Verlauf, Sehhilfe, Ausweis, Protokoll ----------
+  const ID_DOCS = [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["fuehrerschein", "Führerschein"], ["aufenthaltstitel", "Aufenthaltstitel"]];
+  const aidKind = r => r.sehtest_aid_kind || (r.sehtest_aid === false ? "ohne" : null);
   function sehtestControls(r, c) {
     const on = (group, value, cur, label, cls = "") => `<button class="btn btn-sm btn-ghost att-btn ${cur === value ? cls || "on-yes" : ""}" type="button" data-st="${group}" data-val="${value}" aria-pressed="${cur === value}">${label}</button>`;
     const done = Boolean(sehtestDay(r, c));
+    const nr = r.sehtest_nr ? `Protokoll-Nr. <strong>${esc(r.sehtest_nr)}</strong>`
+      : r.sehtest_passed != null ? "Protokoll-Nr. folgt beim Synchronisieren" : "Protokoll-Nr. kommt mit dem Ergebnis";
     return `<div class="st-row">
       <div class="st-group"><span class="st-label">Sehtest:</span>${on("done", true, done, done ? "✓ gemacht" : "gemacht")}</div>
-      <div class="st-group"><span class="st-label">Bestanden:</span>${on("passed", true, r.sehtest_passed, "Ja")}${on("passed", false, r.sehtest_passed, "Nein", "on-no")}</div>
-      <div class="st-group"><span class="st-label">Sehhilfe:</span>${on("aid", true, r.sehtest_aid, "Mit")}${on("aid", false, r.sehtest_aid, "Ohne")}</div>
+      <div class="st-group"><span class="st-label">Ergebnis:</span>${on("passed", true, r.sehtest_passed, "Bestanden")}${on("passed", false, r.sehtest_passed, "Nicht bestanden", "on-no")}</div>
+      <div class="st-group"><span class="st-label">Verlauf:</span>${on("flow", "fluessig", r.sehtest_flow, "Flüssig")}${on("flow", "zoegerlich", r.sehtest_flow, "Zögerlich")}</div>
+      <div class="st-group"><span class="st-label">Sehhilfe:</span>${on("aid", "ohne", aidKind(r), "Keine")}${on("aid", "brille", aidKind(r), "Brille")}${on("aid", "linse", aidKind(r), "Kontaktlinse")}</div>
+      <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => on("iddoc", k, r.sehtest_id_doc, l)).join("")}</div>
+      <div class="st-group"><span class="small">${nr}</span><button class="btn btn-sm btn-ghost" type="button" data-st-print>Sehtest-Protokoll</button></div>
     </div>`;
   }
   async function handleSehtest(btn, r, c) {
-    const value = btn.dataset.val === "true";
-    if (btn.dataset.st === "done") {
+    const today = () => (c ? dayOf(c.starts_at) : localDate(new Date()));
+    const group = btn.dataset.st, raw = btn.dataset.val;
+    if (group === "done") {
       const done = Boolean(sehtestDay(r, c));
+      // Eine schon vergebene Protokoll-Nummer bleibt erhalten
       return db.updateRegistration(r.id, done
-        ? { sehtest_on: null, sehtest_none: true, sehtest_passed: null, sehtest_aid: null }
-        : { sehtest_on: c ? dayOf(c.starts_at) : localDate(new Date()), sehtest_none: false });
+        ? { sehtest_on: null, sehtest_none: true, sehtest_passed: null, sehtest_aid: null, sehtest_aid_kind: null, sehtest_flow: null, sehtest_id_doc: null }
+        : { sehtest_on: today(), sehtest_none: false });
     }
-    const field = btn.dataset.st === "passed" ? "sehtest_passed" : "sehtest_aid";
-    const patch = { [field]: r[field] === value ? null : value };
-    // Wer ein Ergebnis hat, hat den Sehtest auch gemacht
-    if (patch[field] !== null && !sehtestDay(r, c)) { patch.sehtest_on = c ? dayOf(c.starts_at) : localDate(new Date()); patch.sehtest_none = false; }
+    const field = { passed: "sehtest_passed", flow: "sehtest_flow", aid: "sehtest_aid_kind", iddoc: "sehtest_id_doc" }[group];
+    const value = group === "passed" ? raw === "true" : raw;
+    const cur = group === "aid" ? aidKind(r) : r[field];
+    const patch = { [field]: cur === value ? null : value };
+    if (group === "aid") patch.sehtest_aid = patch.sehtest_aid_kind ? patch.sehtest_aid_kind !== "ohne" : null;
+    // Wer Angaben zum Sehtest hat, hat ihn auch gemacht
+    if (patch[field] !== null && !sehtestDay(r, c)) { patch.sehtest_on = today(); patch.sehtest_none = false; }
+    // Die fortlaufende Nummer vergibt die Datenbank beim ersten Ergebnis, deshalb mit Internet sofort online
+    if (group === "passed" && patch.sehtest_passed !== null && !r.sehtest_nr) return db.updateRegistrationNow(r.id, patch);
     return db.updateRegistration(r.id, patch);
+  }
+  // Sehtest-Protokoll als PDF, mit allem, was schon eingetragen ist
+  async function sehtestPdf(r, c, showError) {
+    showError("");
+    const win = openTab();
+    try {
+      await ensurePdf();
+      const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : "");
+      const bytes = await EHFYDocs.sehtestProtocols([{
+        first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
+        date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc
+      }], await issuer(), loadFont);
+      showPdf(bytes, `Sehtest-Protokoll${r.sehtest_nr ? "_" + r.sehtest_nr : ""}_${r.last_name}_${r.first_name}.pdf`, win);
+    } catch (e) { if (win) win.close(); showError(e.message); }
   }
   const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
 
@@ -919,6 +947,7 @@
     const row = ev.target.closest("[data-att]");
     if (!row) return;
     const r = attRegs.find(x => x.id === row.dataset.att);
+    if (r && ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseOf(r), msg => { $("att-error").textContent = msg; });
     const stBtn = ev.target.closest("[data-st]");
     if (r && stBtn) {
       try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { $("att-error").textContent = e.message; }
@@ -1059,6 +1088,7 @@
     if (!box) return;
     const r = studentRegs.find(x => x.id === box.dataset.reg);
     const show = msg => { $("sc-error").textContent = msg; };
+    if (ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseFor(r), show);
     const stBtn = ev.target.closest("[data-st]");
     if (stBtn) {
       try { await handleSehtest(stBtn, r, courseFor(r)); await loadStudents(); } catch (e) { show(e.message); }

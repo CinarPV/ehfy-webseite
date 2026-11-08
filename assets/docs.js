@@ -309,5 +309,151 @@
     return [{ text, qty: 1, price: p.price }];
   }
 
-  root.EHFYDocs = { certificates, datasheets, receipts, invoice, invoices, bundle, receiptItems, fmtDate };
+  // ---------- Sehtest-Protokoll (DIN 58220 Teil 6) im EHfy-Design ----------
+  // Öffnung der Landoltringe je Test und Zeile, abgelesen vom bisherigen Protokoll.
+  // O = oben, OR = oben rechts, R = rechts, UR = unten rechts, U = unten, UL = unten links, L = links, OL = oben links
+  const VISUS = ["0,32", "0,7", "0,7", "1,0", "1,0"];
+  const RINGS = [
+    { title: "Test 1 (monokular – rechts)", rows: ["R L OL U", "O UR OR R OL", "OL U L UL R", "L OL O OR UL", "O OR R U UR"] },
+    { title: "Test 4 (monokular – rechts)", rows: ["R L UL O", "U OR UR R UL", "UL O L OL R", "L UL U UR OL", "U UR R O OR"] },
+    { title: "Test 2 (monokular – links)", rows: ["R L OL U", "OR UL U O L", "UL R UR U L", "U OR L UR R", "OL L UR O UL"] },
+    { title: "Test 5 (monokular – links)", rows: ["R L UL O", "OL R OR U UL", "U OR O UL L", "O UR L OR R", "UL L OR U OL"] },
+    { title: "Test 3 (binokular)", rows: ["R L OL U", "O UL UR OR R", "UL R OL U L", "O OR L UR UL", "R OL U OR L"] },
+    { title: "Test 6 (binokular)", rows: ["R L UL O", "U OL O UR OR", "OL R UL O L", "U UR L OR OL", "R UL O UR L"] }
+  ];
+  const DIR = { R: 0, OR: 45, O: 90, OL: 135, L: 180, UL: 225, U: 270, UR: 315 };
+
+  // Landoltring als gefüllte Fläche: Ring mit gerader Lücke (Lücke = Strichstärke = 1/5 des Durchmessers)
+  function landolt(page, cx, cy, d, dir, color) {
+    const ro = d / 2, ri = ro * 0.6, g = d / 5;
+    const ao = Math.asin(g / 2 / ro), ai = Math.asin(g / 2 / ri), rot = (DIR[dir] || 0) * Math.PI / 180, n = 40;
+    const pts = [];
+    for (let i = 0; i <= n; i++) { const a = ao + (2 * Math.PI - 2 * ao) * i / n; pts.push([ro * Math.cos(a), ro * Math.sin(a)]); }
+    for (let i = n; i >= 0; i--) { const a = ai + (2 * Math.PI - 2 * ai) * i / n; pts.push([ri * Math.cos(a), ri * Math.sin(a)]); }
+    // drawSvgPath zählt y nach unten, deshalb das Vorzeichen umdrehen
+    const path = pts.map(([x, y], i) => {
+      const xr = x * Math.cos(rot) - y * Math.sin(rot), yr = x * Math.sin(rot) + y * Math.cos(rot);
+      return `${i ? "L" : "M"}${xr.toFixed(2)} ${(-yr).toFixed(2)}`;
+    }).join(" ") + " Z";
+    page.drawSvgPath(path, { x: cx, y: cy, color: rgb(color) });
+  }
+
+  const box = (page, x, y, s, checked, f) => {
+    page.drawRectangle({ x, y, width: s, height: s, borderColor: rgb(C.ink), borderWidth: 0.8, color: root.PDFLib.rgb(1, 1, 1) });
+    if (checked) page.drawText("X", { x: x + s * 0.18, y: y + s * 0.16, size: s * 0.9, font: f.black, color: rgb(C.ink) });
+  };
+  // Kästchen mit Beschriftung; gibt die Breite zurück
+  function choice(page, f, x, y, label, checked) {
+    box(page, x, y - 1.5, 10, checked, f);
+    page.drawText(label, { x: x + 15, y, size: 10, font: f.regular, color: rgb(C.ink) });
+    return 15 + f.regular.widthOfTextAtSize(label, 10) + 16;
+  }
+  function field(page, f, x, y, w, label, value) {
+    page.drawText(label, { x, y, size: 8, font: f.bold, color: rgb(C.aid) });
+    page.drawLine({ start: { x, y: y - 20 }, end: { x: x + w, y: y - 20 }, thickness: 0.7, color: rgb(C.muted) });
+    if (value) {
+      let size = 12;
+      while (size > 7 && f.bold.widthOfTextAtSize(value, size) > w - 4) size -= 0.25;
+      page.drawText(value, { x: x + 2, y: y - 16, size, font: f.bold, color: rgb(C.ink) });
+    }
+  }
+
+  function sehtestPage(pdf, f, p, issuer) {
+    const page = pdf.addPage(A4);
+    const W = A4[0];
+    const rows = [["Protokoll-Nr.", p.nr || "–"], ["Datum", p.date ? fmtDate(p.date) : "–"]];
+    frame(page, f, issuer, "Sehtest-Protokoll", rows);
+    page.drawText("zum straßenverkehrsbezogenen Sehtest gemäß DIN 58220 Teil 6", { x: M, y: A4[1] - 188, size: 10, font: f.bold, color: rgb(C.muted) });
+
+    // Angaben zur Person
+    let y = A4[1] - 216;
+    const half = (W - 2 * M - 20) / 2;
+    field(page, f, M, y, half, "NAME", p.last_name);
+    field(page, f, M + half + 20, y, half, "VORNAME", p.first_name);
+    y -= 38;
+    field(page, f, M, y, 120, "GEBURTSDATUM", fmtBirth(p.birth_date));
+    field(page, f, M + 140, y, 110, "FÜHRERSCHEINKLASSE", p.license || "");
+    page.drawText("SEHHILFE", { x: M + 270, y, size: 8, font: f.bold, color: rgb(C.aid) });
+    let x = M + 270;
+    x += choice(page, f, x, y - 16, "keine", p.aid === "ohne");
+    x += choice(page, f, x, y - 16, "Brille", p.aid === "brille");
+    choice(page, f, x, y - 16, "Kontaktlinse", p.aid === "linse");
+    y -= 38;
+    page.drawText("AUSWEISDOKUMENT", { x: M, y, size: 8, font: f.bold, color: rgb(C.aid) });
+    x = M;
+    [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["fuehrerschein", "Führerschein"], ["aufenthaltstitel", "Aufenthaltstitel"]]
+      .forEach(([k, label]) => { x += choice(page, f, x, y - 16, label, p.idDoc === k); });
+    page.drawText("Nr.", { x: x - 4, y: y - 16, size: 10, font: f.regular, color: rgb(C.ink) });
+    page.drawLine({ start: { x: x + 14, y: y - 18 }, end: { x: W - M, y: y - 18 }, thickness: 0.7, color: rgb(C.muted) });
+
+    // Ringtafeln: links Prüfung, rechts Wiederholungsprüfung
+    const top = y - 36, visW = 30, colW = (W - 2 * M - visW) / 2, cellH = 104, headH = 18, rowH = 16.5;
+    const gx = M, gy = top - headH - 3 * cellH;
+    page.drawRectangle({ x: gx, y: top - headH, width: W - 2 * M, height: headH, color: rgb(C.ink) });
+    const white = root.PDFLib.rgb(1, 1, 1);
+    page.drawText("Visus", { x: gx + 4, y: top - 13, size: 8.5, font: f.bold, color: white });
+    ["Prüfung", "Wiederholungsprüfung"].forEach((t, i) => {
+      const w = f.bold.widthOfTextAtSize(t, 9.5);
+      page.drawText(t, { x: gx + visW + colW * i + (colW - w) / 2, y: top - 13, size: 9.5, font: f.bold, color: white });
+    });
+    const shade = { 0: [0.93, 0.95, 0.96], 3: [0.86, 0.9, 0.92], 4: [0.86, 0.9, 0.92] };
+    for (let r = 0; r < 3; r++) {
+      const cy0 = top - headH - r * cellH; // Oberkante der Zelle
+      for (let col = 0; col < 2; col++) {
+        const t = RINGS[r * 2 + col], x0 = gx + visW + col * colW;
+        page.drawText(t.title, { x: x0 + 8, y: cy0 - 13, size: 8.5, font: f.bold, color: rgb(C.ink) });
+        t.rows.forEach((row, k) => {
+          const ry = cy0 - 26 - k * rowH; // Mitte der Zeile
+          if (shade[k]) page.drawRectangle({ x: x0 + 3, y: ry - rowH / 2 + 0.5, width: colW - 6, height: rowH - 1, color: rgb(shade[k]) });
+          row.split(" ").forEach((dir, i) => {
+            const rx = x0 + 18 + i * ((colW - 24) / 5);
+            landolt(page, rx, ry, 11, dir, C.ink);
+            box(page, rx + 9, ry - 4.5, 9, false, f);
+          });
+          if (col === 0) {
+            if (shade[k]) page.drawRectangle({ x: gx + 3, y: ry - rowH / 2 + 0.5, width: visW - 6, height: rowH - 1, color: rgb(shade[k]) });
+            page.drawText(VISUS[k], { x: gx + 6, y: ry - 3, size: 8.5, font: f.bold, color: rgb(C.ink) });
+          }
+        });
+      }
+      page.drawLine({ start: { x: gx, y: cy0 - cellH }, end: { x: W - M, y: cy0 - cellH }, thickness: 0.7, color: rgb(C.muted) });
+    }
+    // Rahmen und Spaltenlinien
+    page.drawRectangle({ x: gx, y: gy, width: W - 2 * M, height: headH + 3 * cellH, borderColor: rgb(C.ink), borderWidth: 1 });
+    [gx + visW, gx + visW + colW].forEach(lx => page.drawLine({ start: { x: lx, y: gy }, end: { x: lx, y: top }, thickness: 0.7, color: rgb(C.ink) }));
+
+    // Ergebnis und Verlauf
+    y = gy - 26;
+    page.drawText("ERGEBNIS", { x: M, y: y + 14, size: 8, font: f.bold, color: rgb(C.aid) });
+    x = M;
+    x += choice(page, f, x, y, "bestanden", p.passed === true);
+    choice(page, f, x, y, "nicht bestanden", p.passed === false);
+    page.drawText("VERLAUF", { x: M + 260, y: y + 14, size: 8, font: f.bold, color: rgb(C.aid) });
+    x = M + 260;
+    x += choice(page, f, x, y, "flüssig", p.flow === "fluessig");
+    choice(page, f, x, y, "zögerlich", p.flow === "zoegerlich");
+
+    // Datum, Prüfer, Unterschrift
+    const sy = 104, w3 = (W - 2 * M - 40) / 3;
+    [["Datum", p.date ? fmtDate(p.date) : ""], ["Prüfer", p.examiner || ""], ["Unterschrift", ""]].forEach(([label, value], i) => {
+      const lx = M + i * (w3 + 20);
+      if (value) page.drawText(value, { x: lx + 2, y: sy + 5, size: 11, font: f.regular, color: rgb(C.ink) });
+      page.drawLine({ start: { x: lx, y: sy }, end: { x: lx + w3, y: sy }, thickness: 0.8, color: rgb(C.ink) });
+      page.drawText(label, { x: lx, y: sy - 12, size: 8, font: f.regular, color: rgb(C.muted) });
+    });
+    // Fußzeile ohne Bankverbindung und Steuernummer
+    const foot = `${issuer.name} · ${issuer.owner} · ${issuer.street} · ${issuer.zip} ${issuer.city}${issuer.phone ? " · Tel. " + issuer.phone : ""}`;
+    page.drawLine({ start: { x: M, y: 64 }, end: { x: W - M, y: 64 }, thickness: 0.8, color: rgb(C.line) });
+    page.drawText(foot, { x: (W - f.regular.widthOfTextAtSize(foot, 7.5)) / 2, y: 50, size: 7.5, font: f.regular, color: rgb(C.muted) });
+  }
+
+  async function sehtestProtocols(list, issuer, loadFont) {
+    const { PDFDocument } = root.PDFLib;
+    const pdf = await PDFDocument.create();
+    const f = await fonts(pdf, loadFont);
+    for (const p of list) sehtestPage(pdf, f, p, issuer);
+    return pdf.save();
+  }
+
+  root.EHFYDocs = { certificates, datasheets, receipts, invoice, invoices, bundle, receiptItems, fmtDate, sehtestProtocols };
 })(typeof window !== "undefined" ? window : globalThis);

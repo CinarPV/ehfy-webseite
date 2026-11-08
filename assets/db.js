@@ -99,7 +99,8 @@
         }
       },
       async updateRegistration(id, patch) {
-        check(await sb.from("registrations").update(patch).eq("id", id));
+        // Gibt die gespeicherte Zeile zurück (z. B. mit der von der Datenbank vergebenen Sehtest-Nummer)
+        return check(await sb.from("registrations").update(patch).eq("id", id).select("id, sehtest_nr, sehtest_nr_at").maybeSingle());
       },
       async deleteRegistration(id) { check(await sb.from("registrations").delete().eq("id", id)); },
       // Bankverbindung und Steuernummer (nur für das Verwaltungs-Konto lesbar)
@@ -250,7 +251,18 @@
         db.regs.push({ id: uid(), status: "angemeldet", cancel_token: uid(), created_at: new Date().toISOString(), cancelled_at: null, ...r });
         save();
       },
-      async updateRegistration(id, patch) { const r = load().regs.find(x => x.id === id); Object.assign(r, patch); save(); },
+      async updateRegistration(id, patch) {
+        const db = load(), r = db.regs.find(x => x.id === id);
+        const first = r.sehtest_passed == null;
+        Object.assign(r, patch);
+        // Wie in der Datenbank: Nummer erst beim ersten Ergebnis
+        if (r.sehtest_passed != null && !r.sehtest_nr && first) {
+          const n = db.regs.filter(x => x.sehtest_nr).length + 1;
+          r.sehtest_nr = `S${String(new Date().getFullYear()).slice(2)}-${String(n).padStart(3, "0")}`;
+        }
+        save();
+        return { id, sehtest_nr: r.sehtest_nr || null };
+      },
       async deleteRegistration(id) { const db = load(); db.regs = db.regs.filter(r => r.id !== id); save(); },
       async getSettings() {
         try { return JSON.parse(localStorage.getItem("ehfy-demo-settings")) || {}; } catch (e) { return {}; }

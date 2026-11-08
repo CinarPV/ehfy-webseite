@@ -230,6 +230,23 @@
       await queue({ type: "reg-put", row: { id: uid(), status: "angemeldet", created_at: new Date().toISOString(), ...r } });
     },
     async updateRegistration(id, patch) { await queue({ type: "reg-patch", id, patch }); },
+    // Wie oben, aber mit Internet sofort online (für Nummern, die nur die Datenbank vergibt).
+    // Ohne Internet wartet die Änderung wie gewohnt auf „Synchronisieren“.
+    async updateRegistrationNow(id, patch) {
+      await queue({ type: "reg-patch", id, patch });
+      if (!isOnline() || syncing) return false;
+      try {
+        if (outbox.some(o => o.type === "reg-put" && o.row.id === id)) { await sync(); return true; }
+        for (const op of outbox.filter(o => o.type === "reg-patch" && o.id === id)) {
+          const row = await remote.updateRegistration(id, op.patch);
+          outbox = outbox.filter(o => o !== op);
+          const r = state.regs.find(x => x.id === id);
+          if (r && row) Object.assign(r, { sehtest_nr: row.sehtest_nr, sehtest_nr_at: row.sehtest_nr_at });
+        }
+        await finish();
+        return true;
+      } catch (e) { if (!isNetError(e)) throw e; return false; }
+    },
     async deleteRegistration(id) { await queue({ type: "reg-del", id }); },
 
     // Bankverbindung
