@@ -674,7 +674,7 @@
       const bytes = await EHFYDocs.sehtestProtocols([{
         first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
         nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
-        date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc
+        date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no
       }], await issuer(), loadFont);
       showPdf(bytes, `Sehtest-Protokoll${r.sehtest_nr ? "_" + r.sehtest_nr : ""}_${r.last_name}_${r.first_name}.pdf`, win);
     } catch (e) { if (win) win.close(); showError(e.message); }
@@ -687,7 +687,8 @@
     offen: "Noch nicht fertig"
   };
   const STATE_TEXT = { bestanden: "bestanden", nicht: "nicht bestanden", offen: "läuft", leer: "offen" };
-  let stRun = null; // { r, c, marks, test, flow, draft, done }
+  let stRun = null; // { r, c, marks, set, flow, aid, idDoc, draft, done }
+  const SET_LABEL = ["Test 1–3", "Test 4–6"];
   function stDialog() {
     let d = $("st-dialog");
     if (d) return d;
@@ -696,15 +697,15 @@
     d.innerHTML = `<div class="st-dlg">
       <div class="st-head"><div><h3 id="sd-name"></h3><p class="small muted" id="sd-birth"></p></div>
         <div class="field st-nr"><label for="sd-nr">Protokoll-Nr. <span class="small muted" id="sd-nr-hint"></span></label><input id="sd-nr" autocomplete="off"></div></div>
-      <div class="st-tabs" id="sd-tabs" role="tablist"></div>
-      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen; die Verwaltung erkennt das selbst.</p>
-      <div id="sd-grid" class="st-grid"></div>
-      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm btn-ghost" type="button" id="sd-rest">Übrige Ringe der abgefragten Zeilen als richtig</button><button class="btn btn-sm btn-ghost" type="button" id="sd-clear">Test leeren</button></div>
-      <div class="st-sum" id="sd-sum"></div>
+      <div class="st-sets" id="sd-sets" role="tablist"></div>
+      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen. Die 0,32-Zeile ist zum Üben und zählt nicht.</p>
+      <div id="sd-grid"></div>
+      <p class="st-result" id="sd-result"></p>
       <div class="st-extra">
         <div class="st-group"><span class="st-label">Verlauf:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="fluessig">Flüssig</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="zoegerlich">Zögerlich</button></div>
         <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
+        <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"></div>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
       </div>
       <p class="small" id="sd-error" style="color:var(--danger)"></p>
@@ -715,63 +716,73 @@
     d.addEventListener("click", ev => {
       const ring = ev.target.closest("[data-ring]");
       if (ring) {
-        const i = Number(ring.dataset.ring), m = S.marksOf(stRun.marks, stRun.test).split("");
+        const n = Number(ring.dataset.t), i = Number(ring.dataset.ring), m = S.marksOf(stRun.marks, n).split("");
         m[i] = m[i] === "." ? "r" : m[i] === "r" ? "f" : ".";
-        stRun.marks[stRun.test] = m.join("");
+        stRun.marks[n] = m.join("");
         return stRender();
       }
-      const tab = ev.target.closest("[data-test]");
-      if (tab) { stRun.test = Number(tab.dataset.test); return stRender(); }
+      const set = ev.target.closest("[data-set]");
+      if (set) { stRun.set = Number(set.dataset.set); return stRender(); }
+      const rest = ev.target.closest("[data-rest]");
+      if (rest) {
+        const n = Number(rest.dataset.rest), rows = S.rowsToFill(stRun.marks, n), t = S.test(n);
+        stRun.marks[n] = S.marksOf(stRun.marks, n).split("").map((x, i) => (x === "." && rows.includes(t.rings[i].row) ? "r" : x)).join("");
+        return stRender();
+      }
+      const clear = ev.target.closest("[data-clear]");
+      if (clear) { delete stRun.marks[clear.dataset.clear]; return stRender(); }
       const pick = ev.target.closest("[data-pick]");
       if (pick) { const k = pick.dataset.pick; stRun[k] = stRun[k] === pick.dataset.val ? null : pick.dataset.val; return stRender(); }
     });
-    $("sd-rest").onclick = () => {
-      const rows = S.rowsToFill(stRun.marks, stRun.test), t = S.test(stRun.test);
-      stRun.marks[stRun.test] = S.marksOf(stRun.marks, stRun.test).split("").map((x, i) => (x === "." && rows.includes(t.rings[i].row) ? "r" : x)).join("");
-      stRender();
-    };
-    $("sd-clear").onclick = () => { delete stRun.marks[stRun.test]; stRender(); };
     $("sd-close").onclick = () => d.close();
     $("sd-keep").onclick = () => stSave(false);
     $("sd-save").onclick = () => stSave(true);
     return d;
   }
-  function stRender() {
-    const { r, marks, test } = stRun;
-    const t = S.test(test), m = S.marksOf(marks, test);
-    $("sd-tabs").innerHTML = S.TESTS.map(x => {
-      const ev = S.evaluate(marks, x.n);
-      return `<button type="button" role="tab" class="st-tab ${x.n === test ? "active" : ""} is-${ev.state}" data-test="${x.n}" aria-selected="${x.n === test}">
-        <strong>Test ${x.n}</strong><span>${x.n > 3 ? "alternativ · " : ""}${x.short}</span><em>${STATE_TEXT[ev.state]}</em></button>`;
-    }).join("");
+  // Ein Test als Block: Überschrift mit Stand, darunter die Ringzeilen
+  function stBlock(n) {
+    const t = S.test(n), m = S.marksOf(stRun.marks, n), ev = S.evaluate(stRun.marks, n);
     let i = 0;
-    $("sd-grid").innerHTML = t.rows.map((row, k) => `<div class="st-line ${k === 0 ? "ignored" : "counted"}"><span class="st-visus">${S.VISUS[k]}</span>${row.split(" ").map(dir => {
+    const rows = t.rows.map((row, k) => `<div class="st-line ${k === 0 ? "practice" : "counted"}"><span class="st-visus">${S.VISUS[k]}${k === 0 ? "<small>Übung</small>" : ""}</span>${row.split(" ").map(dir => {
       const idx = i++, mk = m[idx];
-      return `<button type="button" class="st-ring m-${mk === "." ? "leer" : mk}" data-ring="${idx}" aria-label="Ring ${idx + 1}: ${mk === "r" ? "richtig" : mk === "f" ? "falsch" : "offen"}">
+      return `<button type="button" class="st-ring m-${mk === "." ? "leer" : mk}" data-t="${n}" data-ring="${idx}" aria-label="Test ${n}, Ring ${idx + 1}: ${mk === "r" ? "richtig" : mk === "f" ? "falsch" : "offen"}">
         <svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="${S.ringPath(20, dir)}"/></svg><span>${mk === "r" ? "✓" : mk === "f" ? "✗" : ""}</span></button>`;
     }).join("")}</div>`).join("");
-    const ev = S.evaluate(marks, test), all = S.overall(marks);
-    const groupText = g => `${g.visus}-Zeilen: ${g.rowErr[0]} + ${g.rowErr[1]} Fehler${g.open ? ` (${g.open} offen)` : ""} → ${STATE_TEXT[g.state]}`;
-    const warn = ev.used.some(g => g.state === "offen" && g.rowErr.includes(2)) ? " Achtung: In einer Zeile sind schon 2 Fehler – ein weiterer dort, und der Test ist nicht bestanden." : "";
-    $("sd-sum").innerHTML = `<p class="small" style="margin:10px 0 4px">${t.title}: ${ev.used.length ? ev.used.map(groupText).join(" · ") : "Frag entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen ab"}. Nicht bestanden ab 3 Fehlern in einer Zeile. Die 0,32-Zeile zählt nicht.${warn}</p>
-      <p class="st-result is-${all.state}">${RESULT_TEXT[all.state]}${all.otherFree ? ` <span class="small">(alternativ ${all.sets[0] === "leer" ? "Test 1–3" : "Test 4–6"} noch möglich)</span>` : ""}</p>`;
+    const groupText = g => `${g.visus}: ${g.rowErr[0]} + ${g.rowErr[1]} Fehler${g.open ? ` (${g.open} offen)` : ""}`;
+    const warn = ev.used.some(g => g.state === "offen" && g.rowErr.includes(2)) ? '<p class="small st-warn">Achtung: In einer Zeile sind schon 2 Fehler – ein weiterer dort, und der Test ist nicht bestanden.</p>' : "";
+    return `<section class="st-block is-${ev.state}">
+      <div class="st-block-head"><h4>${t.title}</h4><span class="st-badge">${STATE_TEXT[ev.state]}</span></div>
+      <p class="small muted" style="margin:0 0 6px">${ev.used.length ? ev.used.map(groupText).join(" · ") : "Entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen abfragen."}</p>
+      <div class="st-grid">${rows}</div>${warn}
+      <div class="btn-row" style="margin-top:6px"><button class="btn btn-sm btn-ghost" type="button" data-rest="${n}">Übrige der abgefragten Zeilen richtig</button><button class="btn btn-sm btn-ghost" type="button" data-clear="${n}">Leeren</button></div>
+    </section>`;
+  }
+  function stRender() {
+    const { r, marks } = stRun, all = S.overall(marks);
+    $("sd-sets").innerHTML = S.SETS.map((set, k) => `<button type="button" role="tab" class="st-set ${k === stRun.set ? "active" : ""} is-${all.sets[k]}" data-set="${k}" aria-selected="${k === stRun.set}">
+      <strong>${SET_LABEL[k]}</strong><em>${STATE_TEXT[all.sets[k]]}</em></button>`).join("");
+    $("sd-grid").innerHTML = S.SETS[stRun.set].map(stBlock).join("");
+    $("sd-result").className = `st-result is-${all.state}`;
+    $("sd-result").innerHTML = `${RESULT_TEXT[all.state]}${all.otherFree ? ` <span class="small">(alternativ ${all.sets[0] === "leer" ? "Test 1–3" : "Test 4–6"} noch möglich)</span>` : ""}`;
     document.querySelectorAll("#st-dialog [data-pick]").forEach(b => { const on = stRun[b.dataset.pick] === b.dataset.val; b.classList.toggle("on-yes", on); b.setAttribute("aria-pressed", on); });
     $("sd-save").disabled = all.state === "offen";
     $("sd-name").textContent = `${r.first_name} ${r.last_name}`;
   }
   async function openSehtest(r, c, done) {
     const d = stDialog();
-    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, test: 1, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, draft: r.sehtest_nr ? "" : await draftNr() };
+    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, draft: r.sehtest_nr ? "" : await draftNr() };
+    // Mit der Tafel weitermachen, die schon angefangen ist
+    const sets = S.overall(stRun.marks).sets;
+    if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
     $("sd-date").value = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : localDate(new Date()));
-    // Mit dem ersten noch nicht fertigen Test beginnen
-    const next = S.TESTS.find(x => !["bestanden", "nicht"].includes(S.evaluate(stRun.marks, x.n).state));
-    if (next) stRun.test = next.n;
+    $("sd-idno").value = r.sehtest_id_no || "";
     $("sd-birth").textContent = r.birth_date ? `geb. ${birthText(r.birth_date)}` : "";
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
     $("sd-nr-hint").textContent = r.sehtest_nr ? "(änderbar)" : "(vorläufig, fest beim Übernehmen)";
     $("sd-error").textContent = "";
     stRender();
     d.showModal();
+    d.scrollTop = 0;
   }
   async function stSave(withResult) {
     const { r, c, marks, flow, aid, idDoc, draft } = stRun;
@@ -780,6 +791,7 @@
     const all = S.overall(marks);
     const patch = {
       sehtest_marks: marks, sehtest_flow: flow, sehtest_aid_kind: aid, sehtest_aid: aid ? aid !== "ohne" : null, sehtest_id_doc: idDoc,
+      sehtest_id_no: $("sd-idno").value.trim() || null,
       sehtest_on: $("sd-date").value || (c ? dayOf(c.starts_at) : localDate(new Date())), sehtest_none: false
     };
     const typed = $("sd-nr").value.trim();
@@ -1325,6 +1337,7 @@
       const row = await db.addRegistration({
         course_id: null, first_name: first, last_name: last, birth_date: $("se-birth").value || null,
         phone: $("se-phone").value.trim() || null, email: $("se-mail").value.trim() || null,
+        street: $("se-street").value.trim() || null, zip: $("se-zip").value.trim() || null, city: $("se-city").value.trim() || null,
         package: "kurs", sehtest_only: true, sehtest_on: localDate(new Date()), sehtest_none: false,
         message: "manuell eingetragen" // keine Anmelde-Mail
       });

@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 39</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 40</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -184,6 +184,9 @@
                   <div class="field"><label for="se-birth">Geburtsdatum</label><input id="se-birth" type="date"></div>
                   <div class="field"><label for="se-phone">Telefon (freiwillig)</label><input id="se-phone" type="tel" autocomplete="off"></div>
                   <div class="field"><label for="se-mail">E-Mail (freiwillig)</label><input id="se-mail" type="email" autocomplete="off"></div>
+                  <div class="field full"><label for="se-street">Straße und Hausnummer (freiwillig)</label><input id="se-street" autocomplete="off"></div>
+                  <div class="field"><label for="se-zip">PLZ (freiwillig)</label><input id="se-zip" inputmode="numeric" autocomplete="off"></div>
+                  <div class="field"><label for="se-city">Ort (freiwillig)</label><input id="se-city" autocomplete="off"></div>
                 </div>
                 <p class="small muted">Es geht keine E-Mail raus. Danach öffnet sich gleich der Sehtest.</p>
                 <div class="btn-row"><button class="btn" type="submit">Anlegen und Sehtest starten</button><button class="btn btn-ghost" type="button" id="se-cancel">Abbrechen</button></div>

@@ -631,3 +631,21 @@ body.has-reminder { padding-bottom: 90px; }
   .se-row { grid-template-columns: 1fr 1fr; }
   .se-who { grid-column: 1 / -1; order: -1; }
 }
+.st-sets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.st-set { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 14px; background: #fff; font: inherit; cursor: pointer; color: inherit; }
+.st-set strong { font-size: 1.05rem; }
+.st-set em { font-style: normal; font-weight: 700; font-size: .85rem; }
+.st-set.active { border-color: var(--ink, #0a2540); box-shadow: inset 0 0 0 1px var(--ink, #0a2540); }
+.st-set.is-bestanden em, .st-block.is-bestanden .st-badge { color: var(--ok); }
+.st-set.is-nicht em, .st-block.is-nicht .st-badge { color: var(--danger); }
+.st-block { border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin-bottom: 12px; }
+.st-block.is-bestanden { border-color: var(--ok); }
+.st-block.is-nicht { border-color: var(--danger); }
+.st-block-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.st-block-head h4 { margin: 0 0 2px; font-size: 1rem; }
+.st-badge { font-weight: 800; font-size: .85rem; white-space: nowrap; }
+.st-line.practice { background: repeating-linear-gradient(135deg, #f6f8f9 0 8px, #fff 8px 16px); }
+.st-visus small { display: block; font-weight: 600; font-size: .62rem; color: var(--muted); }
+.st-warn { color: #a5560b; margin: 6px 0 0; font-weight: 600; }
+#sd-idno { padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; min-width: 0; width: 220px; max-width: 100%; }
+.st-set { flex-wrap: wrap; } .st-set strong { white-space: nowrap; }

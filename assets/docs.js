@@ -376,6 +376,7 @@
       .forEach(([k, label]) => { x += choice(page, f, x, y - 16, label, p.idDoc === k); });
     page.drawText("Nr.", { x: x - 4, y: y - 16, size: 10, font: f.regular, color: rgb(C.ink) });
     page.drawLine({ start: { x: x + 14, y: y - 18 }, end: { x: W - M, y: y - 18 }, thickness: 0.7, color: rgb(C.muted) });
+    if (p.idNo) page.drawText(String(p.idNo), { x: x + 16, y: y - 16, size: 10, font: f.bold, color: rgb(C.ink) });
 
     // Ringtafeln: links Test 1–3, rechts gleichwertig Test 4–6
     const top = y - 36, visW = 30, colW = (W - 2 * M - visW) / 2, cellH = 104, headH = 18, rowH = 16.5;
