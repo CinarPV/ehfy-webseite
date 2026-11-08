@@ -687,7 +687,28 @@
     offen: "Noch nicht fertig"
   };
   const STATE_TEXT = { bestanden: "bestanden", nicht: "nicht bestanden", offen: "läuft", leer: "offen" };
-  let stRun = null; // { r, c, marks, set, flow, aid, idDoc, draft, done }
+  // ---------- Ausweis fotografieren: nur Vorname, Nachname, Geburtsdatum, Ausweisnummer ----------
+  // Die Erkennung läuft auf dem Gerät; das Foto wird weder hochgeladen noch gespeichert.
+  const norm = t => String(t || "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
+  function scanId(info, apply) {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "image/*"; input.setAttribute("capture", "environment");
+    input.onchange = async () => {
+      const file = input.files[0];
+      input.value = "";
+      if (!file) return;
+      info.innerHTML = "Ausweis wird gelesen … (beim ersten Mal lädt die Texterkennung, das dauert etwas)";
+      try {
+        const res = await window.EHFYAusweis.read(file, pct => { info.textContent = `Ausweis wird gelesen … ${pct} %`; });
+        if (!res) { info.innerHTML = '<strong style="color:var(--danger)">Keine maschinenlesbare Zeile gefunden.</strong> Bitte die Seite mit den Zeilen voller „&lt;&lt;&lt;“ gerade, scharf und ohne Spiegelung fotografieren (beim Personalausweis die Rückseite). Führerscheine haben diese Zeilen nicht – dann bitte von Hand eintragen.'; return; }
+        info.innerHTML = apply(res) + (res.allOk ? "" : ' <br><strong style="color:var(--danger)">Nummer oder Geburtsdatum unsicher gelesen – bitte mit dem Ausweis vergleichen.</strong>');
+      } catch (e) { info.textContent = e.message; }
+    };
+    input.click();
+  }
+
+  let stRun = null; // { r, c, marks, set, flow, aid, idDoc, birth, draft, done }
   const SET_LABEL = ["Test 1–3", "Test 4–6"];
   function stDialog() {
     let d = $("st-dialog");
@@ -705,7 +726,8 @@
         <div class="st-group"><span class="st-label">Verlauf:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="fluessig">Flüssig</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="zoegerlich">Zögerlich</button></div>
         <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
-        <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"></div>
+        <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
+        <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
       </div>
       <p class="small" id="sd-error" style="color:var(--danger)"></p>
@@ -733,6 +755,17 @@
       if (clear) { delete stRun.marks[clear.dataset.clear]; return stRender(); }
       const pick = ev.target.closest("[data-pick]");
       if (pick) { const k = pick.dataset.pick; stRun[k] = stRun[k] === pick.dataset.val ? null : pick.dataset.val; return stRender(); }
+    });
+    $("sd-scan").onclick = () => scanId($("sd-idinfo"), res => {
+      stRun.idDoc = res.idDoc;
+      $("sd-idno").value = res.docNumber;
+      const r = stRun.r, same = norm(`${r.first_name} ${r.last_name}`) === norm(`${res.firstName} ${res.lastName}`);
+      const birthOk = !r.birth_date || !res.birth || r.birth_date === res.birth;
+      if (!r.birth_date && res.birth) stRun.birth = res.birth;
+      stRender();
+      return `Gelesen: ${esc(res.lastName)}, ${esc(res.firstName)} · geb. ${res.birth ? birthText(res.birth) : "?"} · Nr. ${esc(res.docNumber)}`
+        + (same && birthOk ? ' <strong style="color:var(--ok)">✓ passt zur Person</strong>' : ' <strong style="color:var(--danger)">Name oder Geburtsdatum weichen ab – bitte prüfen</strong>')
+        + (!r.birth_date && res.birth ? " · Geburtsdatum wird übernommen" : "");
     });
     $("sd-close").onclick = () => d.close();
     $("sd-keep").onclick = () => stSave(false);
@@ -776,6 +809,7 @@
     if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
     $("sd-date").value = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : localDate(new Date()));
     $("sd-idno").value = r.sehtest_id_no || "";
+    $("sd-idinfo").innerHTML = "";
     $("sd-birth").textContent = r.birth_date ? `geb. ${birthText(r.birth_date)}` : "";
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
     $("sd-nr-hint").textContent = r.sehtest_nr ? "(änderbar)" : "(vorläufig, fest beim Übernehmen)";
@@ -792,6 +826,7 @@
     const patch = {
       sehtest_marks: marks, sehtest_flow: flow, sehtest_aid_kind: aid, sehtest_aid: aid ? aid !== "ohne" : null, sehtest_id_doc: idDoc,
       sehtest_id_no: $("sd-idno").value.trim() || null,
+      ...(stRun.birth ? { birth_date: stRun.birth } : {}),
       sehtest_on: $("sd-date").value || (c ? dayOf(c.starts_at) : localDate(new Date())), sehtest_none: false
     };
     const typed = $("sd-nr").value.trim();
@@ -1326,7 +1361,14 @@
     }).join("") : '<p class="muted">Noch keine Sehtests gefunden.</p>';
   }
   $("se-search").addEventListener("input", renderSehtests);
-  $("se-new").onclick = () => { $("se-form").classList.remove("hidden"); $("se-first").focus(); };
+  let seId = null; // gelesene Ausweisdaten für die neue Person
+  $("se-new").onclick = () => { seId = null; $("se-idinfo").innerHTML = ""; $("se-form").classList.remove("hidden"); $("se-first").focus(); };
+  $("se-scan").onclick = () => scanId($("se-idinfo"), res => {
+    seId = res;
+    $("se-first").value = res.firstName; $("se-last").value = res.lastName;
+    if (res.birth) $("se-birth").value = res.birth;
+    return `Übernommen: ${esc(res.firstName)} ${esc(res.lastName)} · geb. ${res.birth ? birthText(res.birth) : "?"} · Ausweis-Nr. ${esc(res.docNumber)}. Bitte die Namen kurz prüfen: Umlaute stehen im Ausweis als AE/OE/UE, und einzelne Buchstaben können falsch gelesen sein.`;
+  });
   $("se-cancel").onclick = () => { $("se-form").reset(); $("se-form").classList.add("hidden"); };
   $("se-form").addEventListener("submit", async ev => {
     ev.preventDefault();
@@ -1339,6 +1381,7 @@
         phone: $("se-phone").value.trim() || null, email: $("se-mail").value.trim() || null,
         street: $("se-street").value.trim() || null, zip: $("se-zip").value.trim() || null, city: $("se-city").value.trim() || null,
         package: "kurs", sehtest_only: true, sehtest_on: localDate(new Date()), sehtest_none: false,
+        ...(seId ? { sehtest_id_doc: seId.idDoc, sehtest_id_no: seId.docNumber } : {}),
         message: "manuell eingetragen" // keine Anmelde-Mail
       });
       $("se-form").reset(); $("se-form").classList.add("hidden");
