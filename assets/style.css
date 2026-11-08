@@ -582,3 +582,38 @@ body.has-reminder { padding-bottom: 90px; }
   #att-section .att-btns { flex: 1 1 100%; }
   #att-section .att-btn { flex: 1 1 0; }
 }
+
+/* ---------- Sehtest am Computer ---------- */
+.st-dlg { padding: 20px; }
+.st-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 20px; align-items: flex-end; }
+.st-head h3 { margin: 0; }
+.st-head p { margin: 2px 0 0; }
+.st-nr { margin: 0; min-width: 0; }
+.st-nr input { width: 160px; font-weight: 700; }
+.st-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
+.st-tab { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 8px; border: 1.5px solid var(--line, #e3eaee); border-radius: 12px; background: #fff; font: inherit; font-size: .78rem; text-align: left; cursor: pointer; color: inherit; min-width: 0; }
+.st-tab span { color: var(--muted, #5f7180); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.st-tab em { font-style: normal; font-weight: 700; }
+.st-tab.active { border-color: var(--ink, #0a2540); box-shadow: inset 0 0 0 1px var(--ink, #0a2540); }
+.st-tab.is-bestanden em { color: var(--ok); }
+.st-tab.is-nicht em { color: var(--danger); }
+.st-grid { display: grid; gap: 6px; }
+.st-line { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 10px; }
+.st-line.counted { background: #eef4f6; }
+.st-visus { width: 34px; flex: none; font-weight: 700; font-size: .85rem; }
+.st-ring { position: relative; flex: 1 1 0; max-width: 72px; height: 52px; border: 1.5px solid var(--line, #e3eaee); border-radius: 12px; background: #fff; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
+.st-ring svg { width: 30px; height: 30px; fill: #0a2540; }
+.st-ring span { position: absolute; right: 4px; top: 2px; font-weight: 800; font-size: .85rem; }
+.st-ring.m-r { border-color: var(--ok); background: #e9f7ef; }
+.st-ring.m-r span { color: var(--ok); }
+.st-ring.m-f { border-color: var(--danger); background: #fdecea; }
+.st-ring.m-f span { color: var(--danger); }
+.st-result { margin: 6px 0 0; font-weight: 800; font-size: 1.1rem; }
+.st-result.is-bestanden { color: var(--ok); }
+.st-result.is-nicht, .st-result.is-nicht-wiederholung { color: var(--danger); }
+@media (max-width: 640px) {
+  .st-dlg { padding: 14px; }
+  .st-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .st-ring { height: 46px; }
+  .st-ring svg { width: 26px; height: 26px; }
+}

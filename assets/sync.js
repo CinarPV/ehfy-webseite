@@ -230,6 +230,18 @@
       await queue({ type: "reg-put", row: { id: uid(), status: "angemeldet", created_at: new Date().toISOString(), ...r } });
     },
     async updateRegistration(id, patch) { await queue({ type: "reg-patch", id, patch }); },
+    // Nur mit Internet: z. B. eine Protokoll-Nummer von Hand ändern. Klappt es nicht (Nummer schon vergeben),
+    // bleibt nichts in der Warteschlange hängen.
+    async updateRegistrationOnline(id, patch) {
+      await ready;
+      if (!isOnline()) throw new Error("Dafür braucht es Internet.");
+      if (outbox.some(o => (o.type === "reg-put" && o.row.id === id) || (o.type === "reg-patch" && o.id === id))) await sync();
+      const row = await remote.updateRegistration(id, patch);
+      const r = state.regs.find(x => x.id === id);
+      if (r) Object.assign(r, patch, row ? { sehtest_nr: row.sehtest_nr, sehtest_nr_at: row.sehtest_nr_at } : {});
+      await finish();
+      return row;
+    },
     // Wie oben, aber mit Internet sofort online (für Nummern, die nur die Datenbank vergibt).
     // Ohne Internet wartet die Änderung wie gewohnt auf „Synchronisieren“.
     async updateRegistrationNow(id, patch) {

@@ -310,33 +310,24 @@
   }
 
   // ---------- Sehtest-Protokoll (DIN 58220 Teil 6) im EHfy-Design ----------
-  // Öffnung der Landoltringe je Test und Zeile, abgelesen vom bisherigen Protokoll.
-  // O = oben, OR = oben rechts, R = rechts, UR = unten rechts, U = unten, UL = unten links, L = links, OL = oben links
-  const VISUS = ["0,32", "0,7", "0,7", "1,0", "1,0"];
-  const RINGS = [
-    { title: "Test 1 (monokular – rechts)", rows: ["R L OL U", "O UR OR R OL", "OL U L UL R", "L OL O OR UL", "O OR R U UR"] },
-    { title: "Test 4 (monokular – rechts)", rows: ["R L UL O", "U OR UR R UL", "UL O L OL R", "L UL U UR OL", "U UR R O OR"] },
-    { title: "Test 2 (monokular – links)", rows: ["R L OL U", "OR UL U O L", "UL R UR U L", "U OR L UR R", "OL L UR O UL"] },
-    { title: "Test 5 (monokular – links)", rows: ["R L UL O", "OL R OR U UL", "U OR O UL L", "O UR L OR R", "UL L OR U OL"] },
-    { title: "Test 3 (binokular)", rows: ["R L OL U", "O UL UR OR R", "UL R OL U L", "O OR L UR UL", "R OL U OR L"] },
-    { title: "Test 6 (binokular)", rows: ["R L UL O", "U OL O UR OR", "OL R UL O L", "U UR L OR OL", "R UL O UR L"] }
-  ];
-  const DIR = { R: 0, OR: 45, O: 90, OL: 135, L: 180, UL: 225, U: 270, UR: 315 };
-
-  // Landoltring als gefüllte Fläche: Ring mit gerader Lücke (Lücke = Strichstärke = 1/5 des Durchmessers)
+  const ST = () => root.EHFYSehtest;
+  // Landoltring als gefüllte Fläche (Form aus assets/sehtest.js)
   function landolt(page, cx, cy, d, dir, color) {
-    const ro = d / 2, ri = ro * 0.6, g = d / 5;
-    const ao = Math.asin(g / 2 / ro), ai = Math.asin(g / 2 / ri), rot = (DIR[dir] || 0) * Math.PI / 180, n = 40;
-    const pts = [];
-    for (let i = 0; i <= n; i++) { const a = ao + (2 * Math.PI - 2 * ao) * i / n; pts.push([ro * Math.cos(a), ro * Math.sin(a)]); }
-    for (let i = n; i >= 0; i--) { const a = ai + (2 * Math.PI - 2 * ai) * i / n; pts.push([ri * Math.cos(a), ri * Math.sin(a)]); }
-    // drawSvgPath zählt y nach unten, deshalb das Vorzeichen umdrehen
-    const path = pts.map(([x, y], i) => {
-      const xr = x * Math.cos(rot) - y * Math.sin(rot), yr = x * Math.sin(rot) + y * Math.cos(rot);
-      return `${i ? "L" : "M"}${xr.toFixed(2)} ${(-yr).toFixed(2)}`;
-    }).join(" ") + " Z";
-    page.drawSvgPath(path, { x: cx, y: cy, color: rgb(color) });
+    page.drawSvgPath(ST().ringPath(d, dir), { x: cx, y: cy, color: rgb(color) });
   }
+  // Kreuz im Kästchen am Ring: Haken = richtig, X = falsch
+  function ringMark(page, x, y, s, mark) {
+    const ink = rgb(C.ink), w = 1.1;
+    if (mark === "r") {
+      page.drawLine({ start: { x: x + s * 0.18, y: y + s * 0.5 }, end: { x: x + s * 0.42, y: y + s * 0.2 }, thickness: w, color: ink });
+      page.drawLine({ start: { x: x + s * 0.42, y: y + s * 0.2 }, end: { x: x + s * 0.85, y: y + s * 0.85 }, thickness: w, color: ink });
+    }
+    if (mark === "f") {
+      page.drawLine({ start: { x: x + s * 0.18, y: y + s * 0.18 }, end: { x: x + s * 0.82, y: y + s * 0.82 }, thickness: w, color: ink });
+      page.drawLine({ start: { x: x + s * 0.18, y: y + s * 0.82 }, end: { x: x + s * 0.82, y: y + s * 0.18 }, thickness: w, color: ink });
+    }
+  }
+  const TEST_WORD = { bestanden: "bestanden", nicht: "nicht bestanden", offen: "noch offen" };
 
   const box = (page, x, y, s, checked, f) => {
     page.drawRectangle({ x, y, width: s, height: s, borderColor: rgb(C.ink), borderWidth: 0.8, color: root.PDFLib.rgb(1, 1, 1) });
@@ -361,7 +352,7 @@
   function sehtestPage(pdf, f, p, issuer) {
     const page = pdf.addPage(A4);
     const W = A4[0];
-    const rows = [["Protokoll-Nr.", p.nr || "–"], ["Datum", p.date ? fmtDate(p.date) : "–"]];
+    const rows = [["Protokoll-Nr.", p.nr || (p.nrDraft ? `${p.nrDraft} (vorläufig)` : "–")], ["Datum", p.date ? fmtDate(p.date) : "–"]];
     frame(page, f, issuer, "Sehtest-Protokoll", rows);
     page.drawText("zum straßenverkehrsbezogenen Sehtest gemäß DIN 58220 Teil 6", { x: M, y: A4[1] - 188, size: 10, font: f.bold, color: rgb(C.muted) });
 
@@ -400,8 +391,14 @@
     for (let r = 0; r < 3; r++) {
       const cy0 = top - headH - r * cellH; // Oberkante der Zelle
       for (let col = 0; col < 2; col++) {
-        const t = RINGS[r * 2 + col], x0 = gx + visW + col * colW;
+        const t = ST().test(r + 1 + col * 3), x0 = gx + visW + col * colW;
+        const marks = ST().marksOf(p.marks, t.n), ev = ST().evaluate(p.marks, t.n);
         page.drawText(t.title, { x: x0 + 8, y: cy0 - 13, size: 8.5, font: f.bold, color: rgb(C.ink) });
+        if (TEST_WORD[ev.state]) {
+          const note = `${TEST_WORD[ev.state]}${ev.wrong ? ` · ${ev.wrong} Fehler` : ""}`, wn = f.bold.widthOfTextAtSize(note, 7.5);
+          page.drawText(note, { x: x0 + colW - 8 - wn, y: cy0 - 13, size: 7.5, font: f.bold, color: rgb(ev.state === "nicht" ? [0.75, 0.2, 0.15] : C.aid) });
+        }
+        let idx = 0;
         t.rows.forEach((row, k) => {
           const ry = cy0 - 26 - k * rowH; // Mitte der Zeile
           if (shade[k]) page.drawRectangle({ x: x0 + 3, y: ry - rowH / 2 + 0.5, width: colW - 6, height: rowH - 1, color: rgb(shade[k]) });
@@ -409,10 +406,11 @@
             const rx = x0 + 18 + i * ((colW - 24) / 5);
             landolt(page, rx, ry, 11, dir, C.ink);
             box(page, rx + 9, ry - 4.5, 9, false, f);
+            ringMark(page, rx + 9, ry - 4.5, 9, marks[idx++]);
           });
           if (col === 0) {
             if (shade[k]) page.drawRectangle({ x: gx + 3, y: ry - rowH / 2 + 0.5, width: visW - 6, height: rowH - 1, color: rgb(shade[k]) });
-            page.drawText(VISUS[k], { x: gx + 6, y: ry - 3, size: 8.5, font: f.bold, color: rgb(C.ink) });
+            page.drawText(ST().VISUS[k], { x: gx + 6, y: ry - 3, size: 8.5, font: f.bold, color: rgb(C.ink) });
           }
         });
       }
