@@ -14,35 +14,68 @@
   ].map(t => ({ ...t, rings: t.rows.map((r, row) => r.split(" ").map(dir => ({ dir, row }))).flat() }));
   const DIR = { R: 0, OR: 45, O: 90, OL: 135, L: 180, UL: 225, U: 270, UR: 315 };
   const STRAIGHT = new Set(["O", "U", "L", "R"]);
-  // Gewertet wird je Test entweder das Paar 0,7-Zeilen oder das Paar 1,0-Zeilen (die 0,32-Zeile zählt nicht)
+  // Gewertet werden je Test genau zwei Zeilen: 2× 0,7, 1× 0,7 + 1× 1,0 oder 2× 1,0 (die 0,32-Zeile zählt nicht).
+  const COUNTED = [1, 2, 3, 4];
+  const ROW_NAME = { 1: "0,7 (1)", 2: "0,7 (2)", 3: "1,0 (1)", 4: "1,0 (2)" };
   const GROUPS = [{ visus: "0,7", rows: [1, 2] }, { visus: "1,0", rows: [3, 4] }];
   const test = n => TESTS.find(t => t.n === n);
 
   // Kreuze je Test: Text mit einem Zeichen je Ring: "r" = richtig, "f" = falsch, "." = noch offen
   const marksOf = (marks, n) => String((marks && marks[n]) || "").padEnd(test(n).rings.length, ".");
 
-  // Ein Paar (zweimal 5 Ringe) ist nicht bestanden, sobald in einer Zeile mehr als 2 Fehler sind
-  // (höchstens 2 + 2 = 4). Bestanden erst, wenn beide Zeilen vollständig abgefragt sind.
-  // Die Verwaltung erkennt am Ankreuzen, welches Paar abgefragt wurde. Sind beide angefangen, gilt:
-  // eines nicht bestanden = nicht bestanden, eines noch offen = läuft.
+  // Nicht bestanden, sobald bei den zwei gewerteten Zeilen
+  //  – in einer Zeile mehr als 2 Fehler sind, oder
+  //  – zusammen mehr als 2 Ringe mit gerader Öffnung (oben, unten, links, rechts) falsch sind, oder
+  //  – zusammen mehr als 2 Ringe mit schräger Öffnung falsch sind.
+  // Bestanden, wenn zwei vollständig abgefragte Zeilen das einhalten. Gewertet werden die angefangenen Zeilen.
+  function rowInfo(m, rings, row) {
+    const cells = rings.map((ring, i) => ({ ring, mk: m[i] })).filter(x => x.ring.row === row);
+    const wrong = cells.filter(x => x.mk === "f");
+    const open = cells.filter(x => x.mk === ".").length;
+    return { row, visus: VISUS[row], name: ROW_NAME[row], err: wrong.length,
+      straight: wrong.filter(x => STRAIGHT.has(x.ring.dir)).length, oblique: wrong.filter(x => !STRAIGHT.has(x.ring.dir)).length,
+      open, started: open < cells.length, complete: open === 0 };
+  }
+  function pairInfo(a, b) {
+    const straight = a.straight + b.straight, oblique = a.oblique + b.oblique;
+    const failed = a.err > 2 || b.err > 2 || straight > 2 || oblique > 2;
+    return { rows: [a, b], straight, oblique, err: a.err + b.err, failed, complete: a.complete && b.complete,
+      pass: a.complete && b.complete && !failed };
+  }
+  const visusText = rows => {
+    const v = rows.map(r => r.visus);
+    return v.length === 2 && v[0] === v[1] ? `2× ${v[0]}` : v.join(" + ");
+  };
   function evaluate(marks, n) {
     const m = marksOf(marks, n), rings = test(n).rings;
-    const groups = GROUPS.map(g => {
-      const rowErr = g.rows.map(row => rings.reduce((k, ring, i) => k + (ring.row === row && m[i] === "f" ? 1 : 0), 0));
-      const cells = rings.map((ring, i) => (g.rows.includes(ring.row) ? m[i] : null)).filter(x => x !== null);
-      const open = cells.filter(x => x === ".").length, started = open < cells.length;
-      const failed = rowErr.some(e => e > 2);
-      return { visus: g.visus, rows: g.rows, rowErr, open, started, wrong: rowErr[0] + rowErr[1], state: !started ? "leer" : failed ? "nicht" : open ? "offen" : "bestanden" };
-    });
-    const used = groups.filter(g => g.started);
-    const state = !used.length ? (m.replace(/\./g, "") ? "offen" : "leer")
-      : used.some(g => g.state === "nicht") ? "nicht" : used.some(g => g.state === "offen") ? "offen" : "bestanden";
-    return { state, groups, used, wrong: used.reduce((k, g) => k + g.wrong, 0) };
+    const rows = COUNTED.map(row => rowInfo(m, rings, row));
+    const started = rows.filter(r => r.started);
+    const pairs = [];
+    for (let i = 0; i < started.length; i++) for (let j = i + 1; j < started.length; j++) pairs.push(pairInfo(started[i], started[j]));
+    let state, used = started, pair = null;
+    const passing = pairs.find(p => p.pass);
+    if (passing) { state = "bestanden"; pair = passing; used = passing.rows; }
+    else if (!started.length) state = m.replace(/\./g, "") ? "offen" : "leer";
+    else if (started.length === 1) {
+      const r = started[0];
+      state = r.err > 2 || r.straight > 2 || r.oblique > 2 ? "nicht" : "offen";
+    } else if (pairs.some(p => !p.failed)) {
+      state = "offen";
+      pair = pairs.find(p => !p.failed);
+    } else { state = "nicht"; pair = pairs[0]; }
+    const shown = pair ? pair.rows : used;
+    const straight = shown.reduce((k, r) => k + r.straight, 0), oblique = shown.reduce((k, r) => k + r.oblique, 0);
+    // Hinweis, wenn ein weiterer Fehler den Test kippen würde
+    const warn = state === "offen" && (shown.some(r => r.err === 2) || straight === 2 || oblique === 2);
+    return { state, rows, used: shown, pair, wrong: shown.reduce((k, r) => k + r.err, 0), straight, oblique, warn,
+      visusText: visusText(shown), groups: shown };
   }
-  // Zeilen, die „Übrige als richtig“ füllen soll: die angefangenen Paare, sonst das 0,7-Paar
+  // Zeilen, die „Übrige als richtig“ füllen soll: die angefangenen Zeilen, mindestens zwei (sonst die passende zweite)
   function rowsToFill(marks, n) {
-    const used = evaluate(marks, n).used;
-    return (used.length ? used : [GROUPS[0]]).flatMap(g => g.rows);
+    const started = evaluate(marks, n).rows.filter(r => r.started).map(r => r.row);
+    if (!started.length) return [1, 2];
+    if (started.length === 1) return [started[0], { 1: 2, 2: 1, 3: 4, 4: 3 }[started[0]]];
+    return started;
   }
 
   // Zwei gleichwertige Tafeln: Test 1–3 oder alternativ Test 4–6. Bestanden, wenn alle drei Tests

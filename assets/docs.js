@@ -396,7 +396,7 @@
         const marks = ST().marksOf(p.marks, t.n), ev = ST().evaluate(p.marks, t.n);
         page.drawText(t.title, { x: x0 + 8, y: cy0 - 13, size: 8.5, font: f.bold, color: rgb(C.ink) });
         if (TEST_WORD[ev.state]) {
-          const vis = ev.used.map(g => g.visus).join(" + ");
+          const vis = ev.used.length ? ev.visusText : "";
           const note = `${TEST_WORD[ev.state]}${vis ? ` (Visus ${vis})` : ""}${ev.wrong ? ` · ${ev.wrong} Fehler` : ""}`, wn = f.bold.widthOfTextAtSize(note, 7.5);
           page.drawText(note, { x: x0 + colW - 8 - wn, y: cy0 - 13, size: 7.5, font: f.bold, color: rgb(ev.state === "nicht" ? [0.75, 0.2, 0.15] : C.aid) });
         }

@@ -860,7 +860,7 @@
       <div class="st-head"><div><h3 id="sd-name"></h3><p class="small muted" id="sd-birth"></p></div>
         <div class="field st-nr"><label for="sd-nr">Protokoll-Nr. <span class="small muted" id="sd-nr-hint"></span></label><input id="sd-nr" autocomplete="off"></div></div>
       <div class="st-sets" id="sd-sets" role="tablist"></div>
-      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen. Die 0,32-Zeile ist zum Üben und zählt nicht.</p>
+      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test zwei Zeilen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Nicht bestanden bei mehr als 2 Fehlern in einer Zeile oder mehr als 2 Fehlern bei geraden bzw. bei schrägen Öffnungen. Die 0,32-Zeile ist zum Üben.</p>
       <div id="sd-grid"></div>
       <p class="st-result" id="sd-result"></p>
       <div class="st-extra">
@@ -922,11 +922,13 @@
       return `<button type="button" class="st-ring m-${mk === "." ? "leer" : mk}" data-t="${n}" data-ring="${idx}" aria-label="Test ${n}, Ring ${idx + 1}: ${mk === "r" ? "richtig" : mk === "f" ? "falsch" : "offen"}">
         <svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="${S.ringPath(20, dir)}"/></svg><span>${mk === "r" ? "✓" : mk === "f" ? "✗" : ""}</span></button>`;
     }).join("")}</div>`).join("");
-    const groupText = g => `${g.visus}: ${g.rowErr[0]} + ${g.rowErr[1]} Fehler${g.open ? ` (${g.open} offen)` : ""}`;
-    const warn = ev.used.some(g => g.state === "offen" && g.rowErr.includes(2)) ? '<p class="small st-warn">Achtung: In einer Zeile sind schon 2 Fehler – ein weiterer dort, und der Test ist nicht bestanden.</p>' : "";
+    const rowText = r => `${r.name}: ${r.err} Fehler${r.open ? ` (${r.open} offen)` : ""}`;
+    const info = ev.used.length ? ev.used.map(rowText).join(" · ") + (ev.wrong ? ` · gerade ${ev.straight}, schräg ${ev.oblique}` : "")
+      : "Zwei Zeilen abfragen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0.";
+    const warn = ev.warn ? '<p class="small st-warn">Achtung: Ein weiterer Fehler (in derselben Zeile, bei geraden oder bei schrägen Öffnungen) und der Test ist nicht bestanden.</p>' : "";
     return `<section class="st-block is-${ev.state}">
       <div class="st-block-head"><h4>${t.title}</h4><span class="st-badge">${STATE_TEXT[ev.state]}</span></div>
-      <p class="small muted" style="margin:0 0 6px">${ev.used.length ? ev.used.map(groupText).join(" · ") : "Entweder die beiden 0,7-Zeilen oder die beiden 1,0-Zeilen abfragen."}</p>
+      <p class="small muted" style="margin:0 0 6px">${info}</p>
       <div class="st-grid">${rows}</div>${warn}
       <div class="btn-row" style="margin-top:6px"><button class="btn btn-sm btn-ghost" type="button" data-rest="${n}">Übrige der abgefragten Zeilen richtig</button><button class="btn btn-sm btn-ghost" type="button" data-clear="${n}">Leeren</button></div>
     </section>`;
