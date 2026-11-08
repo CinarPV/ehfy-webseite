@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seite nicht gefunden – Erste Hilfe for you</title>
+  <meta name="robots" content="noindex">
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0a2540; background: #fff; display: grid; place-items: center; min-height: 100vh; padding: 16px; box-sizing: border-box; }
+    main { max-width: 460px; text-align: center; }
+    h1 { font-size: 1.6rem; margin: 0 0 10px; }
+    p { color: #5a6b78; line-height: 1.5; }
+    a { display: inline-block; margin: 6px; padding: 12px 18px; border-radius: 14px; background: #29b4b6; color: #fff; font-weight: 700; text-decoration: none; }
+    a.alt { background: #f1f7f8; color: #0a2540; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Diese Seite gibt es nicht mehr</h1>
+    <p>Unsere Webseite ist neu. Du wirst gleich zur Startseite weitergeleitet.</p>
+    <a id="home" href="/">Zur Startseite</a><a id="book" class="alt" href="/anmelden.html">Kurs buchen</a>
+  </main>
+  <script>
+    // Alte Adressen der früheren WordPress-Seite (z. B. /anmelden/, /preise/) auf die passende neue Seite lenken.
+    // Auf der Test-Adresse (….github.io/ehfy-webseite/) liegt alles in einem Unterordner.
+    (function () {
+      var base = /github\.io$/.test(location.hostname) ? "/" + location.pathname.split("/")[1] + "/" : "/";
+      var path = location.pathname.toLowerCase();
+      var rules = [[/anmeld|buch|termin/, "anmelden.html"], [/preis/, "preise.html"], [/datenschutz/, "datenschutz.html"],
+        [/impressum/, "impressum.html"], [/ersatz/, "ersatzbescheinigung.html"], [/absag|storn/, "absage.html"], [/info|kurs/, "kurs.html"]];
+      var target = base;
+      for (var i = 0; i < rules.length; i++) if (rules[i][0].test(path)) { target = base + rules[i][1]; break; }
+      document.getElementById("home").href = base;
+      document.getElementById("book").href = base + "anmelden.html";
+      setTimeout(function () { location.replace(target); }, target === base ? 2500 : 0);
+    })();
+  </script>
+</body>
+</html>

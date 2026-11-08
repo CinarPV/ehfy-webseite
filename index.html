@@ -2,6 +2,15 @@
 <html lang="de">
 <head>
   <meta charset="utf-8">
+  <script>
+    // Alte WordPress-Links (ehfy.de/?page_id=…) auf die neuen Seiten umleiten, damit Links von anderen Seiten weiter funktionieren
+    (function () {
+      var m = location.search.match(/[?&]page_id=(\d+)/);
+      var map = { "825": "anmelden.html", "936": "anmelden.html", "847": "datenschutz.html", "862": "ersatzbescheinigung.html",
+        "865": "impressum.html", "868": "kurs.html", "871": "preise.html", "817": "absage.html", "806": "./" };
+      if (m && map[m[1]]) location.replace(map[m[1]]);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Erste-Hilfe-Kurs Siegen für den Führerschein – mit Sehtest & Passbild | Erste Hilfe for you</title>
   <meta name="description" content="Erste-Hilfe-Kurs, Sehtest und Passbild an einem Tag – in Siegen, Burbach, Netphen und Wilnsdorf. Jetzt online Platz sichern.">
