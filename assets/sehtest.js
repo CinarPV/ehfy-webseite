@@ -45,17 +45,24 @@
     return (used.length ? used : [GROUPS[0]]).flatMap(g => g.rows);
   }
 
-  // Gesamtergebnis: Test 1, 2 und 3 müssen bestanden sein. Die Wiederholung (4, 5, 6) ersetzt einen nicht bestandenen Test.
+  // Zwei gleichwertige Tafeln: Test 1–3 oder alternativ Test 4–6. Bestanden, wenn alle drei Tests
+  // einer Tafel bestanden sind. Welche Tafel genommen wird, ist egal.
+  const SETS = [[1, 2, 3], [4, 5, 6]];
+  function setState(marks, set) {
+    const st = set.map(n => evaluate(marks, n).state);
+    if (st.every(x => x === "bestanden")) return "bestanden";
+    if (st.includes("nicht")) return "nicht";
+    return st.every(x => x === "leer") ? "leer" : "offen";
+  }
   function overall(marks) {
-    const parts = [[1, 4], [2, 5], [3, 6]].map(([a, b]) => {
-      const main = evaluate(marks, a), again = evaluate(marks, b);
-      if (main.state === "bestanden") return "bestanden";
-      if (main.state === "nicht") return again.state === "bestanden" ? "bestanden" : again.state === "nicht" ? "nicht" : "wiederholung";
-      return "offen";
-    });
-    if (parts.every(p => p === "bestanden")) return { state: "bestanden", parts };
-    if (parts.includes("offen")) return { state: "offen", parts };
-    return { state: parts.includes("nicht") ? "nicht" : "nicht-wiederholung", parts };
+    const sets = SETS.map(set => setState(marks, set));
+    let state;
+    if (sets.includes("bestanden")) state = "bestanden";
+    else if (sets.includes("offen") || sets.every(x => x === "leer")) state = "offen";
+    else state = "nicht";
+    // Hinweis, wenn die andere Tafel noch gar nicht benutzt wurde
+    const otherFree = state === "nicht" && sets.includes("leer");
+    return { state, sets, otherFree };
   }
 
   // Landoltring als Umriss: Ring mit gerader Lücke (Lücke = Strichstärke = 1/5 des Durchmessers).
@@ -72,5 +79,5 @@
   const ringPath = (d, dir, cx = 0, cy = 0) =>
     ringPoints(d, dir).map(([x, y], i) => `${i ? "L" : "M"}${(cx + x).toFixed(2)} ${(cy - y).toFixed(2)}`).join(" ") + " Z";
 
-  root.EHFYSehtest = { VISUS, TESTS, GROUPS, test, marksOf, evaluate, rowsToFill, overall, ringPath, STRAIGHT };
+  root.EHFYSehtest = { VISUS, TESTS, GROUPS, SETS, test, marksOf, evaluate, rowsToFill, overall, ringPath, STRAIGHT };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -40,7 +40,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-bar no-print">
-            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 38</span></h1>
+            <h1 style="margin:0;font-size:1.8rem">Verwaltung <span class="small muted" style="font-weight:600">Version 39</span></h1>
             <button class="btn btn-outline btn-sm" id="logout">Abmelden</button>
           </div>
           <div class="sync-bar no-print" id="sync-bar" role="status">
@@ -54,6 +54,7 @@
             <button data-view="termine" class="active">Termine</button>
             <button data-view="anwesenheit">Anwesenheit</button>
             <button data-view="schueler">Schüler</button>
+            <button data-view="sehtests">Sehtests</button>
             <button data-view="rechnungen">Rechnungen</button>
             <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
             <button data-view="vorlagen">Einstellungen</button>
@@ -168,6 +169,28 @@
             </div>
             <div id="sc-list" class="sc-list"></div>
             <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">
+          </div>
+
+          <div id="sehtest-view" class="hidden" data-section="sehtests">
+            <h2 style="margin:0 0 4px;font-size:1.4rem">Sehtests</h2>
+            <p class="muted small" id="se-count"></p>
+            <div class="card" style="margin-bottom:14px">
+              <div class="field" style="margin:0 0 10px"><label for="se-search">Suchen (Name, Protokoll-Nr., Geburtsdatum, Telefon)</label><input id="se-search" type="search" placeholder="z. B. Müller oder S26-012" autocomplete="off"></div>
+              <div class="btn-row"><button class="btn" type="button" id="se-new">+ Person nur für Sehtest anlegen</button><button class="btn btn-ghost" type="button" id="se-blank">Leeres Protokoll drucken</button></div>
+              <form id="se-form" class="hidden" style="margin-top:14px">
+                <div class="form-grid">
+                  <div class="field"><label for="se-first">Vorname</label><input id="se-first" required autocomplete="off"></div>
+                  <div class="field"><label for="se-last">Nachname</label><input id="se-last" required autocomplete="off"></div>
+                  <div class="field"><label for="se-birth">Geburtsdatum</label><input id="se-birth" type="date"></div>
+                  <div class="field"><label for="se-phone">Telefon (freiwillig)</label><input id="se-phone" type="tel" autocomplete="off"></div>
+                  <div class="field"><label for="se-mail">E-Mail (freiwillig)</label><input id="se-mail" type="email" autocomplete="off"></div>
+                </div>
+                <p class="small muted">Es geht keine E-Mail raus. Danach öffnet sich gleich der Sehtest.</p>
+                <div class="btn-row"><button class="btn" type="submit">Anlegen und Sehtest starten</button><button class="btn btn-ghost" type="button" id="se-cancel">Abbrechen</button></div>
+              </form>
+            </div>
+            <p class="form-error" id="se-error" role="alert"></p>
+            <div id="se-list" class="se-list"></div>
           </div>
 
           <div id="finance-view" class="hidden no-print" data-section="finanzen"></div>

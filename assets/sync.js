@@ -227,7 +227,9 @@
     async listAllRegistrations() { await ready; return state.regs.map(r => ({ ...r })); },
     async listRegistrations(courseId) { await ready; return state.regs.filter(r => r.course_id === courseId).map(r => ({ ...r })); },
     async addRegistration(r) {
-      await queue({ type: "reg-put", row: { id: uid(), status: "angemeldet", created_at: new Date().toISOString(), ...r } });
+      const row = { id: uid(), status: "angemeldet", created_at: new Date().toISOString(), ...r };
+      await queue({ type: "reg-put", row });
+      return { ...row };
     },
     async updateRegistration(id, patch) { await queue({ type: "reg-patch", id, patch }); },
     // Nur mit Internet: z. B. eine Protokoll-Nummer von Hand ändern. Klappt es nicht (Nummer schon vergeben),

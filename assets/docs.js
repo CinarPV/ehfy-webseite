@@ -377,13 +377,13 @@
     page.drawText("Nr.", { x: x - 4, y: y - 16, size: 10, font: f.regular, color: rgb(C.ink) });
     page.drawLine({ start: { x: x + 14, y: y - 18 }, end: { x: W - M, y: y - 18 }, thickness: 0.7, color: rgb(C.muted) });
 
-    // Ringtafeln: links Prüfung, rechts Wiederholungsprüfung
+    // Ringtafeln: links Test 1–3, rechts gleichwertig Test 4–6
     const top = y - 36, visW = 30, colW = (W - 2 * M - visW) / 2, cellH = 104, headH = 18, rowH = 16.5;
     const gx = M, gy = top - headH - 3 * cellH;
     page.drawRectangle({ x: gx, y: top - headH, width: W - 2 * M, height: headH, color: rgb(C.ink) });
     const white = root.PDFLib.rgb(1, 1, 1);
     page.drawText("Visus", { x: gx + 4, y: top - 13, size: 8.5, font: f.bold, color: white });
-    ["Prüfung", "Wiederholungsprüfung"].forEach((t, i) => {
+    ["Prüfung (Test 1–3)", "oder alternativ (Test 4–6)"].forEach((t, i) => {
       const w = f.bold.widthOfTextAtSize(t, 9.5);
       page.drawText(t, { x: gx + visW + colW * i + (colW - w) / 2, y: top - 13, size: 9.5, font: f.bold, color: white });
     });

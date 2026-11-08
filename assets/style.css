@@ -618,3 +618,16 @@ body.has-reminder { padding-bottom: 90px; }
   .st-ring svg { width: 26px; height: 26px; }
 }
 .st-line.ignored { opacity: .55; }
+.st-extra { display: grid; gap: 8px; margin-top: 10px; }
+.st-extra input[type="date"] { padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; }
+.st-quick { margin-top: 6px; }
+.se-list { display: grid; gap: 10px; }
+.se-row { display: grid; grid-template-columns: 90px 1fr 100px 150px; gap: 6px 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.se-nr { font-weight: 800; }
+.se-res.ok { color: var(--ok); font-weight: 700; }
+.se-res.no { color: var(--danger); font-weight: 700; }
+.se-act { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 640px) {
+  .se-row { grid-template-columns: 1fr 1fr; }
+  .se-who { grid-column: 1 / -1; order: -1; }
+}

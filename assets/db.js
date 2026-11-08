@@ -235,6 +235,9 @@
         const db = load(), i = db.regs.findIndex(r => r.id === row.id);
         const full = { status: "angemeldet", cancel_token: uid(), created_at: new Date().toISOString(), cancelled_at: null, ...row };
         if (i >= 0) db.regs[i] = { ...db.regs[i], ...row }; else db.regs.push(full);
+        // Wie in der Datenbank: Sehtest-Nummer beim ersten Ergebnis
+        const r = db.regs.find(x => x.id === row.id);
+        if (r.sehtest_passed != null && !r.sehtest_nr) r.sehtest_nr = `S${String(new Date().getFullYear()).slice(2)}-${String(db.regs.filter(x => x.sehtest_nr).length + 1).padStart(3, "0")}`;
         save();
       },
       async listAllRegistrations() { return load().regs.map(r => ({ ...r })); },
