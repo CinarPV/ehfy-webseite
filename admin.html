@@ -12,9 +12,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="EHfy Admin">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#03110d">
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="stylesheet" href="assets/admin-monitor.css">
 </head>
 <body data-page="admin">
   <header id="site-header"></header>
@@ -40,13 +41,14 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-top no-print">
-            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 49</span></h1>
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 50</span></h1>
             <div class="sync-mini" id="sync-bar" role="status">
               <span class="sync-dot" id="sync-dot"></span>
               <span id="sync-text" class="small"></span>
               <button class="btn btn-sm" id="sync-btn" type="button">Synchronisieren</button>
             </div>
           </div>
+          <svg class="adm-ekg no-print" viewBox="0 0 1000 34" preserveAspectRatio="none" aria-hidden="true"><path d="M0 20 H180 L195 20 L205 4 L215 30 L225 20 H420 L435 20 L445 4 L455 30 L465 20 H660 L675 20 L685 4 L695 30 L705 20 H1000"/></svg>
           <nav class="main-nav no-print" id="main-tabs" aria-label="Bereiche">
             <div class="nav-main">
               <button data-view="start" class="active"><svg class="sym" aria-hidden="true"><use href="assets/symbole.svg#herz"/></svg>Start</button>
@@ -153,7 +155,7 @@
                   <button class="cap-btn" id="p-cap-up" type="button" aria-label="Ein Platz mehr">+</button></p>
               </div>
               <div class="btn-row no-print">
-                <button class="btn btn-sm btn-teal" id="p-add">+ Schüler nachträglich eintragen</button>
+                <button class="btn btn-sm btn-teal hidden" id="p-add">+ Schüler nachträglich eintragen</button>
                 <button class="btn btn-sm btn-outline" id="p-print">Liste drucken</button>
                 <button class="btn btn-sm btn-outline" id="p-csv">Excel/CSV</button>
                 <a class="btn btn-sm btn-outline" id="p-mail" href="#">E-Mail an alle</a>
@@ -445,6 +447,7 @@
   <footer id="site-footer"></footer>
   <script src="assets/config.js"></script>
   <script src="assets/layout.js"></script>
+  <script>document.querySelectorAll("#site-header [data-logo]").forEach(el => { el.dataset.theme = "dark"; });</script>
   <script src="assets/vendor/supabase.js"></script>
   <script src="assets/db.js"></script>
   <script src="assets/sync.js"></script>
