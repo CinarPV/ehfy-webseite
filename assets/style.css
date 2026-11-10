@@ -749,3 +749,7 @@ body[data-page="admin"] .section { padding-top: 22px; }
 .cap-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 480px) { .cap-grid { grid-template-columns: 1fr; } }
 .del-mini { margin-top: 6px; font: inherit; font-size: .8rem; font-weight: 700; color: var(--danger); background: var(--danger-light); border: 1px solid transparent; border-radius: 999px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
+/* QR-Code zur Selbsteintragung */
+.qr-dlg { width: min(520px, 100vw - 16px); padding: 18px 16px 20px; box-sizing: border-box; }
+.qr-img { background: #fff; border-radius: 14px; padding: 10px; margin: 0 auto 10px; max-width: 360px; }
+.qr-img svg { display: block; width: 100%; height: auto; }

@@ -41,7 +41,9 @@
     birth: { x: 130, y: 342, size: 12 },
     street: { x: 108, y: 287, size: 12 },
     city: { x: 348, y: 287, size: 12 },
-    signDate: { x: 60, y: 82, size: 11 }
+    signDate: { x: 60, y: 82, size: 11 },
+    // Unterschrift des Teilnehmers (Selbsteintragung per QR-Code) rechts neben Ort/Datum
+    sign: { x: 330, y: 74, w: 200, h: 56 }
   };
 
   const text = (page, s, p, font, color = C.ink) => page.drawText(String(s || ""), { x: p.x, y: p.y, size: p.size, font, color: rgb(color) });
@@ -64,7 +66,7 @@
     const f = await fonts(out, loadFont);
     // Seite 1 der Vorlage einmal je Teilnehmer übernehmen
     const pages = await out.copyPages(tpl, people.map(() => 0));
-    pages.forEach((page, i) => { out.addPage(page); fill(page, people[i], f); });
+    for (let i = 0; i < pages.length; i++) { out.addPage(pages[i]); await fill(pages[i], people[i], f, out); }
     return out.save();
   }
 
@@ -81,14 +83,19 @@
   }
 
   function datasheets(templateBytes, course, people, loadFont) {
-    return fillTemplate(templateBytes, people, loadFont, (page, r, f) => {
+    return fillTemplate(templateBytes, people, loadFont, async (page, r, f, out) => {
       text(page, fmtDate(course.starts_at), SHEET.date, f.bold);
       text(page, r.last_name, SHEET.last, f.bold);
       text(page, r.first_name, SHEET.first, f.bold);
       text(page, fmtBirth(r.birth_date), SHEET.birth, f.bold);
       text(page, r.street, SHEET.street, f.bold);
       text(page, [r.zip, r.city].filter(Boolean).join(" "), SHEET.city, f.bold);
-      text(page, fmtDate(course.starts_at), SHEET.signDate, f.regular);
+      // Ort ist immer Siegen
+      text(page, `Siegen, ${fmtDate(course.starts_at)}`, SHEET.signDate, f.regular);
+      if (r.signature_png && /^data:image\/png;base64,/.test(r.signature_png)) {
+        const png = await out.embedPng(r.signature_png), k = Math.min(SHEET.sign.w / png.width, SHEET.sign.h / png.height);
+        page.drawImage(png, { x: SHEET.sign.x, y: SHEET.sign.y, width: png.width * k, height: png.height * k });
+      }
     });
   }
 

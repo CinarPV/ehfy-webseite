@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teilnehmerdatenblatt – Erste Hilfe for you</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="assets/style.css">
+  <style>
+    .vo-wrap { max-width: 560px; margin: 0 auto; }
+    .vo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+    .vo-grid .wide { grid-column: 1 / -1; }
+    .vo-pad { display: block; width: 100%; aspect-ratio: 3 / 1; border: 2px dashed var(--line); border-radius: 14px; background: #fff; touch-action: none; }
+    .vo-sign-head { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 6px; }
+    .vo-check { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; font-size: .95rem; }
+    .vo-check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+    .vo-done { text-align: center; padding: 30px 0; }
+    .vo-done .big { font-size: 3rem; line-height: 1; }
+    @media (max-width: 480px) { .vo-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body data-page="vor-ort">
+  <header id="site-header"></header>
+
+  <main>
+    <section class="section">
+      <div class="container vo-wrap">
+        <h1 style="font-size:1.6rem;margin-bottom:4px">Teilnehmerdatenblatt</h1>
+        <p class="lead" id="vo-course" style="margin-top:0">Erste-Hilfe-Kurs</p>
+
+        <div id="vo-invalid" class="card hidden"><p><strong>Dieser QR-Code ist nicht (mehr) gültig.</strong></p><p class="muted">Bitte wende dich an deinen Kursleiter.</p></div>
+
+        <form id="vo-form" class="card hidden" novalidate>
+          <div class="vo-grid">
+            <div class="field"><label for="vo-first">Vorname</label><input id="vo-first" autocomplete="given-name" required maxlength="80"></div>
+            <div class="field"><label for="vo-last">Nachname</label><input id="vo-last" autocomplete="family-name" required maxlength="80"></div>
+            <div class="field wide"><label for="vo-birth">Geburtsdatum</label><input id="vo-birth" inputmode="numeric" autocomplete="bday" placeholder="TT.MM.JJJJ" required maxlength="10"></div>
+            <div class="field wide"><label for="vo-street">Straße und Hausnummer</label><input id="vo-street" autocomplete="street-address" required maxlength="120"></div>
+            <div class="field"><label for="vo-zip">PLZ</label><input id="vo-zip" inputmode="numeric" autocomplete="postal-code" required maxlength="10"></div>
+            <div class="field"><label for="vo-city">Ort</label><input id="vo-city" autocomplete="address-level2" required maxlength="80"></div>
+            <div class="field"><label for="vo-phone">Telefon <span class="muted small">(freiwillig)</span></label><input id="vo-phone" type="tel" autocomplete="tel" maxlength="40"></div>
+            <div class="field"><label for="vo-email">E-Mail <span class="muted small">(freiwillig)</span></label><input id="vo-email" type="email" autocomplete="email" maxlength="120"></div>
+            <div class="field wide"><label for="vo-pkg">Gebucht</label>
+              <select id="vo-pkg"><option value="kurs">Erste-Hilfe-Kurs</option><option value="komplett">Erste-Hilfe-Kurs mit Sehtest</option></select></div>
+          </div>
+
+          <div class="vo-sign-head"><strong>Unterschrift</strong><button class="btn btn-sm btn-ghost" type="button" id="vo-clear">Löschen</button></div>
+          <canvas id="vo-pad" class="vo-pad" width="900" height="300" aria-label="Hier mit dem Finger unterschreiben"></canvas>
+          <p class="small muted" style="margin:6px 0 0">Mit dem Finger im Feld unterschreiben.</p>
+
+          <label class="vo-check"><input type="checkbox" id="vo-ok"> <span>Meine Angaben sind richtig. Die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> habe ich zur Kenntnis genommen.</span></label>
+
+          <p class="form-error" id="vo-error" role="alert"></p>
+          <button class="btn" type="submit" id="vo-send" style="width:100%">Absenden</button>
+        </form>
+
+        <div id="vo-done" class="card vo-done hidden">
+          <div class="big">✓</div>
+          <h2 id="vo-thanks">Danke!</h2>
+          <p class="muted">Du bist für den Kurs eingetragen.</p>
+          <button class="btn btn-ghost" type="button" id="vo-next">Nächste Person eintragen</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/layout.js"></script>
+  <script src="assets/vendor/supabase.js"></script>
+  <script src="assets/db.js"></script>
+  <script>
+  (async function () {
+    const $ = id => document.getElementById(id);
+    const db = window.EHFY_DB;
+    const token = new URLSearchParams(location.search).get("k") || "";
+
+    let course = null;
+    try { course = await db.checkinCourse(token); } catch (e) { course = null; }
+    if (!course) { $("vo-invalid").classList.remove("hidden"); return; }
+    const day = new Date(course.starts_at).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+    $("vo-course").textContent = `Erste-Hilfe-Kurs am ${day} in Siegen`;
+    $("vo-form").classList.remove("hidden");
+
+    // Unterschrift mit dem Finger: nur die Linie wird gespeichert
+    const cv = $("vo-pad"), ctx = cv.getContext("2d");
+    let down = false, drawn = false;
+    const pos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
+    const clear = () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn = false; };
+    ctx.lineWidth = 6; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = "#0a2a8a";
+    cv.addEventListener("pointerdown", e => { down = drawn = true; cv.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); });
+    cv.addEventListener("pointermove", e => { if (!down) return; ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); });
+    cv.addEventListener("pointerup", () => { down = false; });
+    cv.addEventListener("pointercancel", () => { down = false; });
+    $("vo-clear").onclick = clear;
+
+    // Geburtsdatum: Punkte automatisch
+    $("vo-birth").addEventListener("input", e => {
+      const d = e.target.value.replace(/\D/g, "").slice(0, 8);
+      e.target.value = [d.slice(0, 2), d.slice(2, 4), d.slice(4)].filter(Boolean).join(".");
+    });
+
+    $("vo-form").addEventListener("submit", async ev => {
+      ev.preventDefault();
+      const err = $("vo-error"), btn = $("vo-send");
+      err.textContent = "";
+      const v = id => $(id).value.trim();
+      const birth = EHFY.parseBirth(v("vo-birth"));
+      if (!v("vo-first") || !v("vo-last")) { err.textContent = "Bitte Vor- und Nachname eintragen."; return; }
+      if (!birth) { err.textContent = "Bitte das Geburtsdatum so eingeben: TT.MM.JJJJ."; return; }
+      if (!v("vo-street") || !v("vo-zip") || !v("vo-city")) { err.textContent = "Bitte die vollständige Adresse eintragen."; return; }
+      if (v("vo-email") && !$("vo-email").checkValidity()) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
+      if (!drawn) { err.textContent = "Bitte im Feld unterschreiben."; return; }
+      if (!$("vo-ok").checked) { err.textContent = "Bitte bestätigen, dass deine Angaben richtig sind."; return; }
+      btn.disabled = true; btn.textContent = "Wird gesendet …";
+      try {
+        const name = await db.checkinRegister({
+          token, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
+          street: v("vo-street"), zip: v("vo-zip"), city: v("vo-city"), phone: v("vo-phone"), email: v("vo-email"),
+          package: $("vo-pkg").value, signature: cv.toDataURL("image/png")
+        });
+        $("vo-thanks").textContent = `Danke, ${name}!`;
+        $("vo-form").classList.add("hidden");
+        $("vo-done").classList.remove("hidden");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (e) { err.textContent = e.message; }
+      finally { btn.disabled = false; btn.textContent = "Absenden"; }
+    });
+
+    // Gleiches Handy für die nächste Person (z. B. wer kein eigenes Handy dabei hat)
+    $("vo-next").onclick = () => {
+      $("vo-form").reset(); clear();
+      $("vo-done").classList.add("hidden");
+      $("vo-form").classList.remove("hidden");
+      window.scrollTo({ top: 0 });
+    };
+  })();
+  </script>
+</body>
+</html>

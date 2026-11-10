@@ -167,6 +167,13 @@
     // Nächste Sehtest-Nummer: nur mit Internet (die Datenbank vergibt die Nummern)
     getNextSehtestNr: () => remote.getNextSehtestNr(),
     setNextSehtestNr: nr => remote.setNextSehtestNr(nr),
+    // QR-Schlüssel für die Selbsteintragung: nur mit Internet
+    async checkinToken(courseId, renew) {
+      await ready;
+      if (!isOnline()) throw new Error("Für den QR-Code braucht es einmal Internet.");
+      if (outbox.some(o => o.type === "course-put" && o.row.id === courseId)) await sync();
+      return remote.checkinToken(courseId, renew);
+    },
     // Nummer ändern, spätere rücken nach: nur mit Internet, danach den neuen Stand holen
     async renumberSehtest(id, nr) {
       await ready;

@@ -126,6 +126,7 @@
           <td>${pill}${db.isPending(c.id) ? '<br><span class="small muted">noch nicht online</span>' : ""}</td>
           <td><div class="btn-row">
             <button class="btn btn-sm" data-act="people" data-id="${c.id}">Teilnehmerliste</button>
+            <button class="btn btn-sm btn-outline" data-act="qr" data-id="${c.id}" title="Schüler tragen sich mit dem eigenen Handy ein">QR-Code</button>
             ${c.booked ? `<button class="btn btn-sm btn-teal" data-act="print" data-id="${c.id}" title="Datenblätter, Bescheinigungen und Quittungen für alle Teilnehmer">Kursmappe drucken</button>` : ""}
             <details class="row-more"><summary class="btn btn-sm btn-ghost">Mehr</summary><div class="row-more-box">
               <button class="btn btn-sm btn-outline" data-act="edit" data-id="${c.id}">Bearbeiten</button>
@@ -154,6 +155,7 @@
     const c = courses.find(x => x.id === b.dataset.id);
     if (b.dataset.act === "edit") openCourseDialog(c);
     if (b.dataset.act === "people") openParticipants(c);
+    if (b.dataset.act === "qr") openQr(c);
     if (b.dataset.act === "cap-up" || b.dataset.act === "cap-down") {
       const capacity = Math.max(0, c.capacity + (b.dataset.act === "cap-up" ? 1 : -1));
       try { await db.saveCourse({ ...c, capacity }); await loadCourses(); } catch (e) { alert(e.message); }
@@ -575,6 +577,41 @@
     } catch (e) { $("rd-error").textContent = e.message; }
   });
 
+  // ---------- QR-Code: Schüler tragen sich mit dem eigenen Handy ein und unterschreiben mit dem Finger ----------
+  function qrDialog() {
+    let d = $("qr-dialog");
+    if (d) return d;
+    d = document.createElement("dialog");
+    d.id = "qr-dialog"; d.className = "qr-dlg";
+    d.innerHTML = `<h3 id="qr-title" style="margin:0 0 4px"></h3>
+      <p class="small muted" style="margin:0 0 10px">Schüler scannen den Code mit der Handy-Kamera, tragen ihre Daten ein und unterschreiben mit dem Finger. Sie stehen danach sofort in der Teilnehmerliste.</p>
+      <div id="qr-img" class="qr-img"></div>
+      <p class="small" id="qr-msg" role="status"></p>
+      <div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" id="qr-copy">Link kopieren</button><button class="btn btn-sm btn-ghost" type="button" id="qr-new">Neuer Code (alter wird ungültig)</button><button class="btn btn-sm" type="button" id="qr-close">Schließen</button></div>`;
+    document.body.appendChild(d);
+    $("qr-close").onclick = () => d.close();
+    d.addEventListener("close", () => loadCourses().catch(() => {}));
+    return d;
+  }
+  async function openQr(c, renew) {
+    if (!c) return;
+    const d = qrDialog();
+    $("qr-title").textContent = `${dayText(c.starts_at)} · ${fmtRange(c.starts_at, c.ends_at)}`;
+    $("qr-img").innerHTML = '<p class="muted">QR-Code wird erstellt …</p>';
+    $("qr-msg").textContent = "";
+    if (!d.open) d.showModal();
+    try {
+      const token = await db.checkinToken(c.id, renew);
+      const link = new URL(`vor-ort.html?k=${token}`, location.href).href;
+      const qr = window.qrcode(0, "M");
+      qr.addData(link); qr.make();
+      $("qr-img").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+      $("qr-copy").onclick = async () => { try { await navigator.clipboard.writeText(link); $("qr-msg").textContent = "Link kopiert ✓"; } catch (e) { $("qr-msg").textContent = link; } };
+      $("qr-new").onclick = () => { if (confirm("Neuen QR-Code erstellen? Der bisherige Code funktioniert dann nicht mehr.")) openQr(c, true); };
+      $("qr-msg").textContent = "Gültig von 2 Tagen vor bis 14 Tage nach dem Kurstag. Es geht keine Anmelde-Mail raus.";
+    } catch (e) { $("qr-img").innerHTML = ""; $("qr-msg").textContent = e.message; }
+  }
+
   // ---------- Schüler vor Ort erfassen (vor allem am Handy) ----------
   // Ausweis/Pass oder Teilnehmerdatenblatt fotografieren, Angaben prüfen, speichern, nächster.
   // Kursdatum ist heute, lässt sich aber ändern. Gibt es an dem Tag noch keinen Kurs, wird er beim Speichern angelegt.
@@ -593,6 +630,7 @@
         <div class="field"><label for="cap-loc">Ort</label><input id="cap-loc" list="loc-list" autocomplete="off"></div>
       </div>
       <p class="small" id="cap-course-info"></p>
+      <button class="btn btn-sm btn-outline hidden" type="button" id="cap-qr" style="margin-bottom:10px">QR-Code: Schüler tragen sich selbst ein</button>
       <div class="cap-grid hidden" id="cap-times">
         <div class="field"><label for="cap-start">Beginn</label><input id="cap-start"></div>
         <div class="field"><label for="cap-end">Ende</label><input id="cap-end"></div>
@@ -623,6 +661,7 @@
       finally { btn.disabled = false; btn.textContent = "📷 Daten auslesen"; }
     });
     $("cap-save").onclick = capSave;
+    $("cap-qr").onclick = () => { const c = capCourse(); if (c) openQr(c); };
     $("cap-done").addEventListener("click", async ev => {
       const b = ev.target.closest("[data-cap-del]");
       if (!b) return;
@@ -699,6 +738,7 @@
   function capCourseInfo() {
     const c = capCourse(), day = $("cap-date").value;
     $("cap-times").classList.toggle("hidden", Boolean(c));
+    $("cap-qr").classList.toggle("hidden", !c);
     $("cap-here-box").classList.toggle("hidden", !day || day > localDate(new Date()));
     if (c) { $("cap-course-info").innerHTML = `✓ Kurs vorhanden: <strong>${fmtRange(c.starts_at, c.ends_at)} · ${esc(c.location)}</strong>`; return; }
     const l = qList.find(x => x.name.toLowerCase() === $("cap-loc").value.trim().toLowerCase());
@@ -919,7 +959,7 @@
       const seh = list.filter(r => r.package === "komplett" || r.sehtest_passed != null), sehDone = seh.filter(r => r.sehtest_passed != null).length;
       return `<p class="start-big">${esc(c.location)} · ${fmtRange(c.starts_at, c.ends_at)}${c.status === "abgesagt" ? " · ABGESAGT" : ""}</p>
         <p class="small muted">${list.length} angemeldet · ${da} da${seh.length ? ` · Sehtests ${sehDone} von ${seh.length}` : ""}</p>
-        <div class="btn-row"><button class="btn" type="button" data-go="anwesenheit">Kurstag öffnen</button><button class="btn btn-ghost" type="button" data-open="${c.id}">Teilnehmerliste</button></div>`;
+        <div class="btn-row"><button class="btn" type="button" data-go="anwesenheit">Kurstag öffnen</button><button class="btn btn-ghost" type="button" data-qr="${c.id}">QR-Code zum Eintragen</button><button class="btn btn-ghost" type="button" data-open="${c.id}">Teilnehmerliste</button></div>`;
     }).join("") : `<p class="start-big">Heute ist kein Kurs.</p>${upcoming[0] ? `<p class="small muted">Nächster Kurs: ${dayText(upcoming[0].starts_at)} in ${esc(upcoming[0].location)}</p>` : ""}`);
     const st = db.status(), reissue = attRegs.filter(r => r.sehtest_reissue).length;
     const todo = [
@@ -938,6 +978,8 @@
   $("start-view").addEventListener("click", ev => {
     const go = ev.target.closest("[data-go]"), open = ev.target.closest("[data-open]");
     if (go) return goView(go.dataset.go);
+    const qr = ev.target.closest("[data-qr]");
+    if (qr) return openQr(courses.find(c => c.id === qr.dataset.qr));
     if (open) return goCourse(open.dataset.open);
     if (ev.target.closest("[data-sync]")) return runSync();
     if (ev.target.closest("[data-unchecked]")) {
@@ -1652,6 +1694,7 @@
     return `<div class="sc-entry" data-reg="${r.id}">
       <div class="sc-facts">
         <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : r.sehtest_only ? "Nur Sehtest, kein Kurs" : "Termin gelöscht"}</strong>${!c && r.sehtest_only ? "" : `<br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.virtual ? "nicht belegt, nur angemeldet" : c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span>`}</div>
+        ${r.checkin_at ? `<div><label>Datenblatt</label><span class="small">✍ selbst eingetragen und unterschrieben (QR-Code) am ${birthText(r.checkin_at.slice(0, 10))}</span></div>` : ""}
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
       ${!off && !c.virtual ? `<div class="att-btns">

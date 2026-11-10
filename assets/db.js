@@ -86,7 +86,8 @@
         check(await sb.from("push_subscriptions").delete().eq("endpoint", endpoint));
       },
       // Für den Abgleich der Verwaltung (assets/sync.js)
-      async putCourse(row) { check(await sb.from("courses").upsert(row)); },
+      // Den QR-Schlüssel nie mit einem alten Stand überschreiben: er wird nur über checkin_token gesetzt
+      async putCourse({ checkin_token, ...row }) { check(await sb.from("courses").upsert(row)); },
       async putRegistration(row) { check(await sb.from("registrations").upsert(row)); },
       async listAllRegistrations() { return fetchAll(() => sb.from("registrations").select("*").order("created_at").order("id")); },
       async listAllInvoices() { return fetchAll(() => sb.from("invoices").select("*").order("seq", { ascending: false }).order("id")); },
@@ -107,6 +108,15 @@
       async getNextSehtestNr() { return check(await sb.rpc("get_next_sehtest_nr")); },
       async setNextSehtestNr(nr) { return check(await sb.rpc("set_next_sehtest_nr", { p_next: nr })); },
       async renumberSehtest(id, nr) { return check(await sb.rpc("renumber_sehtest", { p_id: id, p_new: nr })) || []; },
+      // Selbsteintragung vor Ort per QR-Code
+      async checkinToken(courseId, renew) { return check(await sb.rpc("checkin_token", { p_course: courseId, p_new: Boolean(renew) })); },
+      async checkinCourse(token) { return check(await sb.rpc("checkin_course", { p_token: token })); },
+      async checkinRegister(d) {
+        return check(await sb.rpc("checkin_register", {
+          p_token: d.token, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
+          p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
+        }));
+      },
       // Bankverbindung und Steuernummer (nur für das Verwaltungs-Konto lesbar)
       async getSettings() {
         const row = check(await sb.from("app_settings").select("value").eq("key", "issuer").maybeSingle());
@@ -161,6 +171,11 @@
   const nrPlus = nr => nr.replace(/(\d+)$/, d => String(Number(d) + 1).padStart(d.length, "0"));
 
   // Demo: nächste Nummer wie in der Datenbank (eingestellte Startnummer, sonst S26-…)
+  function demoCheckin(db, token) {
+    const day = iso => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+    const shift = n => new Date(Date.now() + n * 864e5).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+    return db.courses.find(c => token && c.checkin_token === token && c.status !== "abgesagt" && day(c.starts_at) >= shift(-2) && day(c.starts_at) <= shift(14)) || null;
+  }
   function demoNextNr(db) {
     let next = null;
     try { next = localStorage.getItem("ehfy-demo-sehtest-next"); } catch (e) { /* egal */ }
@@ -310,6 +325,32 @@
         try { localStorage.setItem("ehfy-demo-sehtest-next", plus(after.length + 1)); } catch (e) { /* egal */ }
         save();
         return [r, ...after].filter(x => x.sehtest_issued_at && x.sehtest_reissue).map(x => ({ name: `${x.first_name} ${x.last_name}`, nr: x.sehtest_nr }));
+      },
+      // Selbsteintragung vor Ort (Demo, wie in der Datenbank)
+      async checkinToken(courseId, renew) {
+        const db = load(), c = db.courses.find(x => x.id === courseId);
+        if (!c) throw new Error("Termin nicht gefunden.");
+        if (!c.checkin_token || renew) { c.checkin_token = uid(); save(); }
+        return c.checkin_token;
+      },
+      async checkinCourse(token) {
+        const c = demoCheckin(load(), token);
+        return c ? { starts_at: c.starts_at, ends_at: c.ends_at } : null;
+      },
+      async checkinRegister(d) {
+        const db = load(), c = demoCheckin(db, d.token);
+        if (!c) throw new Error("Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.");
+        if (!d.signature || !d.signature.startsWith("data:image/png;base64,")) throw new Error("Bitte unterschreiben.");
+        const same = x => x.course_id === c.id && x.status !== "storniert" && x.first_name.toLowerCase() === d.first_name.trim().toLowerCase()
+          && x.last_name.toLowerCase() === d.last_name.trim().toLowerCase() && x.birth_date === d.birth_date;
+        if (db.regs.some(same)) throw new Error("Du bist für diesen Kurs schon eingetragen.");
+        const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+        db.regs.push({ id: uid(), course_id: c.id, first_name: d.first_name.trim(), last_name: d.last_name.trim(), birth_date: d.birth_date,
+          street: d.street, zip: d.zip, city: d.city, phone: d.phone || null, email: d.email || null, package: d.package === "komplett" ? "komplett" : "kurs",
+          status: new Date(c.starts_at).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) <= today ? "teilgenommen" : "angemeldet",
+          message: "manuell eingetragen", signature_png: d.signature, checkin_at: new Date().toISOString(), created_at: new Date().toISOString(), cancel_token: uid() });
+        save();
+        return d.first_name.trim();
       },
       async setNextSehtestNr(nr) {
         nr = String(nr || "").trim();
