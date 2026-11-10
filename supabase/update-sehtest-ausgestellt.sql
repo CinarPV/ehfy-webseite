@@ -1,9 +1,11 @@
 -- Sehtest-Protokoll, Teil 4: „Bescheinigung ausgestellt“ macht die Nummer fest.
 -- Nummer ändern zählt alle späteren Nummern mit; schon ausgestellte werden zum Neu-Ausstellen markiert.
--- Startnummer 3868. Einmal im Supabase SQL Editor ausführen. Löscht nichts.
+-- Dazu: Protokoll digital unterschrieben. Startnummer 3868. Einmal im Supabase SQL Editor ausführen. Löscht nichts.
 
 alter table public.registrations add column if not exists sehtest_issued_at timestamptz;
 alter table public.registrations add column if not exists sehtest_reissue boolean not null default false;
+-- Protokoll digital unterschrieben (die Unterschrift selbst liegt geschützt im Speicher „vorlagen“)
+alter table public.registrations add column if not exists sehtest_signed_at timestamptz;
 
 -- Nummer eines Sehtests ändern; alle späteren Nummern (gleicher Vorsatz, höhere Zahl) rücken fortlaufend nach.
 -- Rückgabe: Liste der schon ausgestellten Bescheinigungen, deren Nummer sich geändert hat.

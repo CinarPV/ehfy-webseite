@@ -847,7 +847,8 @@
       const bytes = await EHFYDocs.sehtestProtocols([{
         first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
         nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
-        date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no
+        date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
+        signature: r.sehtest_signed_at ? await signatureBytes() : null
       }], await issuer(), loadFont);
       showPdf(bytes, `Sehtest-Protokoll${r.sehtest_nr ? "_" + r.sehtest_nr : ""}_${r.last_name}_${r.first_name}.pdf`, win);
     } catch (e) { if (win) win.close(); showError(e.message); }
@@ -902,6 +903,7 @@
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
+        <div class="st-group"><span class="st-label">Unterschrift:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="signed" data-val="ja">✍ Unterschreiben</button><span class="small muted">setzt deine hinterlegte Unterschrift unten rechts ins Protokoll</span></div>
       </div>
       <p class="small" id="sd-error" style="color:var(--danger)"></p>
       <div class="btn-row"><button class="btn" type="button" id="sd-save">Ergebnis übernehmen und Protokoll erstellen</button>
@@ -927,6 +929,12 @@
       const clear = ev.target.closest("[data-clear]");
       if (clear) { delete stRun.marks[clear.dataset.clear]; return stRender(); }
       const pick = ev.target.closest("[data-pick]");
+      if (pick && pick.dataset.pick === "signed" && stRun.signed !== "ja") {
+        return signatureBytes().then(sig => {
+          if (!sig) { $("sd-error").textContent = "Noch keine Unterschrift hinterlegt. Bitte zuerst unter Mehr → Einstellungen → Unterschrift erfassen."; return; }
+          stRun.signed = "ja"; stRender();
+        });
+      }
       if (pick) { const k = pick.dataset.pick; stRun[k] = stRun[k] === pick.dataset.val ? null : pick.dataset.val; return stRender(); }
     });
     $("sd-scan").onclick = () => scanId($("sd-idinfo"), res => {
@@ -978,7 +986,7 @@
   }
   async function openSehtest(r, c, done) {
     const d = stDialog();
-    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, draft: r.sehtest_nr ? "" : await draftNr() };
+    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr ? "" : await draftNr() };
     // Mit der Tafel weitermachen, die schon angefangen ist
     const sets = S.overall(stRun.marks).sets;
     if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
@@ -1002,7 +1010,8 @@
       sehtest_marks: marks, sehtest_flow: flow, sehtest_aid_kind: aid, sehtest_aid: aid ? aid !== "ohne" : null, sehtest_id_doc: idDoc,
       sehtest_id_no: $("sd-idno").value.trim() || null,
       ...(stRun.birth ? { birth_date: stRun.birth } : {}),
-      sehtest_on: $("sd-date").value || (c ? dayOf(c.starts_at) : localDate(new Date())), sehtest_none: false
+      sehtest_on: $("sd-date").value || (c ? dayOf(c.starts_at) : localDate(new Date())), sehtest_none: false,
+      sehtest_signed_at: stRun.signed ? r.sehtest_signed_at || new Date().toISOString() : null
     };
     const typed = $("sd-nr").value.trim();
     // Eigene Nummer nur, wenn sie von der vorgeschlagenen abweicht; sonst vergibt die Datenbank sie
@@ -2336,8 +2345,40 @@
     } catch (e) { pushMsg("Hat nicht geklappt: " + e.message); }
   };
 
+  // ---------- Unterschrift: einmal mit Finger oder Maus zeichnen, geschützt gespeichert (als kleine PDF) ----------
+  const signatureBytes = () => db.getTemplate("unterschrift").catch(() => null);
+  function signaturePad() {
+    const cv = $("sig-pad"), ctx = cv.getContext("2d");
+    let down = false, drawn = false;
+    const clear = () => { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height); drawn = false; };
+    const pos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
+    clear();
+    ctx.lineWidth = 5; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = "#0a2a8a";
+    cv.addEventListener("pointerdown", e => { down = drawn = true; cv.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); e.preventDefault(); });
+    cv.addEventListener("pointermove", e => { if (!down) return; ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); });
+    cv.addEventListener("pointerup", () => { down = false; });
+    $("sig-clear").onclick = clear;
+    $("sig-save").onclick = async () => {
+      if (!drawn) { $("sig-msg").textContent = "Bitte zuerst im weißen Feld unterschreiben."; return; }
+      try {
+        await ensurePdf();
+        const { PDFDocument } = window.PDFLib, pdf = await PDFDocument.create();
+        const png = await pdf.embedPng(cv.toDataURL("image/png"));
+        pdf.addPage([cv.width, cv.height]).drawImage(png, { x: 0, y: 0, width: cv.width, height: cv.height });
+        await db.saveTemplate("unterschrift", new Blob([await pdf.save()], { type: "application/pdf" }));
+        $("sig-msg").textContent = "✓ Unterschrift gespeichert.";
+        await showSignature();
+      } catch (e) { $("sig-msg").textContent = e.message; }
+    };
+  }
+  async function showSignature() {
+    $("sig-state").innerHTML = (await signatureBytes()) ? '<span class="pill">Unterschrift hinterlegt</span> Neu zeichnen ersetzt sie.' : '<span class="pill pill-warn">fehlt noch</span>';
+  }
+  if ($("sig-pad")) { signaturePad(); }
+
   // ---------- Vorlagen ----------
   async function renderTemplates() {
+    showSignature().catch(() => {});
     const cards = await Promise.all(Object.entries(TEMPLATES).map(async ([key, label]) => {
       const has = Boolean(await db.getTemplate(key).catch(() => null));
       return `<div class="card">

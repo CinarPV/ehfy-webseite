@@ -440,6 +440,11 @@
       if (value) page.drawText(value, { x: lx + 2, y: sy + 5, size: 11, font: f.regular, color: rgb(C.ink) });
       page.drawLine({ start: { x: lx, y: sy }, end: { x: lx + w3, y: sy }, thickness: 0.8, color: rgb(C.ink) });
       page.drawText(label, { x: lx, y: sy - 12, size: 8, font: f.regular, color: rgb(C.muted) });
+      // Hinterlegte Unterschrift unten rechts über der Linie
+      if (i === 2 && p._sig) {
+        const h = Math.min(46, w3 * p._sig.height / p._sig.width), w = h * p._sig.width / p._sig.height;
+        page.drawPage(p._sig, { x: lx + (w3 - w) / 2, y: sy + 1, width: w, height: h });
+      }
     });
     // Fußzeile ohne Bankverbindung und Steuernummer
     const foot = `${issuer.name} · ${issuer.owner} · ${issuer.street} · ${issuer.zip} ${issuer.city}${issuer.phone ? " · Tel. " + issuer.phone : ""}`;
@@ -451,7 +456,10 @@
     const { PDFDocument } = root.PDFLib;
     const pdf = await PDFDocument.create();
     const f = await fonts(pdf, loadFont);
-    for (const p of list) sehtestPage(pdf, f, p, issuer);
+    for (const p of list) {
+      if (p.signature) [p._sig] = await pdf.embedPdf(p.signature);
+      sehtestPage(pdf, f, p, issuer);
+    }
     return pdf.save();
   }
 

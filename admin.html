@@ -41,7 +41,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-top no-print">
-            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 53</span></h1>
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 54</span></h1>
             <div class="sync-mini" id="sync-bar" role="status">
               <span class="sync-dot" id="sync-dot"></span>
               <span id="sync-text" class="small"></span>
@@ -284,6 +284,14 @@
             <h3 style="margin-top:8px">Vorlagen</h3>
             <p class="muted small" style="margin-bottom:14px">Deine leeren PDF-Vorlagen. Sie werden geschützt gespeichert und sind nicht öffentlich auf der Webseite.</p>
             <div class="grid grid-2" id="tpl-cards"></div>
+            <div class="card" style="margin-top:22px" id="sig-card">
+              <h3 style="margin-top:0">Unterschrift</h3>
+              <p class="small muted">Einmal mit dem Finger (Handy/Tablet) oder der Maus unterschreiben. Sie wird geschützt gespeichert und nur beim Knopf „Unterschreiben“ im Sehtest-Protokoll unten rechts eingesetzt.</p>
+              <p class="small" id="sig-state"></p>
+              <canvas id="sig-pad" width="600" height="200" style="width:100%;max-width:600px;aspect-ratio:3/1;border:2px dashed var(--line);border-radius:12px;background:#fff;touch-action:none;display:block"></canvas>
+              <div class="btn-row" style="margin-top:10px"><button class="btn btn-sm" type="button" id="sig-save">Unterschrift speichern</button><button class="btn btn-sm btn-ghost" type="button" id="sig-clear">Feld leeren</button></div>
+              <p class="small" id="sig-msg" role="status"></p>
+            </div>
             <div class="card" style="margin-top:22px" id="backup-card">
               <h3 style="margin-top:0">Sicherung</h3>
               <p class="small muted">Speichert alle Kurse, Schüler, Belege und Einstellungen als Datei auf diesem Gerät. Die Datei enthält persönliche Daten und deine Bankdaten, bewahre sie also sicher auf. PDF-Vorlagen und Protokolle sind nicht enthalten.</p>
