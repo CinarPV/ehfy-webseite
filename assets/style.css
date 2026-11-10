@@ -733,3 +733,19 @@ body[data-page="admin"] .section { padding-top: 22px; }
 .st-fix { color: var(--ok); font-weight: 700; font-size: .85rem; white-space: nowrap; }
 .st-reissue { display: inline-block; color: #fff; background: var(--danger); border-radius: 8px; padding: 1px 8px; font-weight: 700; font-size: .85rem; }
 .st-extra.st-top { margin: 4px 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+/* Schüler vor Ort erfassen */
+.start-capture { margin: 0 0 16px; }
+.start-capture-btn { width: 100%; padding: 18px 16px; font-size: 1.1rem; }
+.start-capture p { margin: 6px 2px 0; }
+.cap-dlg { width: min(640px, 100vw - 16px); padding: 18px 16px 22px; box-sizing: border-box; }
+.cap-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cap-head h3 { margin: 0; }
+.cap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin-bottom: 10px; align-items: end; }
+.cap-shots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; }
+.cap-shots .btn { padding: 16px 8px; border-radius: 14px; }
+.cap-more { margin: 0 0 10px; }
+.cap-more summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.cap-save { width: 100%; padding: 16px; }
+#cap-done h4 { margin: 18px 0 6px; }
+.cap-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 480px) { .cap-grid { grid-template-columns: 1fr; } }

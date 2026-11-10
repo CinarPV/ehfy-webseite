@@ -131,5 +131,47 @@
     return best;
   }
 
-  root.EHFYAusweis = { read, fromText, check };
+  // ---------- Teilnehmerdatenblatt: Text erkennen und typische Angaben herauslesen ----------
+  // Läuft ebenfalls auf dem Gerät. Handschrift wird nur teilweise erkannt: Ergebnis immer prüfen.
+  let sheetWorker = null;
+  async function readSheet(file, progress) {
+    loading = loading || loadScript(TESSERACT);
+    await loading;
+    if (!sheetWorker) sheetWorker = await root.Tesseract.createWorker("deu", 1, {
+      logger: m => { if (progress && m.status === "recognizing text") progress(Math.round(m.progress * 100)); }
+    });
+    const { data } = await sheetWorker.recognize(file);
+    return parseSheet(data.text || "");
+  }
+  function parseSheet(text) {
+    const lines = text.split(/\n/).map(l => l.replace(/[|_]+/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
+    const out = {};
+    const after = (re) => {
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(re);
+        if (!m) continue;
+        const rest = lines[i].slice(m.index + m[0].length).replace(/^[\s:.,-]+/, "").trim();
+        if (rest) return rest;
+        if (lines[i + 1]) return lines[i + 1];
+      }
+      return "";
+    };
+    const nice = t => t.replace(/[^A-Za-zÄÖÜäöüßÀ-ÿ' -]/g, "").trim().toLowerCase().replace(/(^|[\s-])\S/g, m => m.toUpperCase());
+    out.firstName = nice(after(/vorname/i).split(/\s{2,}|nachname|name/i)[0] || "");
+    out.lastName = nice(after(/(nach|familien)name|(^|\s)name(?!n)/i).split(/\s{2,}|vorname/i)[0] || "");
+    const all = lines.join("\n");
+    const date = all.match(/\b(\d{1,2})[.,/ ]\s?(\d{1,2})[.,/ ]\s?((?:19|20)\d{2})\b/);
+    if (date) out.birth = `${date[3]}-${date[2].padStart(2, "0")}-${date[1].padStart(2, "0")}`;
+    const mail = all.replace(/\s?@\s?/g, "@").match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/);
+    if (mail) out.email = mail[0].toLowerCase();
+    const phone = all.match(/(\+49|0)[\d /-]{7,}\d/);
+    if (phone) out.phone = phone[0].replace(/[^\d+]/g, "");
+    const zip = all.match(/\b(\d{5})\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß. -]{2,})/);
+    if (zip) { out.zip = zip[1]; out.city = zip[2].trim(); }
+    const street = all.match(/([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]+(?:stra(?:ß|ss)e|str\.|weg|platz|allee|gasse|ring) ?\d+ ?[a-z]?\b)/i);
+    if (street) out.street = street[1];
+    return out;
+  }
+
+  root.EHFYAusweis = { read, fromText, check, readSheet, parseSheet };
 })(typeof window !== "undefined" ? window : globalThis);

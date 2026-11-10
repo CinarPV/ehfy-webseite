@@ -576,6 +576,189 @@
     } catch (e) { $("rd-error").textContent = e.message; }
   });
 
+  // ---------- Schüler vor Ort erfassen (vor allem am Handy) ----------
+  // Ausweis/Pass oder Teilnehmerdatenblatt fotografieren, Angaben prüfen, speichern, nächster.
+  // Kursdatum ist heute, lässt sich aber ändern. Gibt es an dem Tag noch keinen Kurs, wird er beim Speichern angelegt.
+  let cap = null; // { idRes, sheetFile, done: [registrations] }
+  const CAP_FIELDS = [["first", "Vorname"], ["last", "Nachname"], ["birth", "Geburtsdatum", "TT.MM.JJJJ"], ["idno", "Ausweis-Nr. (freiwillig)"]];
+  const CAP_MORE = [["street", "Straße und Nr."], ["zip", "PLZ"], ["city", "Ort"], ["phone", "Telefon"], ["email", "E-Mail"]];
+  const capInput = ([k, l, ph]) => `<div class="field"><label for="cap-${k}">${l}</label><input id="cap-${k}" autocomplete="off"${ph ? ` placeholder="${ph}" inputmode="numeric"` : ""}${k === "email" ? ' type="email"' : k === "phone" ? ' type="tel"' : ""}></div>`;
+  function capDialog() {
+    let d = $("cap-dialog");
+    if (d) return d;
+    d = document.createElement("dialog");
+    d.id = "cap-dialog"; d.className = "cap-dlg";
+    d.innerHTML = `<div class="cap-head"><h3>Schüler vor Ort erfassen</h3><button class="btn btn-sm btn-ghost" type="button" id="cap-close">Fertig</button></div>
+      <div class="cap-grid">
+        <div class="field"><label for="cap-date">Kursdatum</label><input type="date" id="cap-date"></div>
+        <div class="field"><label for="cap-loc">Ort</label><input id="cap-loc" list="loc-list" autocomplete="off"></div>
+      </div>
+      <p class="small" id="cap-course-info"></p>
+      <div class="cap-grid hidden" id="cap-times">
+        <div class="field"><label for="cap-start">Beginn</label><input id="cap-start"></div>
+        <div class="field"><label for="cap-end">Ende</label><input id="cap-end"></div>
+      </div>
+      <div class="cap-shots">
+        <button class="btn" type="button" id="cap-id">📷 Ausweis / Pass</button>
+        <button class="btn btn-outline" type="button" id="cap-sheet">📷 Datenblatt</button>
+      </div>
+      <p class="small" id="cap-info" role="status"></p>
+      <div class="cap-grid">${CAP_FIELDS.map(capInput).join("")}</div>
+      <details class="cap-more"><summary>Adresse, Telefon, E-Mail</summary><div class="cap-grid">${CAP_MORE.map(capInput).join("")}</div></details>
+      <div class="cap-grid">
+        <div class="field"><label for="cap-pkg">Gebucht</label><select id="cap-pkg"><option value="kurs">Erste-Hilfe-Kurs</option><option value="komplett">Kurs + Sehtest</option></select></div>
+        <label class="check-line" id="cap-here-box"><input type="checkbox" id="cap-here" checked> Ist da (als „✓ Da“ eintragen)</label>
+      </div>
+      <p class="form-error" id="cap-error"></p>
+      <button class="btn cap-save" type="button" id="cap-save">Speichern und nächster Schüler</button>
+      <div id="cap-done"></div>`;
+    document.body.appendChild(d);
+    timeField($("cap-start")); timeField($("cap-end"));
+    $("cap-close").onclick = () => d.close();
+    d.addEventListener("close", () => { if (cap && cap.done.length) loadCourses().catch(() => {}); });
+    $("cap-date").addEventListener("change", capCourseInfo);
+    $("cap-loc").addEventListener("input", capCourseInfo);
+    $("cap-id").onclick = () => scanId($("cap-info"), res => {
+      cap.idRes = res;
+      $("cap-first").value = res.firstName; $("cap-last").value = res.lastName;
+      if (res.birth) $("cap-birth").value = birthText(res.birth);
+      if (res.docNumber) $("cap-idno").value = res.docNumber;
+      return `✓ Übernommen: ${esc(res.firstName)} ${esc(res.lastName)}. Bitte kurz prüfen (Umlaute stehen im Ausweis als AE/OE/UE).`;
+    });
+    $("cap-sheet").onclick = () => {
+      const input = document.createElement("input");
+      input.type = "file"; input.accept = "image/*"; input.setAttribute("capture", "environment");
+      input.onchange = async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const info = $("cap-info");
+        info.textContent = "Datenblatt wird gelesen … (beim ersten Mal lädt die Texterkennung, das dauert etwas)";
+        try {
+          cap.sheetFile = await shrinkPhoto(file);
+          const res = await window.EHFYAusweis.readSheet(cap.sheetFile, pct => { info.textContent = `Datenblatt wird gelesen … ${pct} %`; });
+          const put = (k, v) => { if (v && !$("cap-" + k).value.trim()) $("cap-" + k).value = v; };
+          put("first", res.firstName); put("last", res.lastName); put("birth", res.birth && birthText(res.birth));
+          put("street", res.street); put("zip", res.zip); put("city", res.city); put("phone", res.phone); put("email", res.email);
+          const got = ["firstName", "lastName", "birth", "street", "zip", "phone", "email"].filter(k => res[k]).length;
+          if (res.street || res.zip || res.phone || res.email) $("cap-dialog").querySelector(".cap-more").open = true;
+          info.innerHTML = (got ? `✓ ${got} Angaben erkannt – bitte prüfen und ergänzen. ` : "Die Schrift wurde nicht erkannt – bitte die Angaben eintippen. ")
+            + "Das Foto vom Datenblatt wird beim Schüler gespeichert.";
+        } catch (e) { info.textContent = e.message; }
+      };
+      input.click();
+    };
+    $("cap-save").onclick = capSave;
+    $("cap-done").addEventListener("click", async ev => {
+      const b = ev.target.closest("[data-cap-del]");
+      if (!b) return;
+      const r = cap.done.find(x => x.id === b.dataset.capDel);
+      if (!r || !confirm(`${r.first_name} ${r.last_name} wieder löschen?`)) return;
+      try { await removeRegistration(r); cap.done = cap.done.filter(x => x !== r); capRenderDone(); await loadCourses(); } catch (e) { $("cap-error").textContent = e.message; }
+    });
+    return d;
+  }
+  // Große Handyfotos verkleinern: schneller zu lesen und kleiner gespeichert
+  async function shrinkPhoto(file) {
+    try {
+      const img = await createImageBitmap(file);
+      const k = Math.min(1, 2000 / Math.max(img.width, img.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      const blob = await new Promise(ok => cv.toBlob(ok, "image/jpeg", 0.85));
+      return blob ? new File([blob], "datenblatt.jpg", { type: "image/jpeg" }) : file;
+    } catch (e) { return file; }
+  }
+  const capDay = c => localDate(new Date(c.starts_at));
+  function capCourse() {
+    const day = $("cap-date").value, loc = $("cap-loc").value.trim().toLowerCase();
+    const same = courses.filter(c => capDay(c) === day && c.status !== "abgesagt");
+    return same.find(c => c.location.toLowerCase() === loc) || (!loc && same[0]) || null;
+  }
+  function capCourseInfo() {
+    const c = capCourse(), day = $("cap-date").value;
+    $("cap-times").classList.toggle("hidden", Boolean(c));
+    $("cap-here-box").classList.toggle("hidden", !day || day > localDate(new Date()));
+    if (c) { $("cap-course-info").innerHTML = `✓ Kurs vorhanden: <strong>${fmtRange(c.starts_at, c.ends_at)} · ${esc(c.location)}</strong>`; return; }
+    const l = qList.find(x => x.name.toLowerCase() === $("cap-loc").value.trim().toLowerCase());
+    if (l && !$("cap-start").dataset.touched) { $("cap-start").value = l.start || "10:00"; $("cap-end").value = l.end || "17:30"; }
+    $("cap-course-info").textContent = "An diesem Tag gibt es hier noch keinen Kurs. Er wird beim ersten Speichern angelegt.";
+  }
+  function capReset() {
+    cap.idRes = null; cap.sheetFile = null;
+    [...CAP_FIELDS, ...CAP_MORE].forEach(([k]) => { $("cap-" + k).value = ""; });
+    $("cap-dialog").querySelector(".cap-more").open = false;
+    $("cap-error").textContent = "";
+  }
+  function capRenderDone() {
+    $("cap-done").innerHTML = cap.done.length ? `<h4>Gerade erfasst (${cap.done.length})</h4>` + cap.done.slice().reverse().map(r =>
+      `<div class="cap-row"><span>${esc(r.last_name)}, ${esc(r.first_name)}${r.birth_date ? ` <span class="small muted">· ${birthText(r.birth_date)}</span>` : ""}</span><button class="btn btn-sm btn-ghost" type="button" data-cap-del="${r.id}" style="color:var(--danger)">Löschen</button></div>`).join("") : "";
+  }
+  function openCapture() {
+    const d = capDialog(), today = localDate(new Date());
+    cap = { idRes: null, sheetFile: null, done: [] };
+    capReset();
+    const todays = courses.find(c => capDay(c) === today && c.status !== "abgesagt");
+    $("cap-date").value = today;
+    $("cap-loc").value = todays ? todays.location : (qList[0] && qList[0].name) || cfg.defaultLocation || "";
+    $("cap-start").value = "10:00"; $("cap-end").value = "17:30";
+    $("cap-info").textContent = ""; $("cap-done").innerHTML = "";
+    capCourseInfo();
+    d.showModal();
+    d.scrollTop = 0;
+  }
+  async function capSave() {
+    const err = $("cap-error"), btn = $("cap-save");
+    err.textContent = "";
+    const first = $("cap-first").value.trim(), last = $("cap-last").value.trim();
+    if (!first || !last) { err.textContent = "Bitte Vor- und Nachname eintragen."; return; }
+    const birth = EHFY.parseBirth($("cap-birth").value);
+    if ($("cap-birth").value.trim() && !birth) { err.textContent = "Bitte das Geburtsdatum so eingeben: TT.MM.JJJJ."; return; }
+    const day = $("cap-date").value, loc = $("cap-loc").value.trim();
+    if (!day) { err.textContent = "Bitte das Kursdatum eintragen."; return; }
+    btn.disabled = true;
+    try {
+      let c = capCourse();
+      if (!c) {
+        if (!loc) throw new Error("Bitte den Ort eintragen.");
+        const start = $("cap-start").value || "10:00", end = $("cap-end").value;
+        const l = qList.find(x => x.name.toLowerCase() === loc.toLowerCase());
+        c = await db.saveCourse({
+          starts_at: new Date(`${day}T${start}`).toISOString(), ends_at: end && end > start ? new Date(`${day}T${end}`).toISOString() : null,
+          location: loc, address: (l && l.address) || loc, capacity: (l && l.capacity) || cfg.defaultCapacity || 12,
+          note: null, status: "offen", online_booking: false
+        });
+        courses.push({ ...c, booked: 0 });
+      }
+      const idno = $("cap-idno").value.trim();
+      const here = $("cap-here").checked && day <= localDate(new Date());
+      const row = await db.addRegistration({
+        course_id: c.id, first_name: first, last_name: last, birth_date: birth, package: $("cap-pkg").value,
+        ...(here ? { status: "teilgenommen" } : {}),
+        ...(idno ? { sehtest_id_no: idno, sehtest_id_doc: cap.idRes ? cap.idRes.idDoc : null } : {}),
+        email: $("cap-email").value.trim() || null, phone: $("cap-phone").value.trim() || null,
+        street: $("cap-street").value.trim() || null, zip: $("cap-zip").value.trim() || null, city: $("cap-city").value.trim() || null,
+        message: "manuell eingetragen" // keine Anmelde-Mail
+      });
+      let note = "";
+      if (cap.sheetFile) {
+        try {
+          await db.saveTemplate(protocolKey(row.id), await protocolPdf(cap.sheetFile));
+          await db.updateRegistration(row.id, { protocol_added_on: localDate(new Date()) });
+          row.protocol_added_on = localDate(new Date());
+        } catch (e) { note = " Das Foto vom Datenblatt konnte nicht gespeichert werden (kein Internet?). Die Angaben sind gespeichert."; }
+      }
+      cap.done.push(row);
+      capReset();
+      capRenderDone();
+      capCourseInfo();
+      $("cap-info").textContent = `✓ ${first} ${last} gespeichert.${note} Nächster Schüler:`;
+      $("cap-dialog").scrollTop = 0;
+    } catch (e) { err.textContent = e.message; }
+    finally { btn.disabled = false; }
+  }
+  $("cap-open").onclick = openCapture;
+
   // ---------- Abgleich: lokal arbeiten, dann „Synchronisieren“ ----------
   const changes = n => `${n} Änderung${n === 1 ? "" : "en"}`;
   function renderSync() {
