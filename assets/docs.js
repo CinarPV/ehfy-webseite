@@ -43,7 +43,7 @@
     city: { x: 348, y: 287, size: 12 },
     signDate: { x: 60, y: 82, size: 11 },
     // Unterschrift des Teilnehmers (Selbsteintragung per QR-Code) rechts neben Ort/Datum
-    sign: { x: 330, y: 74, w: 200, h: 56 }
+    sign: { x: 345, y: 64, w: 200, h: 56 }
   };
 
   const text = (page, s, p, font, color = C.ink) => page.drawText(String(s || ""), { x: p.x, y: p.y, size: p.size, font, color: rgb(color) });
