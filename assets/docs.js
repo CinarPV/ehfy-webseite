@@ -303,7 +303,8 @@
   // Inhalt der Quittung für eine Anmeldung
   function receiptItems(reg, course, packages) {
     const p = packages.find(x => x.key === reg.package) || packages[0];
-    const when = course.location === "Ort unbekannt" ? fmtLongDate(course.starts_at) : `${fmtLongDate(course.starts_at)} in ${course.location}`;
+    // Auf allen Belegen steht als Kursort immer Siegen (Sitz der Ausbildungsstelle), egal wo der Kurs stattfand
+    const when = `${fmtLongDate(course.starts_at)} in Siegen`;
     const name = p.key === "komplett" ? "Erste-Hilfe-Kurs Komplettpaket (mit Sehtest und 2 Passbildern gratis)" : "Erste-Hilfe-Kurs";
     const text = `${name}\nKurs am ${when}`;
     return [{ text, qty: 1, price: p.price }];

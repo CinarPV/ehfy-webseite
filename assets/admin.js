@@ -598,10 +598,8 @@
         <div class="field"><label for="cap-start">Beginn</label><input id="cap-start"></div>
         <div class="field"><label for="cap-end">Ende</label><input id="cap-end"></div>
       </div>
-      <div class="cap-shots">
-        <button class="btn" type="button" id="cap-id">📷 Ausweis / Pass</button>
-        <button class="btn btn-outline" type="button" id="cap-sheet">📷 Datenblatt</button>
-      </div>
+      <button class="btn cap-read" type="button" id="cap-read">📷 Daten auslesen</button>
+      <p class="small muted" style="margin:4px 0 0">Ausweis (Vorder- und Rückseite), Teilnehmerdatenblatt oder Zettel fotografieren.</p>
       <p class="small" id="cap-info" role="status"></p>
       <div class="cap-grid">${CAP_FIELDS.map(capInput).join("")}</div>
       <details class="cap-more"><summary>Adresse, Telefon, E-Mail</summary><div class="cap-grid">${CAP_MORE.map(capInput).join("")}</div></details>
@@ -618,32 +616,12 @@
     d.addEventListener("close", () => { if (cap && cap.done.length) loadCourses().catch(() => {}); });
     $("cap-date").addEventListener("change", capCourseInfo);
     $("cap-loc").addEventListener("input", capCourseInfo);
-    $("cap-id").onclick = () => scanId($("cap-info"), res => {
-      cap.idRes = res;
-      $("cap-first").value = res.firstName; $("cap-last").value = res.lastName;
-      if (res.birth) $("cap-birth").value = birthText(res.birth);
-      if (res.docNumber) $("cap-idno").value = res.docNumber;
-      return `✓ Übernommen: ${esc(res.firstName)} ${esc(res.lastName)}. Bitte kurz prüfen (Umlaute stehen im Ausweis als AE/OE/UE).`;
-    });
-    $("cap-sheet").onclick = () => {
+    $("cap-read").onclick = () => {
       const input = document.createElement("input");
       input.type = "file"; input.accept = "image/*"; input.setAttribute("capture", "environment");
       input.onchange = async () => {
         const file = input.files[0];
-        if (!file) return;
-        const info = $("cap-info");
-        info.textContent = "Datenblatt wird gelesen … (beim ersten Mal lädt die Texterkennung, das dauert etwas)";
-        try {
-          cap.sheetFile = await shrinkPhoto(file);
-          const res = await window.EHFYAusweis.readSheet(cap.sheetFile, pct => { info.textContent = `Datenblatt wird gelesen … ${pct} %`; });
-          const put = (k, v) => { if (v && !$("cap-" + k).value.trim()) $("cap-" + k).value = v; };
-          put("first", res.firstName); put("last", res.lastName); put("birth", res.birth && birthText(res.birth));
-          put("street", res.street); put("zip", res.zip); put("city", res.city); put("phone", res.phone); put("email", res.email);
-          const got = ["firstName", "lastName", "birth", "street", "zip", "phone", "email"].filter(k => res[k]).length;
-          if (res.street || res.zip || res.phone || res.email) $("cap-dialog").querySelector(".cap-more").open = true;
-          info.innerHTML = (got ? `✓ ${got} Angaben erkannt – bitte prüfen und ergänzen. ` : "Die Schrift wurde nicht erkannt – bitte die Angaben eintippen. ")
-            + "Das Foto vom Datenblatt wird beim Schüler gespeichert.";
-        } catch (e) { info.textContent = e.message; }
+        if (file) await capRead(file).catch(e => { $("cap-info").textContent = e.message; });
       };
       input.click();
     };
@@ -656,6 +634,51 @@
       try { await removeRegistration(r); cap.done = cap.done.filter(x => x !== r); capRenderDone(); await loadCourses(); } catch (e) { $("cap-error").textContent = e.message; }
     });
     return d;
+  }
+  // Ein Foto, automatisch erkannt: Ausweis-Rückseite / Reisepass (Lesezeile), Ausweis-Vorderseite oder Datenblatt/Zettel
+  async function capRead(file) {
+    const info = $("cap-info"), A = window.EHFYAusweis;
+    const set = (k, v) => { if (v) $("cap-" + k).value = v; };
+    const put = (k, v) => { if (v && !$("cap-" + k).value.trim()) $("cap-" + k).value = v; };
+    info.textContent = "Foto wird gelesen … (beim ersten Mal lädt die Texterkennung, das dauert etwas)";
+    const small = await shrinkPhoto(file);
+    const mrz = await A.read(file, pct => { info.textContent = `Foto wird gelesen … ${pct} %`; });
+    if (mrz) {
+      // Ausweis oder Pass: die Angaben aus der Lesezeile sind verlässlich und ersetzen alles andere
+      cap.idRes = mrz;
+      set("first", mrz.firstName); set("last", mrz.lastName); set("birth", mrz.birth && birthText(mrz.birth)); set("idno", mrz.docNumber);
+      const unsure = mrz.allOk ? "" : " <strong style=\"color:var(--danger)\">Nummer oder Geburtsdatum unsicher gelesen – bitte mit dem Ausweis vergleichen.</strong>";
+      if (mrz.idDoc === "reisepass") {
+        info.innerHTML = `✓ <strong>Reisepass erkannt:</strong> ${esc(mrz.firstName)} ${esc(mrz.lastName)}. Im Reisepass steht keine Adresse – bitte unten eintragen.${unsure}`;
+        $("cap-dialog").querySelector(".cap-more").open = true;
+        return;
+      }
+      info.textContent = "Ausweis erkannt – Adresse wird gelesen …";
+      const back = await A.readSheet(small).catch(() => ({}));
+      set("street", back.street); set("zip", back.zip); set("city", back.city);
+      $("cap-dialog").querySelector(".cap-more").open = true;
+      info.innerHTML = `✓ <strong>Ausweis erkannt:</strong> ${esc(mrz.firstName)} ${esc(mrz.lastName)}, Ausweis-Nr. ${esc(mrz.docNumber)}. `
+        + (back.zip || back.street ? "Adresse übernommen – bitte kurz prüfen." : "Die Adresse wurde nicht erkannt – bitte eintragen.")
+        + " Umlaute stehen im Ausweis als AE/OE/UE." + unsure;
+      return;
+    }
+    const res = await A.readSheet(small, pct => { info.textContent = `Foto wird gelesen … ${pct} %`; });
+    if (/personalausweis|identity\s*card|carte\s*d.identit|bundesrepublik|reisepass|passport|aufenthaltstitel/i.test(res.text)) {
+      // Vorderseite: Nummer steht oben rechts, der Rest kommt sicherer von der Rückseite
+      const nr = res.text.toUpperCase().match(/\b[CFGHJKLMNPRTVWXYZ][CFGHJKLMNPRTVWXYZ0-9]{8}\b/);
+      if (nr) set("idno", nr[0]);
+      put("first", res.firstName); put("last", res.lastName); put("birth", res.birth && birthText(res.birth));
+      info.innerHTML = `✓ <strong>Ausweis erkannt (Vorderseite).</strong> 👉 Bitte jetzt die <strong>Rückseite</strong> fotografieren – dort stehen die Adresse und die Lesezeile mit Name, Geburtsdatum und Ausweisnummer.`;
+      return;
+    }
+    // Teilnehmerdatenblatt oder Zettel: Angaben vorschlagen, Foto beim Schüler speichern
+    cap.sheetFile = small;
+    put("first", res.firstName); put("last", res.lastName); put("birth", res.birth && birthText(res.birth));
+    put("street", res.street); put("zip", res.zip); put("city", res.city); put("phone", res.phone); put("email", res.email);
+    const got = ["firstName", "lastName", "birth", "street", "zip", "phone", "email"].filter(k => res[k]).length;
+    if (res.street || res.zip || res.phone || res.email) $("cap-dialog").querySelector(".cap-more").open = true;
+    info.innerHTML = (got ? `✓ <strong>Datenblatt/Zettel:</strong> ${got} Angaben erkannt – bitte prüfen und ergänzen. ` : "Die Schrift wurde nicht erkannt – bitte die Angaben eintippen. ")
+      + "Das Foto wird beim Schüler gespeichert.";
   }
   // Große Handyfotos verkleinern: schneller zu lesen und kleiner gespeichert
   async function shrinkPhoto(file) {
@@ -698,9 +721,9 @@
     const d = capDialog(), today = localDate(new Date());
     cap = { idRes: null, sheetFile: null, done: [] };
     capReset();
-    const todays = courses.find(c => capDay(c) === today && c.status !== "abgesagt");
     $("cap-date").value = today;
-    $("cap-loc").value = todays ? todays.location : (qList[0] && qList[0].name) || cfg.defaultLocation || "";
+    // Ort ist in der Regel Siegen
+    $("cap-loc").value = cfg.defaultLocation || "Siegen";
     $("cap-start").value = "10:00"; $("cap-end").value = "17:30";
     $("cap-info").textContent = ""; $("cap-done").innerHTML = "";
     capCourseInfo();

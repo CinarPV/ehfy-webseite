@@ -741,8 +741,7 @@ body[data-page="admin"] .section { padding-top: 22px; }
 .cap-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
 .cap-head h3 { margin: 0; }
 .cap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin-bottom: 10px; align-items: end; }
-.cap-shots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; }
-.cap-shots .btn { padding: 16px 8px; border-radius: 14px; }
+.cap-read { width: 100%; padding: 18px 12px; border-radius: 14px; font-size: 1.1rem; margin-top: 6px; }
 .cap-more { margin: 0 0 10px; }
 .cap-more summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .cap-save { width: 100%; padding: 16px; }

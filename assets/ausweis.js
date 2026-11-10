@@ -1,5 +1,6 @@
 // Ausweis lesen: maschinenlesbare Zone (MRZ) von Reisepass, Personalausweis und Aufenthaltstitel.
-// Übernommen werden NUR Vorname, Nachname, Geburtsdatum und Ausweisnummer (dazu die Ausweisart zum Ankreuzen).
+// Übernommen werden NUR Vorname, Nachname, Geburtsdatum und Ausweisnummer (dazu die Ausweisart zum Ankreuzen),
+// bei der Schnellerfassung zusätzlich die Anschrift von der Rückseite des Personalausweises.
 // Alles andere (Ablaufdatum, Geschlecht, Staatsangehörigkeit, Zugangsnummer …) wird nicht ausgewertet.
 // Die Texterkennung läuft komplett auf dem Gerät (Tesseract). Das Foto wird nirgends hochgeladen und nicht gespeichert.
 // Aufbau nach ICAO 9303: TD1 = 3 Zeilen à 30 Zeichen (Ausweiskarten), TD2 = 2 × 36, TD3 = 2 × 44 (Reisepass).
@@ -52,7 +53,8 @@
 
   const nameOf = s => {
     // Füllzeichen am Ende entfernen; die Erkennung liest „<“ dort oft als L oder K
-    const [last, ...rest] = letters(s).replace(/<[<LK]*$/, "").split("<<");
+    // „<<“ zwischen Nach- und Vorname liest die Erkennung manchmal als „<K<“ oder „<L<“
+    const [last, ...rest] = letters(s).replace(/<[<LK]*$/, "").replace(/<[KL]</g, "<<").split("<<");
     const nice = t => t.replace(/</g, " ").trim().toLowerCase().replace(/(^|[\s-])\S/g, m => m.toUpperCase());
     return { lastName: nice(last || ""), firstName: nice(rest.join(" ")) };
   };
@@ -141,7 +143,7 @@
       logger: m => { if (progress && m.status === "recognizing text") progress(Math.round(m.progress * 100)); }
     });
     const { data } = await sheetWorker.recognize(file);
-    return parseSheet(data.text || "");
+    return { ...parseSheet(data.text || ""), text: data.text || "" };
   }
   function parseSheet(text) {
     const lines = text.split(/\n/).map(l => l.replace(/[|_]+/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
@@ -167,9 +169,10 @@
     const phone = all.match(/(\+49|0)[\d /-]{7,}\d/);
     if (phone) out.phone = phone[0].replace(/[^\d+]/g, "");
     const zip = all.match(/\b(\d{5})\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß. -]{2,})/);
-    if (zip) { out.zip = zip[1]; out.city = zip[2].trim(); }
+    const cap = t => t.toLowerCase().replace(/(^|[\s-])\S/g, m => m.toUpperCase());
+    if (zip) { out.zip = zip[1]; out.city = cap(zip[2].trim()); }
     const street = all.match(/([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]+(?:stra(?:ß|ss)e|str\.|weg|platz|allee|gasse|ring) ?\d+ ?[a-z]?\b)/i);
-    if (street) out.street = street[1];
+    if (street) out.street = /[a-zäöü]/.test(street[1]) ? street[1] : cap(street[1]);
     return out;
   }
 
