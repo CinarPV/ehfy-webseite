@@ -108,6 +108,8 @@
       async getNextSehtestNr() { return check(await sb.rpc("get_next_sehtest_nr")); },
       async setNextSehtestNr(nr) { return check(await sb.rpc("set_next_sehtest_nr", { p_next: nr })); },
       async renumberSehtest(id, nr) { return check(await sb.rpc("renumber_sehtest", { p_id: id, p_new: nr })) || []; },
+      async setSehtestNr(id, nr, voidOther) { return check(await sb.rpc("set_sehtest_nr", { p_id: id, p_new: nr, p_void_other: Boolean(voidOther) })); },
+      async voidSehtest(id, reason) { return check(await sb.rpc("void_sehtest", { p_id: id, p_reason: reason || null })); },
       // Selbsteintragung vor Ort per QR-Code
       async checkinToken(courseId, renew) { return check(await sb.rpc("checkin_token", { p_course: courseId, p_new: Boolean(renew) })); },
       async checkinCourse(token) { return check(await sb.rpc("checkin_course", { p_token: token })); },
@@ -297,7 +299,7 @@
         const first = r.sehtest_passed == null;
         Object.assign(r, patch);
         // Wie in der Datenbank: Nummer erst beim ersten Ergebnis
-        if (r.sehtest_passed != null && !r.sehtest_nr && first) r.sehtest_nr = demoNextNr(db);
+        if (r.sehtest_passed != null && !r.sehtest_nr && !r.sehtest_void_at && first) r.sehtest_nr = demoNextNr(db);
         save();
         return { id, sehtest_nr: r.sehtest_nr || null };
       },
@@ -331,6 +333,32 @@
         try { localStorage.setItem("ehfy-demo-sehtest-next", plus(after.length + 1)); } catch (e) { /* egal */ }
         save();
         return [r, ...after].filter(x => x.sehtest_issued_at && x.sehtest_reissue).map(x => ({ name: `${x.first_name} ${x.last_name}`, nr: x.sehtest_nr }));
+      },
+      // Nummer setzen / Ausschuss (Demo, wie in der Datenbank)
+      async voidSehtest(id, reason) {
+        const db = load(), r = db.regs.find(x => x.id === id);
+        const nr = r.sehtest_nr || null;
+        Object.assign(r, { sehtest_void_at: new Date().toISOString(), sehtest_void_nr: nr || r.sehtest_void_nr || null, sehtest_void_reason: reason || null, sehtest_nr: null, sehtest_issued_at: null, sehtest_reissue: false });
+        save();
+        return nr;
+      },
+      async setSehtestNr(id, nr, voidOther) {
+        nr = String(nr || "").trim();
+        if (!/\d$/.test(nr)) throw new Error("Die Nummer muss mit einer Zahl enden, z. B. 3869.");
+        let db = load();
+        const o = db.regs.find(x => x.sehtest_nr === nr && x.id !== id);
+        if (o && !voidOther) throw new Error(`BELEGT|${o.first_name} ${o.last_name}|${o.sehtest_issued_at ? "ja" : "nein"}`);
+        if (o) { await this.voidSehtest(o.id, "Nummer an anderen Sehtest vergeben"); db = load(); }
+        const r = db.regs.find(x => x.id === id);
+        r.sehtest_nr = nr; r.sehtest_void_at = null;
+        let next = null;
+        try { next = localStorage.getItem("ehfy-demo-sehtest-next"); } catch (e) { /* egal */ }
+        const num = x => Number((x.match(/(\d+)$/) || [])[1]);
+        if (next && nr.replace(/\d+$/, "") === next.replace(/\d+$/, "") && num(nr) >= num(next)) {
+          try { localStorage.setItem("ehfy-demo-sehtest-next", nrPlus(nr)); } catch (e) { /* egal */ }
+        }
+        save();
+        return nr;
       },
       // Selbsteintragung vor Ort (Demo, wie in der Datenbank)
       async checkinToken(courseId, renew) {

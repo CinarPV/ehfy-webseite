@@ -753,3 +753,5 @@ body[data-page="admin"] .section { padding-top: 22px; }
 .qr-dlg { width: min(520px, 100vw - 16px); padding: 18px 16px 20px; box-sizing: border-box; }
 .qr-img { background: #fff; border-radius: 14px; padding: 10px; margin: 0 auto 10px; max-width: 360px; }
 .qr-img svg { display: block; width: 100%; height: auto; }
+.st-void { display: inline-block; color: var(--muted); background: var(--soft); border: 1px dashed var(--line); border-radius: 8px; padding: 1px 8px; font-weight: 700; font-size: .85rem; }
+.cert-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }

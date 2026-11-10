@@ -47,6 +47,7 @@
     renderSync();
     await loadCourses();
     askToSync(); // Noch offene Änderungen vom letzten Mal
+    setTimeout(() => askCertificates(), 800); // Bescheinigungen, die noch nicht geschrieben sind
   }
 
   // ---------- Uhrzeit-Felder: vier Ziffern, danach fängt die nächste Ziffer von vorne an ----------
@@ -880,6 +881,8 @@
   }
   $("rm-sync").onclick = () => { $("remind-dialog").close(); runSync(); };
   $("rm-later").onclick = () => $("remind-dialog").close();
+  // Nach der Sync-Frage gleich nach offenen Sehtest-Bescheinigungen fragen
+  $("remind-dialog").addEventListener("close", () => setTimeout(() => askCertificates(), 300));
 
   async function swRegistration() {
     return "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().catch(() => null) : null;
@@ -902,6 +905,7 @@
     }
     if (reg && reg.getNotifications) (await reg.getNotifications({ tag: "ehfy-sync-erinnerung" }).catch(() => [])).forEach(x => x.close());
     if (leftPending) { leftPending = false; askToSync(); }
+    setTimeout(() => askCertificates(), 500);
   });
 
   let lastView = "";
@@ -927,7 +931,7 @@
     // Für den Zurück-Knopf merken, woher du kommst
     const was = $("main-tabs").querySelector("button.active");
     // Beim Wechsel in einen anderen Bereich einmal fragen, ob synchronisiert werden soll
-    if (was && was !== b) askToSync(true);
+    if (was && was !== b) { askToSync(true); setTimeout(() => askCertificates(), 300); }
     if (was && was !== b && !navRestoring) window.EHFYNav.push(() => { navRestoring = true; was.click(); navRestoring = false; });
     $("main-tabs").querySelectorAll("button[data-view]").forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
@@ -973,9 +977,9 @@
         <p class="small muted">${list.length} angemeldet · ${da} da${seh.length ? ` · Sehtests ${sehDone} von ${seh.length}` : ""}</p>
         <div class="btn-row"><button class="btn" type="button" data-go="anwesenheit">Kurstag öffnen</button><button class="btn btn-ghost" type="button" data-qr="${c.id}">QR-Code zum Eintragen</button><button class="btn btn-ghost" type="button" data-open="${c.id}">Teilnehmerliste</button></div>`;
     }).join("") : `<p class="start-big">Heute ist kein Kurs.</p>${upcoming[0] ? `<p class="small muted">Nächster Kurs: ${dayText(upcoming[0].starts_at)} in ${esc(upcoming[0].location)}</p>` : ""}`);
-    const st = db.status(), reissue = attRegs.filter(r => r.sehtest_reissue).length;
+    const st = db.status(), unwritten = attRegs.filter(r => r.sehtest_nr && !r.sehtest_issued_at && !r.sehtest_void_at).length;
     const todo = [
-      [reissue, reissue === 1 ? "Sehtest-Bescheinigung neu ausstellen (Nummer geändert)" : "Sehtest-Bescheinigungen neu ausstellen (Nummer geändert)", 'data-go="sehtests"'],
+      [unwritten, unwritten === 1 ? "Sehtest-Bescheinigung noch nicht geschrieben" : "Sehtest-Bescheinigungen noch nicht geschrieben", 'data-go="sehtests"'],
       [uncheckedCount, uncheckedCount === 1 ? "Schüler noch nicht abgehakt" : "Schüler noch nicht abgehakt", 'data-unchecked'],
       [feeTotal, feeTotal === 1 ? "Ausfallgebühr offen" : "Ausfallgebühren offen", 'data-go="gebuehren"'],
       [st.pending, st.pending === 1 ? "Änderung nicht synchronisiert" : "Änderungen nicht synchronisiert", "data-sync"]
@@ -1070,29 +1074,81 @@
     if (done) await done();
     await openSehtest(row, null, done);
   }
-  // Nummer ändern: Alle späteren Nummern rücken fortlaufend nach.
-  // Ist die Bescheinigung schon ausgestellt, ist die Nummer fest: deutlich warnen, aber erlauben.
+  // Nummer ändern: Nur diese eine Nummer ändert sich, bestätigte Nummern anderer Sehtests bleiben.
+  // Ist die gewünschte Nummer belegt, warnen und anbieten, den anderen Eintrag als Ausschuss zu markieren.
   async function changeNr(r, nrIn) {
-    if (r.sehtest_issued_at && !confirm(`Achtung: Für Nr. ${r.sehtest_nr} (${r.first_name} ${r.last_name}) ist die Sehtest-Bescheinigung schon ausgestellt. Die Nummer ist fest und sollte nicht mehr geändert werden.\n\nTrotzdem ändern?`)) return false;
-    const nr = nrIn || (prompt("Neue Protokoll-Nummer. Alle späteren Nummern rücken fortlaufend nach:", r.sehtest_nr) || "").trim();
+    if (r.sehtest_issued_at && !confirm(`Achtung: Für Nr. ${r.sehtest_nr} (${r.first_name} ${r.last_name}) ist die Sehtest-Bescheinigung schon geschrieben. Die Nummer steht auf der Bescheinigung und sollte nicht mehr geändert werden.\n\nTrotzdem ändern?`)) return false;
+    const nr = nrIn || (prompt("Neue Protokoll-Nummer:", r.sehtest_nr || "") || "").trim();
     if (!nr || nr === r.sehtest_nr) return false;
-    let list;
-    try { list = await db.renumberSehtest(r.id, nr); } catch (e) { throw nrError(e, nr); }
-    if (list && list.length) alert(`Achtung! Diese Sehtest-Bescheinigungen waren schon ausgestellt und haben jetzt eine neue Nummer. Bitte mit der neuen Nummer neu ausstellen:\n\n${list.map(x => `Nr. ${x.nr} – ${x.name}`).join("\n")}`);
+    try { await db.setSehtestNr(r.id, nr, false); }
+    catch (e) {
+      const m = String(e.message || "").match(/BELEGT\|([^|]*)\|(\w+)/);
+      if (!m) throw e;
+      const ok = confirm(`Achtung: Die Nummer ${nr} ist schon belegt – ${m[1]} (Bescheinigung ${m[2] === "ja" ? "schon geschrieben" : "noch nicht geschrieben"}).\n\n`
+        + `Soll der Sehtest von ${m[1]} als AUSSCHUSS markiert werden (Schüler wollte doch keinen / Bescheinigung verschrieben)? Dann ist die Nummer frei und wird hier vergeben.`);
+      if (!ok) return false;
+      await db.setSehtestNr(r.id, nr, true);
+    }
+    if (r.sehtest_issued_at) await db.updateRegistration(r.id, { sehtest_issued_at: null });
     return true;
   }
-  // „Bescheinigung ausgestellt“: Ab dann ist die Nummer fest
-  const issuedOk = r => Boolean(r.sehtest_issued_at && !r.sehtest_reissue);
-  const issuedTag = r => !r.sehtest_nr ? "" : r.sehtest_reissue ? ' <span class="st-reissue">⚠ Nummer geändert – Bescheinigung neu ausstellen</span>'
-    : r.sehtest_issued_at ? ' <span class="st-fix">✓ ausgestellt · Nr. fest</span>' : "";
-  const issuedBtn = r => r.sehtest_nr ? `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${r.sehtest_reissue ? "Neu ausgestellt" : issuedOk(r) ? "✓ Bescheinigung ausgestellt" : "Bescheinigung ausgestellt"}</button>` : "";
+  // Als Ausschuss markieren: Nummer wird frei, der Eintrag bleibt zur Nachvollziehbarkeit
+  async function voidAsk(r) {
+    const reason = prompt(`Sehtest von ${r.first_name} ${r.last_name}${r.sehtest_nr ? ` (Nr. ${r.sehtest_nr})` : ""} als AUSSCHUSS markieren?\n\nDie Nummer wird dann frei. Grund (freiwillig), z. B. „Schüler wollte keinen“ oder „Bescheinigung verschrieben“:`, "");
+    if (reason === null) return false;
+    await db.voidSehtest(r.id, reason.trim());
+    return true;
+  }
+  // „Bescheinigung geschrieben“: auf Anhieb erkennbar, ob die Bescheinigung schon geschrieben ist
+  const issuedOk = r => Boolean(r.sehtest_issued_at);
+  const issuedTag = r => r.sehtest_void_at ? ` <span class="st-void">Ausschuss${r.sehtest_void_nr ? ` (Nr. ${esc(r.sehtest_void_nr)})` : ""}${r.sehtest_void_reason ? ` · ${esc(r.sehtest_void_reason)}` : ""}</span>`
+    : !r.sehtest_nr ? "" : r.sehtest_issued_at ? ' <span class="st-fix">✓ Bescheinigung geschrieben</span>' : ' <span class="st-reissue">✗ Bescheinigung noch nicht geschrieben</span>';
+  const issuedBtn = r => r.sehtest_nr && !r.sehtest_void_at ? `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${issuedOk(r) ? "✓ Bescheinigung geschrieben" : "Bescheinigung geschrieben?"}</button>`
+    + '<button class="btn btn-sm btn-ghost" type="button" data-st-void style="color:var(--danger)">Ausschuss</button>' : "";
   async function toggleIssued(r) {
-    if (r.sehtest_reissue) return db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString(), sehtest_reissue: false });
     if (r.sehtest_issued_at) {
-      if (!confirm(`Haken „Bescheinigung ausgestellt“ bei Nr. ${r.sehtest_nr} entfernen?\n\nDie Nummer ist dann nicht mehr fest.`)) return;
+      if (!confirm(`Haken „Bescheinigung geschrieben“ bei Nr. ${r.sehtest_nr} entfernen?`)) return;
       return db.updateRegistration(r.id, { sehtest_issued_at: null });
     }
     return db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString() });
+  }
+  // ---------- Nachfragen: Sehtest-Bescheinigung schon geschrieben? (bis „Ja“ kommt) ----------
+  const openCerts = async () => (await db.listAllRegistrations()).filter(r => r.sehtest_nr && !r.sehtest_issued_at && !r.sehtest_void_at);
+  function certDialog() {
+    let d = $("cert-dialog");
+    if (d) return d;
+    d = document.createElement("dialog");
+    d.id = "cert-dialog"; d.className = "qr-dlg";
+    d.innerHTML = `<h3 style="margin:0 0 6px">Sehtest-Bescheinigung schon geschrieben?</h3>
+      <div id="cert-list"></div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn btn-ghost" type="button" id="cert-later">Nein, noch nicht</button></div>`;
+    document.body.appendChild(d);
+    $("cert-later").onclick = () => d.close();
+    $("cert-list").addEventListener("click", async ev => {
+      const b = ev.target.closest("[data-cert]");
+      if (!b) return;
+      b.disabled = true;
+      await db.updateRegistration(b.dataset.cert, { sehtest_issued_at: new Date().toISOString() });
+      b.closest(".cert-row").remove();
+      if (!$("cert-list").children.length) { d.close(); refreshViews(); }
+    });
+    d.addEventListener("close", refreshViews);
+    return d;
+  }
+  async function askCertificates(onlyIds) {
+    if ($("app-view").classList.contains("hidden") || document.querySelector("dialog[open]")) return;
+    let list = await openCerts().catch(() => []);
+    if (onlyIds) list = list.filter(r => onlyIds.includes(r.id));
+    if (!list.length) return;
+    const d = certDialog();
+    $("cert-list").innerHTML = list.map(r => `<div class="cert-row"><span><strong>Nr. ${esc(r.sehtest_nr)}</strong> · ${esc(r.last_name)}, ${esc(r.first_name)}${r.sehtest_on ? ` <span class="small muted">· ${birthText(r.sehtest_on)}</span>` : ""}</span>
+      <button class="btn btn-sm" type="button" data-cert="${r.id}">Ja, geschrieben</button></div>`).join("");
+    d.showModal();
+  }
+  function refreshViews() {
+    if (!$("sehtest-view").classList.contains("hidden")) loadSehtests();
+    if (!$("students-view").classList.contains("hidden")) loadStudents();
+    if (!$("start-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden")) loadCourses();
   }
 
   // Sehtest-Protokoll als PDF, mit allem, was schon eingetragen ist
@@ -1301,11 +1357,14 @@
       const fresh = (await db.listAllRegistrations()).find(x => x.id === r.id) || { ...r, ...patch };
       if (stRun.done) await stRun.done();
       if (withResult) await sehtestPdf(fresh, c, msg => { if (msg) alert(msg); });
+      // Gleich nach dem Bestätigen fragen, ob die Bescheinigung schon geschrieben ist
+      if (withResult) setTimeout(() => askCertificates([r.id]), 600);
     } catch (e) { $("sd-error").textContent = e.message; }
     finally { btn.disabled = withResult ? S.overall(stRun.marks).state === "offen" : false; }
   }
   // Kurzer Stand und sichtbarer Knopf „Sehtest durchführen“
   function sehtestState(r) {
+    if (r.sehtest_void_at) return "";
     if (r.sehtest_passed === true) return `bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
     if (r.sehtest_passed === false) return `nicht bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
     return r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen" : "";
@@ -1645,6 +1704,7 @@
     if (r && ev.target.closest("[data-st-again]")) return againSehtest(r, loadCourses).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
+    if (r && ev.target.closest("[data-st-void]")) return voidAsk(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
     const stBtn = ev.target.closest("[data-st]");
     if (r && stBtn) {
       try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { errBox.textContent = e.message; }
@@ -1807,6 +1867,7 @@
     if (ev.target.closest("[data-st-again]")) return againSehtest(r, loadStudents).catch(e => show(e.message));
     if (ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadStudents).catch(e => show(e.message));
     if (ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadStudents).catch(e => show(e.message));
+    if (ev.target.closest("[data-st-void]")) return voidAsk(r).then(loadStudents).catch(e => show(e.message));
     const stBtn = ev.target.closest("[data-st]");
     if (stBtn) {
       try { await handleSehtest(stBtn, r, courseFor(r)); await loadStudents(); } catch (e) { show(e.message); }
@@ -1884,7 +1945,7 @@
         <div class="se-nr">${r.sehtest_nr ? esc(r.sehtest_nr) : '<span class="muted">ohne Nr.</span>'}</div>
         <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
         <div class="se-day small">${day ? birthText(day) : "–"}</div>
-        <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${state || "noch offen"}${issuedTag(r)}</div>
+        <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${r.sehtest_void_at ? "" : state || "noch offen"}${issuedTag(r)}</div>
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>
           <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>${issuedBtn(r)}
           ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}
@@ -2002,6 +2063,7 @@
     if (ev.target.closest("[data-st-print]")) return sehtestPdf(r, c, show);
     if (ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadSehtests).catch(e => show(e.message));
+    if (ev.target.closest("[data-st-void]")) return voidAsk(r).then(loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-se-del]")) {
       if (r.sehtest_nr) { show(`${r.first_name} ${r.last_name} hat schon die Protokoll-Nr. ${r.sehtest_nr}. Damit die Nummern lückenlos bleiben, wird der Eintrag nicht gelöscht.`); return; }
       if (!confirm(`${r.first_name} ${r.last_name} (nur Sehtest) endgültig löschen?`)) return;

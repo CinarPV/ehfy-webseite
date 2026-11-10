@@ -188,6 +188,23 @@
       await pull();
       return list;
     },
+    // Nummer gezielt setzen / Ausschuss: nur mit Internet, danach den neuen Stand holen
+    async setSehtestNr(id, nr, voidOther) {
+      await ready;
+      if (!isOnline()) throw new Error("Dafür braucht es Internet.");
+      if (outbox.length) await sync();
+      const res = await remote.setSehtestNr(id, nr, voidOther);
+      await pull();
+      return res;
+    },
+    async voidSehtest(id, reason) {
+      await ready;
+      if (!isOnline()) throw new Error("Dafür braucht es Internet.");
+      if (outbox.length) await sync();
+      const res = await remote.voidSehtest(id, reason);
+      await pull();
+      return res;
+    },
     removePushSubscription: e => remote.removePushSubscription(e),
     isPending: id => outbox.some(o => (o.row && o.row.id === id) || o.id === id || (o.row && o.row.course_id === id)),
 
