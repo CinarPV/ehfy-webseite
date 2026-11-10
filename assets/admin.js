@@ -674,8 +674,9 @@
     put("street", res.street); put("zip", res.zip); put("city", res.city); put("phone", res.phone); put("email", res.email);
     const got = ["firstName", "lastName", "birth", "street", "zip", "phone", "email"].filter(k => res[k]).length;
     if (res.street || res.zip || res.phone || res.email) $("cap-dialog").querySelector(".cap-more").open = true;
-    info.innerHTML = (got ? `✓ <strong>Datenblatt/Zettel:</strong> ${got} Angaben erkannt – bitte prüfen und ergänzen. ` : "Die Schrift wurde nicht erkannt – bitte die Angaben eintippen. ")
-      + "Das Foto wird beim Schüler gespeichert.";
+    const tips = "Tipps: nah ran, sodass Ausweis oder Zettel das Bild füllt · gerade von oben · gutes Licht, keine Spiegelung · beim Ausweis die Rückseite mit den „&lt;&lt;&lt;“-Zeilen.";
+    info.innerHTML = got ? `✓ <strong>Datenblatt/Zettel:</strong> ${got} Angaben erkannt – bitte prüfen und ergänzen. Das Foto wird beim Schüler gespeichert.`
+      : `<strong style="color:var(--danger)">Nicht lesbar.</strong> Bitte noch einmal fotografieren oder eintippen. ${tips}`;
   }
   // Große Handyfotos verkleinern: schneller zu lesen und kleiner gespeichert
   async function shrinkPhoto(file) {

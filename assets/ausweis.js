@@ -100,15 +100,23 @@
   }
 
   // Bild für die Erkennung vorbereiten: verkleinern, Graustufen, kräftiger Kontrast; optional nur unterer Teil
-  async function prepare(file, part) {
+  // rot: Foto um 90/180/270 Grad drehen (Handy quer oder Ausweis schräg hingelegt)
+  async function prepare(file, part, rot = 0) {
     const img = await createImageBitmap(file);
-    const scale = Math.min(1, 2000 / Math.max(img.width, img.height));
-    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+    const scale = Math.min(1, 2400 / Math.max(img.width, img.height));
+    const side = rot === 90 || rot === 270;
+    const w = Math.round((side ? img.height : img.width) * scale), h = Math.round((side ? img.width : img.height) * scale);
+    const full = document.createElement("canvas");
+    full.width = w; full.height = h;
+    const fx = full.getContext("2d");
+    fx.translate(w / 2, h / 2); fx.rotate(rot * Math.PI / 180);
+    const iw = img.width * scale, ih = img.height * scale;
+    fx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
     const y0 = part ? Math.round(h * (1 - part)) : 0;
     const cv = document.createElement("canvas");
     cv.width = w; cv.height = h - y0;
     const ctx = cv.getContext("2d");
-    ctx.drawImage(img, 0, -y0, w, h);
+    ctx.drawImage(full, 0, -y0);
     const px = ctx.getImageData(0, 0, cv.width, cv.height), d = px.data;
     for (let i = 0; i < d.length; i += 4) {
       const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
@@ -123,9 +131,10 @@
   async function read(file, progress) {
     const w = await getWorker(progress);
     let best = null;
-    // Zuerst nur der untere Teil (dort steht die MRZ), dann das ganze Bild
-    for (const part of [0.45, 0]) {
-      const { data } = await w.recognize(await prepare(file, part));
+    // Zuerst nur der untere Teil (dort steht die MRZ), dann das ganze Bild, dann gedreht
+    const tries = [[0.45, 0], [0, 0], [0, 90], [0, 270], [0.45, 180]];
+    for (const [part, rot] of tries) {
+      const { data } = await w.recognize(await prepare(file, part, rot));
       const res = fromText(data.text);
       if (res && (!best || res.checks.filter(Boolean).length > best.checks.filter(Boolean).length)) best = res;
       if (best && best.allOk) break;
@@ -142,9 +151,20 @@
     if (!sheetWorker) sheetWorker = await root.Tesseract.createWorker("deu", 1, {
       logger: m => { if (progress && m.status === "recognizing text") progress(Math.round(m.progress * 100)); }
     });
-    const { data } = await sheetWorker.recognize(file);
-    return { ...parseSheet(data.text || ""), text: data.text || "" };
+    // Gerade und gedreht lesen, das Ergebnis mit den meisten echten Wörtern gewinnt
+    let best = null;
+    for (const rot of [0, 90, 270]) {
+      const { data } = await sheetWorker.recognize(await prepare(file, 0, rot));
+      const text = data.text || "", score = realWords(text);
+      if (!best || score > best.score) best = { text, score };
+      if (score >= 6) break;
+    }
+    return { ...parseSheet(best.text), text: best.text, score: best.score };
   }
+  // Wie viele Wörter sehen echt aus (Buchstaben, mit Vokal)? Dient als Maß, ob überhaupt etwas lesbar war
+  const realWords = text => (text.match(/[A-Za-zÄÖÜäöüß]{3,}/g) || []).filter(w => /[aeiouäöüy]/i.test(w) && !/(.)\1\1/.test(w)).length;
+  // Nur echt aussehende Namen übernehmen, sonst lieber leer lassen
+  const plausibleName = t => /^[A-ZÄÖÜ][a-zäöüßà-ÿ']+([ -][A-ZÄÖÜ][a-zäöüßà-ÿ']+){0,3}$/.test(t) && /[aeiouäöüy]/i.test(t) && /[bcdfghjklmnpqrstvwxzß]/i.test(t) && t.length <= 40;
   function parseSheet(text) {
     const lines = text.split(/\n/).map(l => l.replace(/[|_]+/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
     const out = {};
@@ -189,6 +209,9 @@
       if (words.length >= 2) { out.firstName = words[0]; out.lastName = words[1]; }
       else if (words.length === 1 && words[0].includes(" ")) { const p = words[0].split(" "); out.lastName = p.pop(); out.firstName = p.join(" "); }
     }
+    if (out.firstName && !plausibleName(out.firstName)) delete out.firstName;
+    if (out.lastName && !plausibleName(out.lastName)) delete out.lastName;
+    if (out.city && !plausibleName(out.city)) delete out.city;
     return out;
   }
 
