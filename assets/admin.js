@@ -1263,7 +1263,7 @@
     $("sd-idinfo").innerHTML = "";
     $("sd-birth").textContent = r.birth_date ? `geb. ${birthText(r.birth_date)}` : "";
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
-    $("sd-nr-hint").textContent = r.sehtest_reissue ? "(geändert – Bescheinigung neu ausstellen)" : r.sehtest_issued_at ? "(fest – Bescheinigung ausgestellt)" : r.sehtest_nr ? "(änderbar, spätere rücken nach)" : "(vorläufig)";
+    $("sd-nr-hint").textContent = r.sehtest_reissue ? "(geändert – Bescheinigung neu ausstellen)" : r.sehtest_issued_at ? "(fest – Bescheinigung ausgestellt)" : r.sehtest_nr ? "(änderbar, spätere rücken nach)" : "(vorläufig – fest erst bei „Ergebnis übernehmen“)";
     $("sd-error").textContent = "";
     stRender();
     d.showModal();
@@ -1283,7 +1283,9 @@
     };
     const typed = $("sd-nr").value.trim();
     // Eigene Nummer nur, wenn sie von der vorgeschlagenen abweicht; sonst vergibt die Datenbank sie
-    const own = typed && typed !== (r.sehtest_nr || draft) ? typed : "";
+    // Zwischenspeichern vergibt nie eine Nummer: Fest wird sie erst beim Übernehmen des Ergebnisses
+    // (dann die zu diesem Zeitpunkt nächste freie Nummer, auch wenn inzwischen ein anderer Sehtest fertig wurde)
+    const own = typed && typed !== (r.sehtest_nr || draft) && (withResult || r.sehtest_nr) ? typed : "";
     if (withResult) patch.sehtest_passed = all.state === "bestanden";
     btn.disabled = true;
     try {
