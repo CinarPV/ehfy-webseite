@@ -892,18 +892,20 @@
     d.innerHTML = `<div class="st-dlg">
       <div class="st-head"><div><h3 id="sd-name"></h3><p class="small muted" id="sd-birth"></p></div>
         <div class="field st-nr"><label for="sd-nr">Protokoll-Nr. <span class="small muted" id="sd-nr-hint"></span></label><input id="sd-nr" autocomplete="off"></div></div>
-      <div class="st-sets" id="sd-sets" role="tablist"></div>
-      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test zwei Zeilen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Nicht bestanden bei mehr als 2 Fehlern in einer Zeile oder mehr als 2 Fehlern bei geraden bzw. bei schrägen Öffnungen. Die 0,32-Zeile ist zum Üben.</p>
-      <div id="sd-grid"></div>
-      <p class="st-result" id="sd-result"></p>
-      <div class="st-extra">
-        <div class="st-group"><span class="st-label">Verlauf:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="fluessig">Flüssig</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="zoegerlich">Zögerlich</button></div>
+      <div class="st-extra st-top">
         <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
         <div class="st-group"><span class="st-label">Unterschrift:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="signed" data-val="ja">✍ Unterschreiben</button><span class="small muted">setzt deine hinterlegte Unterschrift unten rechts ins Protokoll</span></div>
+      </div>
+      <div class="st-sets" id="sd-sets" role="tablist"></div>
+      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test zwei Zeilen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Nicht bestanden bei mehr als 2 Fehlern in einer Zeile oder mehr als 2 Fehlern bei geraden bzw. bei schrägen Öffnungen. Die 0,32-Zeile ist zum Üben.</p>
+      <div id="sd-grid"></div>
+      <p class="st-result" id="sd-result"></p>
+      <div class="st-extra">
+        <div class="st-group"><span class="st-label">Verlauf:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="fluessig">Flüssig</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="flow" data-val="zoegerlich">Zögerlich</button></div>
       </div>
       <p class="small" id="sd-error" style="color:var(--danger)"></p>
       <div class="btn-row"><button class="btn" type="button" id="sd-save">Ergebnis übernehmen und Protokoll erstellen</button>
