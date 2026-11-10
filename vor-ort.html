@@ -18,7 +18,7 @@
     .vo-check { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; font-size: .95rem; }
     .vo-check input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
     .vo-done { text-align: center; padding: 30px 0; }
-    .vo-info { background: var(--soft); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; font-size: .92rem; }
+    .vo-info { background: var(--soft); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; font-size: .85rem; color: var(--muted); }
     .vo-info p { margin: 6px 0 0; }
     .vo-done .big { font-size: 3rem; line-height: 1; }
     @media (max-width: 480px) { .vo-grid { grid-template-columns: 1fr; } }
@@ -36,11 +36,6 @@
         <div id="vo-invalid" class="card hidden"><p><strong>Dieser QR-Code ist nicht (mehr) gültig.</strong></p><p class="muted">Bitte wende dich an deinen Kursleiter.</p></div>
 
         <form id="vo-form" class="card hidden" novalidate>
-          <div class="vo-info">
-            <strong>Wofür wir deine Daten brauchen</strong>
-            <p>Als Ausbildungsstelle für Erste Hilfe führen wir für jeden Kurs ein Teilnehmerdatenblatt. Deine Angaben und deine Unterschrift brauchen wir dafür sowie für deine Teilnahmebescheinigung und die Quittung.</p>
-            <p>Das Teilnehmerdatenblatt bewahren wir <strong>fünf Jahre</strong> auf; es kann auf Anforderung der Anerkennungsbehörde vorgelegt werden. Danach werden die Daten gelöscht. Für Werbung nutzen wir deine Daten nicht.</p>
-          </div>
           <div class="vo-grid">
             <div class="field wide hidden" id="vo-course-box"><label for="vo-course-sel">Kursdatum</label><select id="vo-course-sel"></select></div>
             <div class="field"><label for="vo-first">Vorname</label><input id="vo-first" autocomplete="given-name" required maxlength="80"></div>
@@ -59,8 +54,13 @@
           <canvas id="vo-pad" class="vo-pad" width="900" height="300" aria-label="Hier mit dem Finger unterschreiben"></canvas>
           <p class="small muted" style="margin:6px 0 0">Mit dem Finger im Feld unterschreiben.</p>
 
-          <label class="vo-check"><input type="checkbox" id="vo-ok"> <span>Meine Angaben sind richtig. Die Hinweise oben und die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> habe ich zur Kenntnis genommen.</span></label>
+          <label class="vo-check"><input type="checkbox" id="vo-ok"> <span>Meine Angaben sind richtig. Die Hinweise unten und die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> habe ich zur Kenntnis genommen.</span></label>
 
+          <div class="vo-info">
+            <strong>Wofür wir deine Daten brauchen</strong>
+            <p>Als Ausbildungsstelle für Erste Hilfe führen wir für jeden Kurs ein Teilnehmerdatenblatt. Deine Angaben und deine Unterschrift brauchen wir dafür sowie für deine Teilnahmebescheinigung und die Quittung.</p>
+            <p>Das Teilnehmerdatenblatt bewahren wir <strong>fünf Jahre</strong> auf; es kann auf Anforderung der Anerkennungsbehörde vorgelegt werden. Danach werden die Daten gelöscht. Für Werbung nutzen wir deine Daten nicht.</p>
+          </div>
           <p class="form-error" id="vo-error" role="alert"></p>
           <button class="btn" type="submit" id="vo-send" style="width:100%">Absenden</button>
         </form>
