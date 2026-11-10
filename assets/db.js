@@ -303,7 +303,20 @@
         save();
         return { id, sehtest_nr: r.sehtest_nr || null };
       },
-      async deleteRegistration(id) { const db = load(); db.regs = db.regs.filter(r => r.id !== id); save(); },
+      async deleteRegistration(id) {
+        const db = load(), gone = db.regs.find(r => r.id === id);
+        db.regs = db.regs.filter(r => r.id !== id);
+        // Wie in der Datenbank: war es die letzte vergebene Nummer, zählt der Zähler zurück
+        let next = null;
+        try { next = localStorage.getItem("ehfy-demo-sehtest-next"); } catch (e) { /* egal */ }
+        if (gone && gone.sehtest_nr && next) {
+          const pre = x => x.replace(/\d+$/, ""), num = x => Number((x.match(/(\d+)$/) || [])[1]);
+          const same = db.regs.filter(r => /\d$/.test(r.sehtest_nr || "") && pre(r.sehtest_nr) === pre(next)).sort((a, b) => num(b.sehtest_nr) - num(a.sehtest_nr));
+          const cand = same[0] ? nrPlus(same[0].sehtest_nr) : gone.sehtest_nr;
+          if (pre(cand) === pre(next) && num(cand) < num(next)) try { localStorage.setItem("ehfy-demo-sehtest-next", cand); } catch (e) { /* egal */ }
+        }
+        save();
+      },
       async getSettings() {
         try { return JSON.parse(localStorage.getItem("ehfy-demo-settings")) || {}; } catch (e) { return {}; }
       },

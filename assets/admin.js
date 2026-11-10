@@ -2065,8 +2065,7 @@
     if (ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-st-void]")) return voidAsk(r).then(loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-se-del]")) {
-      if (r.sehtest_nr) { show(`${r.first_name} ${r.last_name} hat schon die Protokoll-Nr. ${r.sehtest_nr}. Damit die Nummern lückenlos bleiben, wird der Eintrag nicht gelöscht.`); return; }
-      if (!confirm(`${r.first_name} ${r.last_name} (nur Sehtest) endgültig löschen?`)) return;
+      if (!confirm(`${r.first_name} ${r.last_name} (nur Sehtest) endgültig löschen?${r.sehtest_nr ? `\n\nDie Protokoll-Nr. ${r.sehtest_nr} wird frei. War es die zuletzt vergebene Nummer, bekommt der nächste Sehtest wieder diese Nummer.` : ""}`)) return;
       try { await db.deleteRegistration(r.id); await loadSehtests(); } catch (e) { show(e.message); }
     }
   });
