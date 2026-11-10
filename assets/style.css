@@ -755,3 +755,11 @@ body[data-page="admin"] .section { padding-top: 22px; }
 .qr-img svg { display: block; width: 100%; height: auto; }
 .st-void { display: inline-block; color: var(--muted); background: var(--soft); border: 1px dashed var(--line); border-radius: 8px; padding: 1px 8px; font-weight: 700; font-size: .85rem; }
 .cert-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+/* Herunterziehen zum Aktualisieren */
+.ptr { position: fixed; top: -46px; left: 50%; transform: translate(-50%, 0); z-index: 60; display: flex; align-items: center; gap: 8px;
+  background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-weight: 700; font-size: .85rem;
+  box-shadow: 0 6px 18px rgba(10, 42, 53, .15); transition: transform .15s; pointer-events: none; }
+.ptr-icon { display: inline-block; font-size: 1.1rem; color: var(--aid-dark); transition: transform .2s; }
+.ptr.ready .ptr-icon { transform: rotate(180deg); }
+.ptr.busy .ptr-icon { animation: ptr-spin .8s linear infinite; }
+@keyframes ptr-spin { to { transform: rotate(360deg); } }

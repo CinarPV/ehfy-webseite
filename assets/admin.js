@@ -878,6 +878,42 @@
     if (courses.length) renderStart();
   }
   const runSync = () => { db.clearNew(); return db.sync().catch(() => {}); };
+
+  // ---------- Herunterziehen zum Aktualisieren (Handy): ganz oben nach unten ziehen und loslassen ----------
+  (function pullToRefresh() {
+    const bar = document.createElement("div");
+    bar.className = "ptr no-print";
+    bar.innerHTML = '<span class="ptr-icon">↻</span><span class="ptr-text">Zum Aktualisieren ziehen</span>';
+    document.body.appendChild(bar);
+    const LIMIT = 80;
+    let startY = null, dy = 0, busy = false;
+    const reset = () => { startY = null; dy = 0; bar.style.transform = ""; bar.classList.remove("ready"); };
+    document.addEventListener("touchstart", ev => {
+      if (busy || ev.touches.length !== 1 || window.scrollY > 0 || document.querySelector("dialog[open]")
+        || $("app-view").classList.contains("hidden") || ev.target.closest("canvas, input, select, textarea, .table-wrap")) return;
+      startY = ev.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener("touchmove", ev => {
+      if (startY === null) return;
+      dy = ev.touches[0].clientY - startY;
+      if (dy <= 0 || window.scrollY > 0) { reset(); return; }
+      const pull = Math.min(dy * 0.5, LIMIT + 20);
+      bar.style.transform = `translate(-50%, ${pull}px)`;
+      bar.classList.toggle("ready", dy * 0.5 >= LIMIT);
+      bar.querySelector(".ptr-text").textContent = dy * 0.5 >= LIMIT ? "Loslassen zum Aktualisieren" : "Zum Aktualisieren ziehen";
+    }, { passive: true });
+    document.addEventListener("touchend", async () => {
+      if (startY === null) return;
+      const go = dy * 0.5 >= LIMIT;
+      if (!go) { reset(); return; }
+      busy = true; startY = null;
+      bar.classList.add("busy");
+      bar.querySelector(".ptr-text").textContent = "Wird aktualisiert …";
+      bar.style.transform = `translate(-50%, ${LIMIT * 0.6}px)`;
+      try { await runSync(); await loadCourses(); refreshViews(); } catch (e) { /* Meldung zeigt die Sync-Leiste */ }
+      setTimeout(() => { bar.classList.remove("busy"); busy = false; reset(); }, 400);
+    });
+  })();
   $("sync-btn").onclick = runSync;
 
   // ---------- Erinnerung ans Synchronisieren ----------
