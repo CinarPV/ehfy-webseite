@@ -754,19 +754,16 @@
   // ---------- Sehtest abhaken: gemacht, Ergebnis, Verlauf, Sehhilfe, Ausweis, Protokoll ----------
   const ID_DOCS = [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["fuehrerschein", "Führerschein"], ["aufenthaltstitel", "Aufenthaltstitel"]];
   const aidKind = r => r.sehtest_aid_kind || (r.sehtest_aid === false ? "ohne" : null);
+  // Nur Anzeige: Alle Angaben (Ergebnis, Verlauf, Sehhilfe, Ausweis, Datum) werden im Protokoll eingetragen
   function sehtestControls(r, c) {
-    const on = (group, value, cur, label, cls = "") => `<button class="btn btn-sm btn-ghost att-btn ${cur === value ? cls || "on-yes" : ""}" type="button" data-st="${group}" data-val="${value}" aria-pressed="${cur === value}">${label}</button>`;
-    const done = Boolean(sehtestDay(r, c));
-    const nr = r.sehtest_nr ? `Protokoll-Nr. <strong>${esc(r.sehtest_nr)}</strong>`
-      : r.sehtest_passed != null ? "Protokoll-Nr. folgt beim Synchronisieren" : "Protokoll-Nr. kommt mit dem Ergebnis";
-    return `<div class="st-row">
-      <div class="st-group"><span class="st-label">Sehtest:</span>${on("done", true, done, done ? "✓ gemacht" : "gemacht")}</div>
-      <div class="st-group"><span class="st-label">Ergebnis:</span>${on("passed", true, r.sehtest_passed, "Bestanden")}${on("passed", false, r.sehtest_passed, "Nicht bestanden", "on-no")}</div>
-      <div class="st-group"><span class="st-label">Verlauf:</span>${on("flow", "fluessig", r.sehtest_flow, "Flüssig")}${on("flow", "zoegerlich", r.sehtest_flow, "Zögerlich")}</div>
-      <div class="st-group"><span class="st-label">Sehhilfe:</span>${on("aid", "ohne", aidKind(r), "Keine")}${on("aid", "brille", aidKind(r), "Brille")}${on("aid", "linse", aidKind(r), "Kontaktlinse")}</div>
-      <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => on("iddoc", k, r.sehtest_id_doc, l)).join("")}</div>
-      <div class="st-group"><span class="small">${nr}</span>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button>' : ""}</div>
-      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button><button class="btn btn-sm btn-ghost" type="button" data-st-print>Sehtest-Protokoll (PDF)</button></div>
+    const day = sehtestDay(r, c);
+    const res = r.sehtest_passed === true ? '<strong style="color:var(--ok)">bestanden</strong>'
+      : r.sehtest_passed === false ? '<strong style="color:var(--danger)">nicht bestanden</strong>'
+      : r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen, noch kein Ergebnis" : "—";
+    return `<div class="st-row st-sum">
+      <div class="st-group"><span class="st-label">Sehtest:</span><strong>${day || r.sehtest_passed != null ? "gemacht" : "nicht gemacht"}</strong>${day ? ` <span class="small muted">am ${birthText(day)}</span>` : ""}</div>
+      <div class="st-group"><span class="st-label">Ergebnis:</span>${res}${r.sehtest_nr ? ` <span class="small muted">· Nr. ${esc(r.sehtest_nr)}</span>` : ""}</div>
+      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>${r.sehtest_passed != null || day ? "Protokoll öffnen" : "Sehtest durchführen"}</button>${r.sehtest_passed != null ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll (PDF)</button>' : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>
     </div>`;
   }
   async function handleSehtest(btn, r, c) {
@@ -1075,8 +1072,7 @@
       </div>`}
       ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
       ${!absent(r) ? sehtestQuick(r) : ""}
-      ${!absent(r) ? `<details class="att-more"><summary>Mehr: Sehtest von Hand, Gutschein</summary>
-        ${r.package === "komplett" || sehtestDay(r, courseOf(r)) ? sehtestControls(r, courseOf(r)) : '<p class="small muted">Ohne Sehtest gebucht.</p>'}
+      ${!absent(r) ? `<details class="att-more"><summary>Mehr: Gutschein</summary>
         ${discountControls(r)}</details>` : ""}
     </div>`;
   }
@@ -1410,7 +1406,6 @@
     return `<div class="sc-entry" data-reg="${r.id}">
       <div class="sc-facts">
         <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : r.sehtest_only ? "Nur Sehtest, kein Kurs" : "Termin gelöscht"}</strong>${!c && r.sehtest_only ? "" : `<br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.virtual ? "nicht belegt, nur angemeldet" : c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span>`}</div>
-        <div><label for="sc-st-${r.id}">Sehtest am (leer = kein Sehtest)</label><input type="date" id="sc-st-${r.id}" data-sehtest value="${sehtestDay(r, c)}"></div>
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
       ${!off && !c.virtual ? `<div class="att-btns">
