@@ -116,7 +116,7 @@
         : '<span class="pill pill-ok">offen</span>';
       return `
         <tr class="${isPast(c) ? "is-past" : ""} row-link" data-open="${c.id}" title="Teilnehmerliste öffnen">
-          <td><strong>${fmtShortDate(c.starts_at)}</strong></td>
+          <td><strong>${fmtShortDate(c.starts_at)}</strong><br><button class="del-mini" data-act="del" data-id="${c.id}" title="Termin löschen">🗑 Löschen</button></td>
           <td>${fmtRange(c.starts_at, c.ends_at)}</td>
           <td>${esc(c.location)}</td>
           <td><span class="cap"><strong>${c.booked}</strong> /
@@ -129,8 +129,7 @@
             ${c.booked ? `<button class="btn btn-sm btn-teal" data-act="print" data-id="${c.id}" title="Datenblätter, Bescheinigungen und Quittungen für alle Teilnehmer">Kursmappe drucken</button>` : ""}
             <details class="row-more"><summary class="btn btn-sm btn-ghost">Mehr</summary><div class="row-more-box">
               <button class="btn btn-sm btn-outline" data-act="edit" data-id="${c.id}">Bearbeiten</button>
-              <button class="btn btn-sm btn-outline" data-act="copy" data-id="${c.id}" title="Gleicher Termin eine Woche später">+1 Woche kopieren</button>
-              <button class="btn btn-sm btn-outline" data-act="del" data-id="${c.id}" style="color:var(--danger)">Termin löschen</button></div></details>
+              <button class="btn btn-sm btn-outline" data-act="copy" data-id="${c.id}" title="Gleicher Termin eine Woche später">+1 Woche kopieren</button></div></details>
           </div></td>
         </tr>`;
     }).join("") : '<tr><td colspan="6" class="muted">Keine Termine vorhanden. Lege mit „+ Neuer Termin“ einen an.</td></tr>';

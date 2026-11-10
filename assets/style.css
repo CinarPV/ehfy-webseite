@@ -748,3 +748,4 @@ body[data-page="admin"] .section { padding-top: 22px; }
 #cap-done h4 { margin: 18px 0 6px; }
 .cap-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 480px) { .cap-grid { grid-template-columns: 1fr; } }
+.del-mini { margin-top: 6px; font: inherit; font-size: .8rem; font-weight: 700; color: var(--danger); background: var(--danger-light); border: 1px solid transparent; border-radius: 999px; padding: 3px 10px; cursor: pointer; white-space: nowrap; }
