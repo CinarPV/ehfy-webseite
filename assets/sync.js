@@ -97,7 +97,33 @@
     applyOp(state, op);
     return finish();
   }
-  async function finish() { lastError = ""; await persist(); notify(); }
+  async function finish() { lastError = ""; await persist(); notify(); if (autoOn) autoSync(); }
+
+  // ---------- Automatisch: Änderungen sofort hochladen, Neues (Anmeldungen, QR-Eintragungen) sofort holen ----------
+  // Ohne Internet bleibt alles wie bisher auf dem Gerät und wird übertragen, sobald es wieder Internet gibt.
+  let autoOn = false, autoTimer = null, pullTimer = null;
+  function autoSync(delay = 700) {
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => { if (isOnline() && outbox.length) { if (syncing) autoSync(1500); else sync().catch(() => {}); } }, delay);
+  }
+  function autoPull(delay = 1200) {
+    clearTimeout(pullTimer);
+    pullTimer = setTimeout(() => {
+      if (!isOnline()) return;
+      if (syncing) { autoPull(1500); return; }
+      (outbox.length ? sync() : pull()).catch(() => {});
+    }, delay);
+  }
+  function startAuto() {
+    if (autoOn) return;
+    autoOn = true;
+    if (remote.subscribe) remote.subscribe(() => autoPull());
+    window.addEventListener("online", () => autoSync(0));
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") autoPull(300); });
+    // Sicherheitsnetz, falls die Live-Verbindung einmal abreißt
+    setInterval(() => { if (document.visibilityState === "visible") autoPull(0); }, 60000);
+    autoPull(0);
+  }
 
   async function pushOp(op) {
     if (op.type === "course-put") return remote.putCourse(op.row);
@@ -161,7 +187,7 @@
   // ---------- Dieselbe Schnittstelle wie EHFY_DB ----------
   window.EHFY_DB = {
     live: remote.live,
-    status, sync, isOnline, pull,
+    status, sync, isOnline, pull, startAuto,
     clearNew() { newRegs = 0; notify(); },
     savePushSubscription: (s, d) => remote.savePushSubscription(s, d),
     // Nächste Sehtest-Nummer: nur mit Internet (die Datenbank vergibt die Nummern)
@@ -372,5 +398,5 @@
 
   // Neue Anmeldungen holen: beim Zurückkehren in die App, jede Minute und bei einer Push-Mitteilung
   // Kein automatischer Abgleich: Eine Push-Mitteilung setzt nur den Hinweis, abgeglichen wird per Knopf
-  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data === "neue-anmeldung") { remoteHint = true; notify(); } });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", ev => { if (ev.data === "neue-anmeldung") { if (autoOn) autoPull(0); else { remoteHint = true; notify(); } } });
 })();

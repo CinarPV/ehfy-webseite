@@ -88,6 +88,14 @@
       // Für den Abgleich der Verwaltung (assets/sync.js)
       // Den QR-Schlüssel nie mit einem alten Stand überschreiben: er wird nur über checkin_token gesetzt
       async putCourse({ checkin_token, ...row }) { check(await sb.from("courses").upsert(row)); },
+      // Live: Bei jeder Änderung in der Datenbank (neue Anmeldung, QR-Eintragung, anderes Gerät) Bescheid geben
+      subscribe(cb) {
+        try {
+          const ch = sb.channel("verwaltung-live");
+          ["registrations", "courses"].forEach(t => ch.on("postgres_changes", { event: "*", schema: "public", table: t }, () => cb()));
+          ch.subscribe();
+        } catch (e) { /* dann greift das regelmäßige Nachsehen */ }
+      },
       async putRegistration(row) { check(await sb.from("registrations").upsert(row)); },
       async listAllRegistrations() { return fetchAll(() => sb.from("registrations").select("*").order("created_at").order("id")); },
       async listAllInvoices() { return fetchAll(() => sb.from("invoices").select("*").order("seq", { ascending: false }).order("id")); },
@@ -266,6 +274,8 @@
       async listRegistrations(courseId) { return load().regs.filter(r => r.course_id === courseId); },
       async savePushSubscription() { /* im Demo-Modus nur Test-Mitteilung */ },
       async removePushSubscription() { },
+      // Demo: Änderungen aus einem anderen Fenster (z. B. QR-Seite) bemerken
+      subscribe(cb) { window.addEventListener("storage", () => cb()); },
       async putCourse(row) {
         const db = load(), i = db.courses.findIndex(c => c.id === row.id);
         if (i >= 0) db.courses[i] = { ...db.courses[i], ...row }; else db.courses.push(row);

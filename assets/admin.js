@@ -46,6 +46,7 @@
     $("app-view").classList.remove("hidden");
     renderSync();
     await loadCourses();
+    db.startAuto(); // Änderungen gehen sofort raus, Neues kommt sofort rein
     askToSync(); // Noch offene Änderungen vom letzten Mal
     setTimeout(() => askCertificates(), 800); // Bescheinigungen, die noch nicht geschrieben sind
   }
@@ -614,12 +615,36 @@
       $("qr-print").onclick = () => {
         const w = window.open("", "_blank");
         if (!w) return;
+        const logo = new URL("assets/logo.png", location.href).href;
+        const when = c ? `Kurs am ${dayText(c.starts_at)} in Siegen` : "Erste-Hilfe-Kurs in Siegen";
         w.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>QR-Code Teilnehmerdatenblatt</title>
-          <style>body{font-family:system-ui,sans-serif;text-align:center;padding:40px;color:#0a2a35}h1{font-size:30px;margin:0 0 6px}p{font-size:18px}svg{width:340px;height:340px}</style></head>
-          <body><h1>Erste-Hilfe-Kurs · Teilnehmerdatenblatt</h1><p>QR-Code mit der Handy-Kamera scannen, Daten eintragen, unterschreiben.</p>
-          ${qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true })}<p>Erste Hilfe for you · Siegen</p></body></html>`);
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #0a2a35; display: flex; align-items: center; justify-content: center; background: #fff;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet { width: 170mm; text-align: center; border: 3px solid #29b4b6; border-radius: 10mm; padding: 14mm 12mm 12mm; position: relative; }
+  .sheet::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 9mm; background: #0a2a35; border-radius: 7mm 7mm 0 0; }
+  .logo { width: 70mm; margin: 6mm auto 4mm; display: block; }
+  h1 { font-size: 24pt; margin: 2mm 0 1mm; letter-spacing: .3px; }
+  .sub { font-size: 13pt; color: #0b7b7f; margin: 0 0 7mm; font-weight: 700; }
+  .qr { width: 95mm; height: 95mm; margin: 0 auto; padding: 4mm; border-radius: 6mm; background: #fff; border: 2px solid #d9ecec; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .steps { display: flex; justify-content: center; gap: 6mm; margin: 8mm 0 6mm; font-size: 11.5pt; font-weight: 700; }
+  .steps span { background: #dcf5f4; border-radius: 99px; padding: 2.5mm 5mm; white-space: nowrap; }
+  .steps b { color: #0b7b7f; margin-right: 1.5mm; }
+  .foot { font-size: 10.5pt; color: #4f6b76; margin-top: 4mm; }
+  .foot strong { color: #0a2a35; }
+</style></head><body><div class="sheet">
+  <img class="logo" src="${logo}" alt="Erste Hilfe for you">
+  <h1>Teilnehmerdatenblatt</h1>
+  <p class="sub">${when}</p>
+  <div class="qr">${qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true })}</div>
+  <div class="steps"><span><b>1</b>QR-Code scannen</span><span><b>2</b>Daten eintragen</span><span><b>3</b>Unterschreiben</span></div>
+  <p class="foot"><strong>Erste Hilfe for you</strong> · Erste-Hilfe-Kurse für Führerschein &amp; Beruf<br>Tel. ${esc(cfg.phone || "")} · www.ehfy.de</p>
+</div><script>let done = false; const go = () => { if (!done) { done = true; print(); } }; document.querySelector(".logo").onload = () => setTimeout(go, 200); setTimeout(go, 2500);<\/script></body></html>`);
         w.document.close();
-        setTimeout(() => w.print(), 300);
       };
     } catch (e) { $("qr-img").innerHTML = ""; $("qr-msg").textContent = e.message; }
   }
@@ -874,6 +899,8 @@
     const st = db.status();
     if (onlyNew && st.pending <= askedAt) return;
     askedAt = st.pending;
+    // Mit Internet wird ohnehin automatisch übertragen: nur ohne Internet nachfragen
+    if (st.online && st.pending) { runSync(); return; }
     if (!st.pending || $("app-view").classList.contains("hidden") || document.querySelector("dialog[open]")) return;
     $("rm-text").textContent = `${changes(st.pending)} ${st.pending === 1 ? "ist" : "sind"} noch nicht synchronisiert. Teilnehmer und deine anderen Geräte sehen sie erst danach.`;
     $("rm-sync").disabled = !st.online;
