@@ -1,0 +1,64 @@
+/* Verwaltung im hellen Design „Farbiger Kopf“ (EHfy-Farben: Türkis, Dunkelblau, Orange).
+   Wird NUR von admin.html geladen – die öffentliche Webseite bleibt unverändert.
+   Gilt nur für den Bildschirm: Gedruckte Listen bleiben weiß. */
+@media screen {
+  body[data-page="admin"] { background: #f1f7f8; }
+  body[data-page="admin"] .site-header { background: #fff; border-bottom: 1px solid var(--line); }
+  body[data-page="admin"] .site-header .stripes { display: none; }
+  body[data-page="admin"] .adm-ekg { display: none; }
+
+  /* Dunkelblauer Kopf mit Titel und Menü */
+  body[data-page="admin"] .admin-top {
+    background: var(--ink); color: #fff; margin: 0; padding: 16px 18px 10px;
+    border-radius: 18px 18px 0 0;
+  }
+  body[data-page="admin"] .admin-top h1 { color: #fff; }
+  body[data-page="admin"] .admin-top h1 .small { color: #9fc4cc; }
+  body[data-page="admin"] .sync-mini #sync-text { color: #cfe6ea; }
+  body[data-page="admin"] .sync-mini .btn { background: transparent; border-color: rgba(255, 255, 255, .35); color: #fff; }
+  body[data-page="admin"] .sync-mini .btn:hover { background: var(--aid); border-color: var(--aid); color: var(--ink); }
+
+  body[data-page="admin"] .main-nav {
+    background: var(--ink); border: 0; border-radius: 0 0 18px 18px;
+    padding: 6px 12px 12px; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(10, 42, 53, .12);
+  }
+  body[data-page="admin"] .nav-main button {
+    background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); color: #e3f1f3;
+    border-radius: 14px; font-weight: 700;
+  }
+  body[data-page="admin"] .nav-main button:hover { background: rgba(255, 255, 255, .12); }
+  body[data-page="admin"] .nav-main button .sym, body[data-page="admin"] .nav-main .dots { color: var(--aid); }
+  body[data-page="admin"] .nav-main button.active, body[data-page="admin"] .nav-more-btn.active {
+    background: var(--aid) !important; border-color: var(--aid) !important; color: var(--ink) !important;
+  }
+  body[data-page="admin"] .nav-main button.active .sym, body[data-page="admin"] .nav-more-btn.active .dots { color: var(--ink); }
+  body[data-page="admin"] .nav-more { background: rgba(255, 255, 255, .08); }
+  body[data-page="admin"] .nav-more button { color: #b9d6dc; }
+  body[data-page="admin"] .nav-more button.active, body[data-page="admin"] .nav-more button:hover { color: #fff; }
+
+  /* Weiße, weiche Karten auf hellem Grund */
+  body[data-page="admin"] .card, body[data-page="admin"] .att-card, body[data-page="admin"] .att-folder,
+  body[data-page="admin"] .sc-person, body[data-page="admin"] .stat, body[data-page="admin"] .table-wrap,
+  body[data-page="admin"] .cal, body[data-page="admin"] .se-row, body[data-page="admin"] .contact-item {
+    background: #fff; border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: 0 1px 3px rgba(10, 42, 53, .05);
+  }
+  body[data-page="admin"] .card:hover { transform: none; }
+  body[data-page="admin"] .att-folder[open] { border-color: var(--aid); }
+
+  /* Knöpfe: Hauptknopf Türkis, Nebenknöpfe weiß */
+  body[data-page="admin"] .btn:hover { transform: none; }
+  body[data-page="admin"] .btn-outline, body[data-page="admin"] .btn-ghost { background: #fff; }
+
+  /* Eingabefelder */
+  body[data-page="admin"] input:not([type=checkbox]):not([type=radio]), body[data-page="admin"] select,
+  body[data-page="admin"] textarea { background: #fff; border-radius: 12px; }
+  body[data-page="admin"] input:focus, body[data-page="admin"] select:focus, body[data-page="admin"] textarea:focus {
+    border-color: var(--aid); outline: 3px solid var(--aid-light); outline-offset: 0;
+  }
+
+  @media (max-width: 640px) {
+    body[data-page="admin"] .admin-top { padding: 12px 12px 8px; border-radius: 14px 14px 0 0; }
+    body[data-page="admin"] .main-nav { padding: 4px 6px 8px; border-radius: 0 0 14px 14px; }
+  }
+}
