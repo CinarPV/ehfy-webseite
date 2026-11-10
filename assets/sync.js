@@ -167,6 +167,15 @@
     // Nächste Sehtest-Nummer: nur mit Internet (die Datenbank vergibt die Nummern)
     getNextSehtestNr: () => remote.getNextSehtestNr(),
     setNextSehtestNr: nr => remote.setNextSehtestNr(nr),
+    // Nummer ändern, spätere rücken nach: nur mit Internet, danach den neuen Stand holen
+    async renumberSehtest(id, nr) {
+      await ready;
+      if (!isOnline()) throw new Error("Dafür braucht es Internet.");
+      if (outbox.length) await sync();
+      const list = await remote.renumberSehtest(id, nr);
+      await pull();
+      return list;
+    },
     removePushSubscription: e => remote.removePushSubscription(e),
     isPending: id => outbox.some(o => (o.row && o.row.id === id) || o.id === id || (o.row && o.row.course_id === id)),
 

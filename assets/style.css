@@ -729,3 +729,6 @@ body[data-page="admin"] .section { padding-top: 22px; }
 @media (pointer: coarse) {
   input, select, textarea { font-size: 16px !important; }
 }
+/* Sehtest-Bescheinigung ausgestellt / neu ausstellen */
+.st-fix { color: var(--ok); font-weight: 700; font-size: .85rem; white-space: nowrap; }
+.st-reissue { display: inline-block; color: #fff; background: var(--danger); border-radius: 8px; padding: 1px 8px; font-weight: 700; font-size: .85rem; }

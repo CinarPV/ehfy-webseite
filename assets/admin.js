@@ -717,8 +717,9 @@
         <p class="small muted">${list.length} angemeldet · ${da} da${seh.length ? ` · Sehtests ${sehDone} von ${seh.length}` : ""}</p>
         <div class="btn-row"><button class="btn" type="button" data-go="anwesenheit">Kurstag öffnen</button><button class="btn btn-ghost" type="button" data-open="${c.id}">Teilnehmerliste</button></div>`;
     }).join("") : `<p class="start-big">Heute ist kein Kurs.</p>${upcoming[0] ? `<p class="small muted">Nächster Kurs: ${dayText(upcoming[0].starts_at)} in ${esc(upcoming[0].location)}</p>` : ""}`);
-    const st = db.status();
+    const st = db.status(), reissue = attRegs.filter(r => r.sehtest_reissue).length;
     const todo = [
+      [reissue, reissue === 1 ? "Sehtest-Bescheinigung neu ausstellen (Nummer geändert)" : "Sehtest-Bescheinigungen neu ausstellen (Nummer geändert)", 'data-go="sehtests"'],
       [uncheckedCount, uncheckedCount === 1 ? "Schüler noch nicht abgehakt" : "Schüler noch nicht abgehakt", 'data-unchecked'],
       [feeTotal, feeTotal === 1 ? "Ausfallgebühr offen" : "Ausfallgebühren offen", 'data-go="gebuehren"'],
       [st.pending, st.pending === 1 ? "Änderung nicht synchronisiert" : "Änderungen nicht synchronisiert", "data-sync"]
@@ -762,8 +763,8 @@
       : r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen, noch kein Ergebnis" : "—";
     return `<div class="st-row st-sum">
       <div class="st-group"><span class="st-label">Sehtest:</span><strong>${day || r.sehtest_passed != null ? "gemacht" : "nicht gemacht"}</strong>${day ? ` <span class="small muted">am ${birthText(day)}</span>` : ""}</div>
-      <div class="st-group"><span class="st-label">Ergebnis:</span>${res}${r.sehtest_nr ? ` <span class="small muted">· Nr. ${esc(r.sehtest_nr)}</span>` : ""}</div>
-      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>${r.sehtest_passed != null || day ? "Protokoll öffnen" : "Sehtest durchführen"}</button>${r.sehtest_passed != null ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll (PDF)</button>' : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>
+      <div class="st-group"><span class="st-label">Ergebnis:</span>${res}${r.sehtest_nr ? ` <span class="small muted">· Nr. ${esc(r.sehtest_nr)}</span>` : ""}${issuedTag(r)}</div>
+      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>${r.sehtest_passed != null || day ? "Protokoll öffnen" : "Sehtest durchführen"}</button>${issuedBtn(r)}${r.sehtest_passed != null ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll (PDF)</button>' : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>
     </div>`;
   }
   async function handleSehtest(btn, r, c) {
@@ -811,11 +812,29 @@
     if (done) await done();
     await openSehtest(row, null, done);
   }
-  async function changeNr(r) {
-    const nr = (prompt("Neue Protokoll-Nummer (jede Nummer gibt es nur einmal):", r.sehtest_nr) || "").trim();
-    if (!nr || nr === r.sehtest_nr) return;
-    if (await nrTaken(nr, r.id)) throw new Error(`Die Protokoll-Nummer ${nr} ist schon vergeben.`);
-    try { await db.updateRegistrationOnline(r.id, { sehtest_nr: nr }); } catch (e) { throw nrError(e, nr); }
+  // Nummer ändern: Alle späteren Nummern rücken fortlaufend nach.
+  // Ist die Bescheinigung schon ausgestellt, ist die Nummer fest: deutlich warnen, aber erlauben.
+  async function changeNr(r, nrIn) {
+    if (r.sehtest_issued_at && !confirm(`Achtung: Für Nr. ${r.sehtest_nr} (${r.first_name} ${r.last_name}) ist die Sehtest-Bescheinigung schon ausgestellt. Die Nummer ist fest und sollte nicht mehr geändert werden.\n\nTrotzdem ändern?`)) return false;
+    const nr = nrIn || (prompt("Neue Protokoll-Nummer. Alle späteren Nummern rücken fortlaufend nach:", r.sehtest_nr) || "").trim();
+    if (!nr || nr === r.sehtest_nr) return false;
+    let list;
+    try { list = await db.renumberSehtest(r.id, nr); } catch (e) { throw nrError(e, nr); }
+    if (list && list.length) alert(`Achtung! Diese Sehtest-Bescheinigungen waren schon ausgestellt und haben jetzt eine neue Nummer. Bitte mit der neuen Nummer neu ausstellen:\n\n${list.map(x => `Nr. ${x.nr} – ${x.name}`).join("\n")}`);
+    return true;
+  }
+  // „Bescheinigung ausgestellt“: Ab dann ist die Nummer fest
+  const issuedOk = r => Boolean(r.sehtest_issued_at && !r.sehtest_reissue);
+  const issuedTag = r => !r.sehtest_nr ? "" : r.sehtest_reissue ? ' <span class="st-reissue">⚠ Nummer geändert – Bescheinigung neu ausstellen</span>'
+    : r.sehtest_issued_at ? ' <span class="st-fix">✓ ausgestellt · Nr. fest</span>' : "";
+  const issuedBtn = r => r.sehtest_nr ? `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${r.sehtest_reissue ? "Neu ausgestellt" : issuedOk(r) ? "✓ Bescheinigung ausgestellt" : "Bescheinigung ausgestellt"}</button>` : "";
+  async function toggleIssued(r) {
+    if (r.sehtest_reissue) return db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString(), sehtest_reissue: false });
+    if (r.sehtest_issued_at) {
+      if (!confirm(`Haken „Bescheinigung ausgestellt“ bei Nr. ${r.sehtest_nr} entfernen?\n\nDie Nummer ist dann nicht mehr fest.`)) return;
+      return db.updateRegistration(r.id, { sehtest_issued_at: null });
+    }
+    return db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString() });
   }
 
   // Sehtest-Protokoll als PDF, mit allem, was schon eingetragen ist
@@ -968,7 +987,7 @@
     $("sd-idinfo").innerHTML = "";
     $("sd-birth").textContent = r.birth_date ? `geb. ${birthText(r.birth_date)}` : "";
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
-    $("sd-nr-hint").textContent = r.sehtest_nr ? "(änderbar)" : "(vorläufig, fest beim Übernehmen)";
+    $("sd-nr-hint").textContent = r.sehtest_reissue ? "(geändert – Bescheinigung neu ausstellen)" : r.sehtest_issued_at ? "(fest – Bescheinigung ausgestellt)" : r.sehtest_nr ? "(änderbar, spätere rücken nach)" : "(vorläufig)";
     $("sd-error").textContent = "";
     stRender();
     d.showModal();
@@ -991,7 +1010,10 @@
     if (withResult) patch.sehtest_passed = all.state === "bestanden";
     btn.disabled = true;
     try {
-      if (own) {
+      if (own && r.sehtest_nr) {
+        if (!(await changeNr(r, own))) return;
+        await db.updateRegistration(r.id, patch);
+      } else if (own) {
         if (await nrTaken(own, r.id)) throw new Error(`Die Protokoll-Nummer ${own} ist schon vergeben.`);
         try { await db.updateRegistrationOnline(r.id, { ...patch, sehtest_nr: own }); } catch (e) { throw nrError(e, own); }
       } else if (withResult && !r.sehtest_nr) await db.updateRegistrationNow(r.id, patch);
@@ -1009,7 +1031,7 @@
     if (r.sehtest_passed === false) return `nicht bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
     return r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen" : "";
   }
-  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span> <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>` : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
+  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span> <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${issuedTag(r)}${issuedBtn(r)}` : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
   const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
 
   // ---------- Gutschein oder Rabatt je Teilnehmer ----------
@@ -1343,6 +1365,7 @@
     if (r && ev.target.closest("[data-st-run]")) return openSehtest(r, courseOf(r), loadCourses).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-st-again]")) return againSehtest(r, loadCourses).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
+    if (r && ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadCourses).catch(e => { errBox.textContent = e.message; });
     const stBtn = ev.target.closest("[data-st]");
     if (r && stBtn) {
       try { await handleSehtest(stBtn, r, courseOf(r)); await loadCourses(); } catch (e) { errBox.textContent = e.message; }
@@ -1487,6 +1510,7 @@
     if (ev.target.closest("[data-st-run]")) return openSehtest(r, courseFor(r), loadStudents).catch(e => show(e.message));
     if (ev.target.closest("[data-st-again]")) return againSehtest(r, loadStudents).catch(e => show(e.message));
     if (ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadStudents).catch(e => show(e.message));
+    if (ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadStudents).catch(e => show(e.message));
     const stBtn = ev.target.closest("[data-st]");
     if (stBtn) {
       try { await handleSehtest(stBtn, r, courseFor(r)); await loadStudents(); } catch (e) { show(e.message); }
@@ -1564,9 +1588,9 @@
         <div class="se-nr">${r.sehtest_nr ? esc(r.sehtest_nr) : '<span class="muted">ohne Nr.</span>'}</div>
         <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
         <div class="se-day small">${day ? birthText(day) : "–"}</div>
-        <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${state || "noch offen"}</div>
+        <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${state || "noch offen"}${issuedTag(r)}</div>
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>
-          <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>
+          <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>${issuedBtn(r)}
           ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}
           ${r.sehtest_only ? '<button class="btn btn-sm btn-ghost" type="button" data-se-del style="color:var(--danger)">Löschen</button>' : ""}</div>
       </article>`;
@@ -1681,6 +1705,7 @@
     if (ev.target.closest("[data-st-again]")) return againSehtest(r, loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-st-print]")) return sehtestPdf(r, c, show);
     if (ev.target.closest("[data-st-nr]")) return changeNr(r).then(loadSehtests).catch(e => show(e.message));
+    if (ev.target.closest("[data-st-issued]")) return toggleIssued(r).then(loadSehtests).catch(e => show(e.message));
     if (ev.target.closest("[data-se-del]")) {
       if (r.sehtest_nr) { show(`${r.first_name} ${r.last_name} hat schon die Protokoll-Nr. ${r.sehtest_nr}. Damit die Nummern lückenlos bleiben, wird der Eintrag nicht gelöscht.`); return; }
       if (!confirm(`${r.first_name} ${r.last_name} (nur Sehtest) endgültig löschen?`)) return;

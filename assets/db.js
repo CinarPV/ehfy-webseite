@@ -106,6 +106,7 @@
       // Nächste Sehtest-Protokoll-Nummer (frei wählbare Startnummer)
       async getNextSehtestNr() { return check(await sb.rpc("get_next_sehtest_nr")); },
       async setNextSehtestNr(nr) { return check(await sb.rpc("set_next_sehtest_nr", { p_next: nr })); },
+      async renumberSehtest(id, nr) { return check(await sb.rpc("renumber_sehtest", { p_id: id, p_new: nr })) || []; },
       // Bankverbindung und Steuernummer (nur für das Verwaltungs-Konto lesbar)
       async getSettings() {
         const row = check(await sb.from("app_settings").select("value").eq("key", "issuer").maybeSingle());
@@ -290,6 +291,25 @@
         const db = load();
         while (db.regs.some(x => x.sehtest_nr === next)) next = nrPlus(next);
         return next;
+      },
+      // Wie renumber_sehtest in der Datenbank: spätere Nummern rücken nach, ausgestellte werden markiert
+      async renumberSehtest(id, nr) {
+        nr = String(nr || "").trim();
+        if (!/\d$/.test(nr)) throw new Error("Die Nummer muss mit einer Zahl enden, z. B. 3868.");
+        const db = load(), r = db.regs.find(x => x.id === id);
+        if (!r || !r.sehtest_nr) throw new Error("Dieser Sehtest hat noch keine Nummer.");
+        if (r.sehtest_nr === nr) return [];
+        const pre = x => x.replace(/\d+$/, ""), num = x => Number((x.match(/(\d+)$/) || [])[1]);
+        const after = db.regs.filter(x => x.id !== id && /\d$/.test(x.sehtest_nr || "") && pre(x.sehtest_nr) === pre(r.sehtest_nr) && num(x.sehtest_nr) > num(r.sehtest_nr))
+          .sort((a, b) => num(a.sehtest_nr) - num(b.sehtest_nr));
+        const plus = k => nr.replace(/(\d+)$/, d => String(Number(d) + k).padStart(d.length, "0"));
+        const wanted = [nr, ...after.map((_, i) => plus(i + 1))], moved = new Set([id, ...after.map(x => x.id)]);
+        const clash = db.regs.find(x => !moved.has(x.id) && wanted.includes(x.sehtest_nr));
+        if (clash) throw new Error(`Die Nummer ${clash.sehtest_nr} ist schon vergeben.`);
+        [r, ...after].forEach((x, i) => { if (x.sehtest_issued_at && x.sehtest_nr !== wanted[i]) x.sehtest_reissue = true; x.sehtest_nr = wanted[i]; });
+        try { localStorage.setItem("ehfy-demo-sehtest-next", plus(after.length + 1)); } catch (e) { /* egal */ }
+        save();
+        return [r, ...after].filter(x => x.sehtest_issued_at && x.sehtest_reissue).map(x => ({ name: `${x.first_name} ${x.last_name}`, nr: x.sehtest_nr }));
       },
       async setNextSehtestNr(nr) {
         nr = String(nr || "").trim();
