@@ -173,6 +173,22 @@
     if (zip) { out.zip = zip[1]; out.city = cap(zip[2].trim()); }
     const street = all.match(/([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]+(?:stra(?:ß|ss)e|str\.|weg|platz|allee|gasse|ring) ?\d+ ?[a-z]?\b)/i);
     if (street) out.street = /[a-zäöü]/.test(street[1]) ? street[1] : cap(street[1]);
+    // Zettel ohne Beschriftung: Geburtsdatum auch mit zweistelligem Jahr
+    if (!out.birth) {
+      const d2 = all.match(/\b(\d{1,2})[.,/]\s?(\d{1,2})[.,/]\s?(\d{2})\b/);
+      if (d2) { const y = Number(d2[3]); out.birth = `${y > (new Date().getFullYear() % 100) ? 1900 + y : 2000 + y}-${d2[2].padStart(2, "0")}-${d2[1].padStart(2, "0")}`; }
+    }
+    // Straße ohne „straße/weg …“: die Zeile mit Hausnummer direkt über der PLZ
+    const zipAt = lines.findIndex(l => /\b\d{5}\b/.test(l));
+    if (!out.street && zipAt > 0 && /^[A-Za-zÄÖÜäöüß. -]{3,}\s?\d+\s?[a-zA-Z]?$/.test(lines[zipAt - 1])) out.street = lines[zipAt - 1];
+    // Namen ohne Beschriftung: die ersten Zeilen nur aus Buchstaben (vor Adresse und Datum)
+    if (!out.firstName && !out.lastName) {
+      const skip = /teilnehmer|datenblatt|erste\s*hilfe|kurs|name|anschrift|adresse|geburt|datum|telefon|e-?mail|unterschrift/i;
+      const words = lines.filter((l, i) => (zipAt < 0 || i < zipAt) && /^[A-Za-zÄÖÜäöüßÀ-ÿ' -]{2,}$/.test(l) && !skip.test(l) && l !== out.street)
+        .map(l => nice(l)).filter(Boolean);
+      if (words.length >= 2) { out.firstName = words[0]; out.lastName = words[1]; }
+      else if (words.length === 1 && words[0].includes(" ")) { const p = words[0].split(" "); out.lastName = p.pop(); out.firstName = p.join(" "); }
+    }
     return out;
   }
 

@@ -615,15 +615,13 @@
     d.addEventListener("close", () => { if (cap && cap.done.length) loadCourses().catch(() => {}); });
     $("cap-date").addEventListener("change", capCourseInfo);
     $("cap-loc").addEventListener("input", capCourseInfo);
-    $("cap-read").onclick = () => {
-      const input = document.createElement("input");
-      input.type = "file"; input.accept = "image/*"; input.setAttribute("capture", "environment");
-      input.onchange = async () => {
-        const file = input.files[0];
-        if (file) await capRead(file).catch(e => { $("cap-info").textContent = e.message; });
-      };
-      input.click();
-    };
+    $("cap-read").onclick = () => pickPhoto(async file => {
+      const btn = $("cap-read");
+      btn.disabled = true; btn.textContent = "⏳ Foto wird gelesen …";
+      try { await capRead(file); }
+      catch (e) { $("cap-info").innerHTML = `<strong style="color:var(--danger)">Das Foto konnte nicht gelesen werden:</strong> ${esc(e.message || String(e))}`; }
+      finally { btn.disabled = false; btn.textContent = "📷 Daten auslesen"; }
+    });
     $("cap-save").onclick = capSave;
     $("cap-done").addEventListener("click", async ev => {
       const b = ev.target.closest("[data-cap-del]");
@@ -1070,21 +1068,29 @@
   // Die Erkennung läuft auf dem Gerät; das Foto wird weder hochgeladen noch gespeichert.
   const norm = t => String(t || "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z]/g, "");
-  function scanId(info, apply) {
+  // Kamera öffnen und das Foto zurückgeben. Das Feld hängt sichtbar-unsichtbar an der Seite:
+  // Sonst meldet das iPhone (Safari) das aufgenommene Foto manchmal gar nicht zurück.
+  function pickPhoto(onFile) {
     const input = document.createElement("input");
     input.type = "file"; input.accept = "image/*"; input.setAttribute("capture", "environment");
-    input.onchange = async () => {
-      const file = input.files[0];
-      input.value = "";
-      if (!file) return;
+    input.style.cssText = "position:fixed;left:-1000px;top:0;width:1px;height:1px;opacity:0";
+    (document.querySelector("dialog[open]") || document.body).appendChild(input);
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      setTimeout(() => input.remove(), 1000);
+      if (file) onFile(file);
+    });
+    input.click();
+  }
+  function scanId(info, apply) {
+    pickPhoto(async file => {
       info.innerHTML = "Ausweis wird gelesen … (beim ersten Mal lädt die Texterkennung, das dauert etwas)";
       try {
         const res = await window.EHFYAusweis.read(file, pct => { info.textContent = `Ausweis wird gelesen … ${pct} %`; });
         if (!res) { info.innerHTML = '<strong style="color:var(--danger)">Keine maschinenlesbare Zeile gefunden.</strong> Bitte die Seite mit den Zeilen voller „&lt;&lt;&lt;“ gerade, scharf und ohne Spiegelung fotografieren (beim Personalausweis die Rückseite). Führerscheine haben diese Zeilen nicht – dann bitte von Hand eintragen.'; return; }
         info.innerHTML = apply(res) + (res.allOk ? "" : ' <br><strong style="color:var(--danger)">Nummer oder Geburtsdatum unsicher gelesen – bitte mit dem Ausweis vergleichen.</strong>');
       } catch (e) { info.textContent = e.message; }
-    };
-    input.click();
+    });
   }
 
   let stRun = null; // { r, c, marks, set, flow, aid, idDoc, birth, draft, done }
