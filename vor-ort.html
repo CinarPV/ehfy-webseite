@@ -68,8 +68,7 @@
         <div id="vo-done" class="card vo-done hidden">
           <div class="big">✓</div>
           <h2 id="vo-thanks">Danke!</h2>
-          <p class="muted">Du bist für den Kurs eingetragen.</p>
-          <button class="btn btn-ghost" type="button" id="vo-next">Nächste Person eintragen</button>
+          <p class="muted">Du bist für den Kurs eingetragen. Du kannst diese Seite jetzt schließen.</p>
         </div>
       </div>
     </section>
@@ -152,15 +151,6 @@
       finally { btn.disabled = false; btn.textContent = "Absenden"; }
     });
 
-    // Gleiches Handy für die nächste Person (z. B. wer kein eigenes Handy dabei hat)
-    $("vo-next").onclick = () => {
-      const keep = $("vo-course-sel").value;
-      $("vo-form").reset(); clear();
-      if (keep) $("vo-course-sel").value = keep;
-      $("vo-done").classList.add("hidden");
-      $("vo-form").classList.remove("hidden");
-      window.scrollTo({ top: 0 });
-    };
   })();
   </script>
 </body>
