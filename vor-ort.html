@@ -35,6 +35,7 @@
 
         <form id="vo-form" class="card hidden" novalidate>
           <div class="vo-grid">
+            <div class="field wide hidden" id="vo-course-box"><label for="vo-course-sel">Kursdatum</label><select id="vo-course-sel"></select></div>
             <div class="field"><label for="vo-first">Vorname</label><input id="vo-first" autocomplete="given-name" required maxlength="80"></div>
             <div class="field"><label for="vo-last">Nachname</label><input id="vo-last" autocomplete="family-name" required maxlength="80"></div>
             <div class="field wide"><label for="vo-birth">Geburtsdatum</label><input id="vo-birth" inputmode="numeric" autocomplete="bday" placeholder="TT.MM.JJJJ" required maxlength="10"></div>
@@ -75,13 +76,28 @@
   (async function () {
     const $ = id => document.getElementById(id);
     const db = window.EHFY_DB;
-    const token = new URLSearchParams(location.search).get("k") || "";
+    const params = new URLSearchParams(location.search);
+    // k = QR-Code für einen Kurs, g = fester QR-Code (Kursdatum wird ausgewählt)
+    const general = params.get("g") || "", token = general || params.get("k") || "";
+    const dayText = iso => new Date(iso).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
 
-    let course = null;
-    try { course = await db.checkinCourse(token); } catch (e) { course = null; }
-    if (!course) { $("vo-invalid").classList.remove("hidden"); return; }
-    const day = new Date(course.starts_at).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
-    $("vo-course").textContent = `Erste-Hilfe-Kurs am ${day} in Siegen`;
+    if (general) {
+      let list = null;
+      try { list = await db.checkinCourses(general); } catch (e) { list = null; }
+      if (!list) { $("vo-invalid").classList.remove("hidden"); return; }
+      if (!list.length) { $("vo-invalid").innerHTML = '<p><strong>Zurzeit ist kein Kurs eingetragen.</strong></p><p class="muted">Bitte wende dich an deinen Kursleiter.</p>'; $("vo-invalid").classList.remove("hidden"); return; }
+      const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+      const dayOf = iso => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+      const pick = list.find(c => dayOf(c.starts_at) === today) || list.find(c => dayOf(c.starts_at) > today) || list[list.length - 1];
+      $("vo-course-sel").innerHTML = list.map(c => `<option value="${c.id}"${c === pick ? " selected" : ""}>${dayText(c.starts_at)}${dayOf(c.starts_at) === today ? " (heute)" : ""}</option>`).join("");
+      $("vo-course-box").classList.remove("hidden");
+      $("vo-course").textContent = "Erste-Hilfe-Kurs in Siegen";
+    } else {
+      let course = null;
+      try { course = await db.checkinCourse(token); } catch (e) { course = null; }
+      if (!course) { $("vo-invalid").classList.remove("hidden"); return; }
+      $("vo-course").textContent = `Erste-Hilfe-Kurs am ${dayText(course.starts_at)} in Siegen`;
+    }
     $("vo-form").classList.remove("hidden");
 
     // Unterschrift mit dem Finger: nur die Linie wird gespeichert
@@ -117,7 +133,7 @@
       btn.disabled = true; btn.textContent = "Wird gesendet …";
       try {
         const name = await db.checkinRegister({
-          token, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
+          token, course: general ? $("vo-course-sel").value : undefined, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
           street: v("vo-street"), zip: v("vo-zip"), city: v("vo-city"), phone: v("vo-phone"), email: v("vo-email"),
           package: $("vo-pkg").value, signature: cv.toDataURL("image/png")
         });
@@ -131,7 +147,9 @@
 
     // Gleiches Handy für die nächste Person (z. B. wer kein eigenes Handy dabei hat)
     $("vo-next").onclick = () => {
+      const keep = $("vo-course-sel").value;
       $("vo-form").reset(); clear();
+      if (keep) $("vo-course-sel").value = keep;
       $("vo-done").classList.add("hidden");
       $("vo-form").classList.remove("hidden");
       window.scrollTo({ top: 0 });

@@ -111,7 +111,13 @@
       // Selbsteintragung vor Ort per QR-Code
       async checkinToken(courseId, renew) { return check(await sb.rpc("checkin_token", { p_course: courseId, p_new: Boolean(renew) })); },
       async checkinCourse(token) { return check(await sb.rpc("checkin_course", { p_token: token })); },
+      async checkinGeneralToken(renew) { return check(await sb.rpc("checkin_general_token", { p_new: Boolean(renew) })); },
+      async checkinCourses(token) { return check(await sb.rpc("checkin_courses", { p_token: token })); },
       async checkinRegister(d) {
+        if (d.course) return check(await sb.rpc("checkin_register_general", {
+          p_token: d.token, p_course: d.course, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
+          p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
+        }));
         return check(await sb.rpc("checkin_register", {
           p_token: d.token, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
           p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
@@ -337,8 +343,25 @@
         const c = demoCheckin(load(), token);
         return c ? { starts_at: c.starts_at, ends_at: c.ends_at } : null;
       },
+      async checkinGeneralToken(renew) {
+        let t = null;
+        try { t = localStorage.getItem("ehfy-demo-checkin"); if (!t || renew) { t = uid(); localStorage.setItem("ehfy-demo-checkin", t); } } catch (e) { /* egal */ }
+        return t;
+      },
+      async checkinCourses(token) {
+        let t = null;
+        try { t = localStorage.getItem("ehfy-demo-checkin"); } catch (e) { /* egal */ }
+        if (!token || token !== t) return null;
+        const day = iso => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+        const shift = n => new Date(Date.now() + n * 864e5).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+        return load().courses.filter(c => c.status !== "abgesagt" && day(c.starts_at) >= shift(-7) && day(c.starts_at) <= shift(30))
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map(c => ({ id: c.id, starts_at: c.starts_at, ends_at: c.ends_at }));
+      },
       async checkinRegister(d) {
-        const db = load(), c = demoCheckin(db, d.token);
+        // Erst die Kursliste prüfen, danach laden (sonst speichert save() einen anderen Stand)
+        const list = d.course ? await this.checkinCourses(d.token) : null;
+        const db = load();
+        const c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : demoCheckin(db, d.token);
         if (!c) throw new Error("Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.");
         if (!d.signature || !d.signature.startsWith("data:image/png;base64,")) throw new Error("Bitte unterschreiben.");
         const same = x => x.course_id === c.id && x.status !== "storniert" && x.first_name.toLowerCase() === d.first_name.trim().toLowerCase()

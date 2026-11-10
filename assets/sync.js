@@ -174,6 +174,11 @@
       if (outbox.some(o => o.type === "course-put" && o.row.id === courseId)) await sync();
       return remote.checkinToken(courseId, renew);
     },
+    async checkinGeneralToken(renew) {
+      await ready;
+      if (!isOnline()) throw new Error("Für den QR-Code braucht es einmal Internet.");
+      return remote.checkinGeneralToken(renew);
+    },
     // Nummer ändern, spätere rücken nach: nur mit Internet, danach den neuen Stand holen
     async renumberSehtest(id, nr) {
       await ready;

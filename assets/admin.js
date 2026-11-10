@@ -587,28 +587,39 @@
       <p class="small muted" style="margin:0 0 10px">Schüler scannen den Code mit der Handy-Kamera, tragen ihre Daten ein und unterschreiben mit dem Finger. Sie stehen danach sofort in der Teilnehmerliste.</p>
       <div id="qr-img" class="qr-img"></div>
       <p class="small" id="qr-msg" role="status"></p>
-      <div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" id="qr-copy">Link kopieren</button><button class="btn btn-sm btn-ghost" type="button" id="qr-new">Neuer Code (alter wird ungültig)</button><button class="btn btn-sm" type="button" id="qr-close">Schließen</button></div>`;
+      <div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" id="qr-print">Drucken</button><button class="btn btn-sm btn-ghost" type="button" id="qr-copy">Link kopieren</button><button class="btn btn-sm btn-ghost" type="button" id="qr-new">Neuer Code (alter wird ungültig)</button><button class="btn btn-sm" type="button" id="qr-close">Schließen</button></div>`;
     document.body.appendChild(d);
     $("qr-close").onclick = () => d.close();
     d.addEventListener("close", () => loadCourses().catch(() => {}));
     return d;
   }
+  // c = Kurs; ohne Kurs: fester QR-Code, der immer gilt (Schüler wählen das Kursdatum selbst)
   async function openQr(c, renew) {
-    if (!c) return;
     const d = qrDialog();
-    $("qr-title").textContent = `${dayText(c.starts_at)} · ${fmtRange(c.starts_at, c.ends_at)}`;
+    $("qr-title").textContent = c ? `${dayText(c.starts_at)} · ${fmtRange(c.starts_at, c.ends_at)}` : "Fester QR-Code (immer gültig)";
     $("qr-img").innerHTML = '<p class="muted">QR-Code wird erstellt …</p>';
     $("qr-msg").textContent = "";
     if (!d.open) d.showModal();
     try {
-      const token = await db.checkinToken(c.id, renew);
-      const link = new URL(`vor-ort.html?k=${token}`, location.href).href;
+      const token = c ? await db.checkinToken(c.id, renew) : await db.checkinGeneralToken(renew);
+      const link = new URL(`vor-ort.html?${c ? "k" : "g"}=${token}`, location.href).href;
       const qr = window.qrcode(0, "M");
       qr.addData(link); qr.make();
       $("qr-img").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
       $("qr-copy").onclick = async () => { try { await navigator.clipboard.writeText(link); $("qr-msg").textContent = "Link kopiert ✓"; } catch (e) { $("qr-msg").textContent = link; } };
-      $("qr-new").onclick = () => { if (confirm("Neuen QR-Code erstellen? Der bisherige Code funktioniert dann nicht mehr.")) openQr(c, true); };
-      $("qr-msg").textContent = "Gültig von 2 Tagen vor bis 14 Tage nach dem Kurstag. Es geht keine Anmelde-Mail raus.";
+      $("qr-new").onclick = () => { if (confirm(`Neuen QR-Code erstellen? Der bisherige Code funktioniert dann nicht mehr${c ? "" : " – auch nicht mehr auf Ausdrucken"}.`)) openQr(c, true); };
+      $("qr-msg").textContent = c ? "Gültig von 2 Tagen vor bis 14 Tage nach dem Kurstag. Es geht keine Anmelde-Mail raus."
+        : "Gilt immer. Die Schüler wählen das Kursdatum aus (Kurse der letzten 7 und nächsten 30 Tage). Es geht keine Anmelde-Mail raus.";
+      $("qr-print").onclick = () => {
+        const w = window.open("", "_blank");
+        if (!w) return;
+        w.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>QR-Code Teilnehmerdatenblatt</title>
+          <style>body{font-family:system-ui,sans-serif;text-align:center;padding:40px;color:#0a2a35}h1{font-size:30px;margin:0 0 6px}p{font-size:18px}svg{width:340px;height:340px}</style></head>
+          <body><h1>Erste-Hilfe-Kurs · Teilnehmerdatenblatt</h1><p>QR-Code mit der Handy-Kamera scannen, Daten eintragen, unterschreiben.</p>
+          ${qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true })}<p>Erste Hilfe for you · Siegen</p></body></html>`);
+        w.document.close();
+        setTimeout(() => w.print(), 300);
+      };
     } catch (e) { $("qr-img").innerHTML = ""; $("qr-msg").textContent = e.message; }
   }
 
@@ -819,6 +830,7 @@
     finally { btn.disabled = false; }
   }
   $("cap-open").onclick = openCapture;
+  $("qr-general").onclick = () => openQr(null);
 
   // ---------- Abgleich: lokal arbeiten, dann „Synchronisieren“ ----------
   const changes = n => `${n} Änderung${n === 1 ? "" : "en"}`;
@@ -1688,12 +1700,19 @@
     }).join("") + (sorted.length > limit ? `<p class="muted small">Es werden die neuesten ${limit} angezeigt. Bitte die Suche genauer eingeben.</p>` : "")
       : '<p class="muted">Keine Schüler gefunden.</p>';
   }
+  // Andere Kurstage zur Auswahl (letzte 60 und nächste 120 Tage, dazu der aktuelle)
+  function moveOptions(cur) {
+    const from = Date.now() - 60 * 864e5, to = Date.now() + 120 * 864e5;
+    const list = courses.filter(x => x.id === cur.id || (x.status !== "abgesagt" && new Date(x.starts_at) >= from && new Date(x.starts_at) <= to));
+    return list.map(x => `<option value="${x.id}"${x.id === cur.id ? " selected" : ""}>${dayText(x.starts_at)} · ${esc(x.location)}</option>`).join("");
+  }
   function studentEntry(r) {
     const c = courseFor(r);
     const off = r.status === "storniert" || !c || c.status === "abgesagt";
     return `<div class="sc-entry" data-reg="${r.id}">
       <div class="sc-facts">
         <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : r.sehtest_only ? "Nur Sehtest, kein Kurs" : "Termin gelöscht"}</strong>${!c && r.sehtest_only ? "" : `<br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.virtual ? "nicht belegt, nur angemeldet" : c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span>`}</div>
+        ${c && !c.virtual ? `<div><label for="sc-mv-${r.id}">Kurstag ändern</label><select id="sc-mv-${r.id}" data-sc-move>${moveOptions(c)}</select></div>` : ""}
         ${r.checkin_at ? `<div><label>Datenblatt</label><span class="small">✍ selbst eingetragen und unterschrieben (QR-Code) am ${birthText(r.checkin_at.slice(0, 10))}</span></div>` : ""}
         <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
       </div>
@@ -1755,6 +1774,15 @@
     if (disc) {
       disc.blur();
       try { await saveDiscount(disc, disc.closest("[data-reg]").dataset.reg); await loadStudents(); }
+      catch (e) { $("sc-error").textContent = e.message; }
+      return;
+    }
+    const mv = ev.target.closest("select[data-sc-move]");
+    if (mv) {
+      const r = studentRegs.find(x => x.id === mv.closest("[data-reg]").dataset.reg), to = courses.find(x => x.id === mv.value);
+      if (!r || !to || to.id === r.course_id) return;
+      if (!confirm(`${r.first_name} ${r.last_name} auf ${dayText(to.starts_at)} (${to.location}) verschieben?`)) { mv.value = r.course_id; return; }
+      try { await db.updateRegistration(r.id, { course_id: to.id }); await loadStudents(); await loadCourses(); }
       catch (e) { $("sc-error").textContent = e.message; }
       return;
     }

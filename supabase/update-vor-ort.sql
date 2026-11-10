@@ -1,6 +1,7 @@
 -- Selbsteintragung vor Ort per QR-Code: Schüler tippen ihre Daten am eigenen Handy ein und unterschreiben mit dem Finger.
 -- Kein Foto, keine Kamera. Gespeichert werden nur die Angaben und die Unterschrift (als Bild der Linie).
--- Einmal im Supabase SQL Editor ausführen. Löscht nichts.
+-- Dazu ein fester QR-Code, der immer gilt: Schüler wählen das Kursdatum selbst.
+-- Einmal im Supabase SQL Editor ausführen (auch erneut möglich). Löscht nichts.
 
 alter table public.courses add column if not exists checkin_token uuid;
 alter table public.registrations add column if not exists signature_png text;
@@ -45,13 +46,13 @@ begin
 end $$;
 grant execute on function public.checkin_course(uuid) to anon, authenticated;
 
-create or replace function public.checkin_register(
-  p_token uuid, p_first_name text, p_last_name text, p_birth_date date,
+-- Gemeinsames Eintragen (für QR je Kurs und den festen QR-Code)
+create or replace function public.checkin_insert(
+  c public.courses, p_first_name text, p_last_name text, p_birth_date date,
   p_street text, p_zip text, p_city text, p_phone text, p_email text, p_package text, p_signature text)
 returns text language plpgsql security definer set search_path = public as $$
-declare c public.courses; v_today date := (now() at time zone 'Europe/Berlin')::date;
+declare v_today date := (now() at time zone 'Europe/Berlin')::date;
 begin
-  c := public.checkin_find(p_token);
   if c.id is null then raise exception 'Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.'; end if;
   if coalesce(trim(p_first_name), '') = '' or coalesce(trim(p_last_name), '') = '' then raise exception 'Bitte Vor- und Nachname eintragen.'; end if;
   if p_birth_date is null or p_birth_date > v_today or p_birth_date < date '1900-01-01' then raise exception 'Bitte das Geburtsdatum prüfen.'; end if;
@@ -75,4 +76,64 @@ begin
      p_signature, now());
   return trim(p_first_name);
 end $$;
+revoke execute on function public.checkin_insert(public.courses, text, text, date, text, text, text, text, text, text, text) from public, anon, authenticated;
+
+-- QR-Code je Kurs
+create or replace function public.checkin_register(
+  p_token uuid, p_first_name text, p_last_name text, p_birth_date date,
+  p_street text, p_zip text, p_city text, p_phone text, p_email text, p_package text, p_signature text)
+returns text language plpgsql security definer set search_path = public as $$
+begin
+  return public.checkin_insert(public.checkin_find(p_token), p_first_name, p_last_name, p_birth_date,
+    p_street, p_zip, p_city, p_phone, p_email, p_package, p_signature);
+end $$;
 grant execute on function public.checkin_register(uuid, text, text, date, text, text, text, text, text, text, text) to anon, authenticated;
+
+-- ---------- Fester QR-Code (immer gültig): Schüler wählen das Kursdatum selbst ----------
+create table if not exists public.checkin_settings (id int primary key default 1 check (id = 1), token uuid);
+alter table public.checkin_settings enable row level security; -- kein Zugriff von außen, nur über die Funktionen
+
+create or replace function public.checkin_general_token(p_new boolean default false)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare t uuid;
+begin
+  if not public.is_admin() then raise exception 'Nicht erlaubt'; end if;
+  select token into t from public.checkin_settings where id = 1;
+  if t is null or p_new then
+    t := gen_random_uuid();
+    insert into public.checkin_settings (id, token) values (1, t) on conflict (id) do update set token = excluded.token;
+  end if;
+  return t;
+end $$;
+revoke execute on function public.checkin_general_token(boolean) from public, anon;
+grant execute on function public.checkin_general_token(boolean) to authenticated;
+
+-- Kurse zur Auswahl: 7 Tage zurück bis 30 Tage voraus, nicht abgesagt (nur Datum und Uhrzeit)
+create or replace function public.checkin_courses(p_token uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare v_today date := (now() at time zone 'Europe/Berlin')::date;
+begin
+  if p_token is null or not exists (select 1 from public.checkin_settings where id = 1 and token = p_token) then return null; end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'starts_at', c.starts_at, 'ends_at', c.ends_at) order by c.starts_at)
+    from public.courses c
+   where c.status <> 'abgesagt'
+     and (c.starts_at at time zone 'Europe/Berlin')::date between v_today - 7 and v_today + 30), '[]'::jsonb);
+end $$;
+grant execute on function public.checkin_courses(uuid) to anon, authenticated;
+
+create or replace function public.checkin_register_general(
+  p_token uuid, p_course uuid, p_first_name text, p_last_name text, p_birth_date date,
+  p_street text, p_zip text, p_city text, p_phone text, p_email text, p_package text, p_signature text)
+returns text language plpgsql security definer set search_path = public as $$
+declare c public.courses; v_today date := (now() at time zone 'Europe/Berlin')::date;
+begin
+  if p_token is null or not exists (select 1 from public.checkin_settings where id = 1 and token = p_token) then
+    raise exception 'Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.';
+  end if;
+  select * into c from public.courses
+   where id = p_course and status <> 'abgesagt'
+     and (starts_at at time zone 'Europe/Berlin')::date between v_today - 7 and v_today + 30;
+  if c.id is null then raise exception 'Bitte das Kursdatum auswählen.'; end if;
+  return public.checkin_insert(c, p_first_name, p_last_name, p_birth_date, p_street, p_zip, p_city, p_phone, p_email, p_package, p_signature);
+end $$;
+grant execute on function public.checkin_register_general(uuid, uuid, text, text, date, text, text, text, text, text, text, text) to anon, authenticated;

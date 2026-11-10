@@ -1,6 +1,6 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v61";
+const CACHE = "ehfy-app-v62";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/admin-hell.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
