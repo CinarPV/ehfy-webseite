@@ -415,10 +415,24 @@
         const c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : demoCheckin(db, d.token);
         if (!c) throw new Error("Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.");
         if (!d.signature || !d.signature.startsWith("data:image/png;base64,")) throw new Error("Bitte unterschreiben.");
-        const same = x => x.course_id === c.id && x.status !== "storniert" && x.first_name.toLowerCase() === d.first_name.trim().toLowerCase()
-          && x.last_name.toLowerCase() === d.last_name.trim().toLowerCase() && x.birth_date === d.birth_date;
-        if (db.regs.some(same)) throw new Error("Du bist für diesen Kurs schon eingetragen.");
+        // Wie in Supabase: Steht der Schüler schon im Kurs, werden seine Daten durch das Datenblatt ersetzt (kein zweiter Eintrag)
+        const key = t => String(t || "").toLowerCase().replace(/ß/g, "ss").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .replace(/ı/g, "i").replace(/ł/g, "l").replace(/ø/g, "o").replace(/[^a-z]/g, "").replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
+        const fits = (a, b) => { a = key(a); b = key(b); return !!a && !!b && (a === b || (a.length >= 3 && b.includes(a)) || (b.length >= 3 && a.includes(b))); };
+        const hit = db.regs.filter(x => x.course_id === c.id && x.status !== "storniert" && (
+            (key(x.last_name) === key(d.last_name) && fits(x.first_name, d.first_name))
+            || (key(x.last_name) === key(d.first_name) && key(x.first_name) === key(d.last_name))
+            || (key(x.last_name) === key(d.last_name) && x.birth_date === d.birth_date)))
+          .sort((x, y) => (y.birth_date === d.birth_date) - (x.birth_date === d.birth_date) || (!y.checkin_at) - (!x.checkin_at) || String(x.created_at).localeCompare(String(y.created_at)))[0];
         const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+        if (hit) {
+          Object.assign(hit, { first_name: d.first_name.trim(), last_name: d.last_name.trim(), birth_date: d.birth_date,
+            street: d.street, zip: d.zip, city: d.city, phone: d.phone || hit.phone || null, email: d.email || hit.email || null,
+            signature_png: d.signature, checkin_at: new Date().toISOString() });
+          if (new Date(c.starts_at).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) <= today && ["angemeldet", "nicht_erschienen"].includes(hit.status)) hit.status = "teilgenommen";
+          save();
+          return d.first_name.trim();
+        }
         db.regs.push({ id: uid(), course_id: c.id, first_name: d.first_name.trim(), last_name: d.last_name.trim(), birth_date: d.birth_date,
           street: d.street, zip: d.zip, city: d.city, phone: d.phone || null, email: d.email || null, package: d.package === "komplett" ? "komplett" : "kurs",
           status: new Date(c.starts_at).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) <= today ? "teilgenommen" : "angemeldet",
