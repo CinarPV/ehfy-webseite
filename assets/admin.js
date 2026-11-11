@@ -579,6 +579,101 @@
     } catch (e) { $("rd-error").textContent = e.message; }
   });
 
+  // ---------- QR-Ausdruck (A4-PDF): großer Code fürs Datenblatt, kleiner Code für die Google-Bewertung ----------
+  async function qrSheetPdf(qr, when) {
+    const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+    const hex = h => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
+    const C = { ink: hex("#0a2a35"), aid: hex("#29b4b6"), aidD: hex("#0b7b7f"), aidL: hex("#dcf5f4"), line: hex("#d9ecec"), soft: hex("#f1f7f8"), mu: hex("#4f6b76"), star: hex("#fbbc04"), white: rgb(1, 1, 1) };
+    const pdf = await PDFDocument.create();
+    pdf.setTitle("QR-Code Teilnehmerdatenblatt");
+    const page = pdf.addPage([595.28, 841.89]);
+    const reg = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const W = 595.28, mid = W / 2;
+    const text = (t, y, size, font, color, x) => {
+      const w = font.widthOfTextAtSize(t, size);
+      page.drawText(t, { x: x == null ? mid - w / 2 : x, y, size, font, color });
+      return w;
+    };
+    // Rechteck mit runden Ecken (SVG-Pfad: Ursprung oben links, y nach unten)
+    const round = (x, top, w, h, r, o) => page.drawSvgPath(
+      `M${r},0 H${w - r} Q${w},0 ${w},${r} V${h - r} Q${w},${h} ${w - r},${h} H${r} Q0,${h} 0,${h - r} V${r} Q0,0 ${r},0 Z`, { x, y: top, ...o });
+    const drawQr = (q, x, top, size) => {
+      const n = q.getModuleCount(), cell = size / n;
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (!q.isDark(r, c)) continue;
+          let e = c; while (e + 1 < n && q.isDark(r, e + 1)) e++;
+          page.drawRectangle({ x: x + c * cell, y: top - (r + 1) * cell, width: (e - c + 1) * cell + 0.2, height: cell + 0.5, color: C.ink });
+          c = e;
+        }
+      }
+    };
+    const star = (x, top, s, color) => {
+      const pts = [];
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? s * 0.2 : s / 2;
+        pts.push(`${(s / 2 + rr * Math.cos(a)).toFixed(2)},${(s / 2 + rr * Math.sin(a)).toFixed(2)}`);
+      }
+      page.drawSvgPath(`M${pts.join(" L")} Z`, { x, y: top, color });
+    };
+
+    // Rahmen mit dunklem Kopfband
+    const L = 56.6, SW = 482, TOP = 806, BOT = 52;
+    round(L, TOP, SW, TOP - BOT, 28, { color: C.white, borderColor: C.aid, borderWidth: 3 });
+    page.drawSvgPath(`M28,0 H${SW - 28} Q${SW},0 ${SW},28 V30 H0 V28 Q0,0 28,0 Z`, { x: L, y: TOP, color: C.ink });
+
+    // Logo
+    try {
+      const png = await pdf.embedPng(await (await fetch(new URL("assets/logo.png", location.href).href)).arrayBuffer());
+      const lw = 190, lh = lw * png.height / png.width;
+      page.drawImage(png, { x: mid - lw / 2, y: 760 - lh, width: lw, height: lh });
+    } catch (e) { text(cfg.name || "Erste Hilfe for you", 715, 24, bold, C.ink); }
+
+    text("Teilnehmerdatenblatt", 648, 28, bold, C.ink);
+    text(when, 624, 13, bold, C.aidD);
+
+    // Großer QR-Code
+    const QS = 250, QB = QS + 24;
+    round(mid - QB / 2, 606, QB, QB, 16, { color: C.white, borderColor: C.line, borderWidth: 2 });
+    drawQr(qr, mid - QS / 2, 606 - 12, QS);
+
+    // Drei Schritte
+    const steps = ["QR-Code scannen", "Daten eintragen", "Unterschreiben"], sz = 11.5, gap = 14;
+    const ws = steps.map(t => bold.widthOfTextAtSize(t, sz) + 44);
+    let x = mid - (ws.reduce((a, b) => a + b, 0) + gap * 2) / 2;
+    steps.forEach((t, i) => {
+      round(x, 316, ws[i], 26, 13, { color: C.aidL });
+      text(String(i + 1), 299, sz, bold, C.aidD, x + 14);
+      text(t, 299, sz, bold, C.ink, x + 30);
+      x += ws[i] + gap;
+    });
+
+    // Kleiner Bewertungs-Code
+    const review = cfg.googleReviewUrl;
+    if (review) {
+      const g = window.qrcode(0, "M"); g.addData(review); g.make();
+      const bx = L + 30, bw = SW - 60, btop = 272, bh = 118, rq = 86;
+      round(bx, btop, bw, bh, 16, { color: C.soft, borderColor: C.line, borderWidth: 1.5 });
+      round(bx + 16, btop - 16, rq + 10, rq + 10, 8, { color: C.white });
+      drawQr(g, bx + 21, btop - 21, rq);
+      const tx = bx + 16 + rq + 10 + 22;
+      text("Hat dir der Kurs gefallen?", btop - 38, 15, bold, C.ink, tx);
+      for (let i = 0; i < 5; i++) star(tx + i * 19, btop - 46, 16, C.star);
+      // „Google“ in den bekannten Farben
+      let gx = tx + 5 * 19 + 8;
+      [["G", "#4285f4"], ["o", "#ea4335"], ["o", "#fbbc04"], ["g", "#4285f4"], ["l", "#34a853"], ["e", "#ea4335"]].forEach(([ch, col]) => {
+        page.drawText(ch, { x: gx, y: btop - 59, size: 14, font: bold, color: hex(col) });
+        gx += bold.widthOfTextAtSize(ch, 14);
+      });
+      text("Bewerte uns auf Google – das hilft uns sehr.", btop - 82, 11, reg, C.ink, tx);
+      text("Kamera auf den kleinen Code halten.", btop - 98, 9.5, reg, C.mu, tx);
+    }
+
+    text("Erste Hilfe for you · Erste-Hilfe-Kurse für Führerschein & Beruf", 100, 10.5, bold, C.ink);
+    text(`Tel. ${cfg.phone || ""} · www.ehfy.de`, 85, 10.5, reg, C.mu);
+    return pdf.save();
+  }
+
   // ---------- QR-Code: Schüler tragen sich mit dem eigenen Handy ein und unterschreiben mit dem Finger ----------
   function qrDialog() {
     let d = $("qr-dialog");
@@ -612,39 +707,16 @@
       $("qr-new").onclick = () => { if (confirm(`Neuen QR-Code erstellen? Der bisherige Code funktioniert dann nicht mehr${c ? "" : " – auch nicht mehr auf Ausdrucken"}.`)) openQr(c, true); };
       $("qr-msg").textContent = c ? "Gültig von 2 Tagen vor bis 14 Tage nach dem Kurstag. Es geht keine Anmelde-Mail raus."
         : "Gilt immer. Die Schüler wählen das Kursdatum aus (Kurse der letzten 7 und nächsten 30 Tage). Es geht keine Anmelde-Mail raus.";
-      $("qr-print").onclick = () => {
-        const w = window.open("", "_blank");
-        if (!w) return;
-        const logo = new URL("assets/logo.png", location.href).href;
-        const when = c ? `Kurs am ${dayText(c.starts_at)} in Siegen` : "Erste-Hilfe-Kurs in Siegen";
-        w.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>QR-Code Teilnehmerdatenblatt</title>
-<style>
-  @page { size: A4; margin: 0; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #0a2a35; display: flex; align-items: center; justify-content: center; background: #fff;
-         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .sheet { width: 170mm; text-align: center; border: 3px solid #29b4b6; border-radius: 10mm; padding: 14mm 12mm 12mm; position: relative; }
-  .sheet::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 9mm; background: #0a2a35; border-radius: 7mm 7mm 0 0; }
-  .logo { width: 70mm; margin: 6mm auto 4mm; display: block; }
-  h1 { font-size: 24pt; margin: 2mm 0 1mm; letter-spacing: .3px; }
-  .sub { font-size: 13pt; color: #0b7b7f; margin: 0 0 7mm; font-weight: 700; }
-  .qr { width: 95mm; height: 95mm; margin: 0 auto; padding: 4mm; border-radius: 6mm; background: #fff; border: 2px solid #d9ecec; }
-  .qr svg { width: 100%; height: 100%; display: block; }
-  .steps { display: flex; justify-content: center; gap: 6mm; margin: 8mm 0 6mm; font-size: 11.5pt; font-weight: 700; }
-  .steps span { background: #dcf5f4; border-radius: 99px; padding: 2.5mm 5mm; white-space: nowrap; }
-  .steps b { color: #0b7b7f; margin-right: 1.5mm; }
-  .foot { font-size: 10.5pt; color: #4f6b76; margin-top: 4mm; }
-  .foot strong { color: #0a2a35; }
-</style></head><body><div class="sheet">
-  <img class="logo" src="${logo}" alt="Erste Hilfe for you">
-  <h1>Teilnehmerdatenblatt</h1>
-  <p class="sub">${when}</p>
-  <div class="qr">${qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true })}</div>
-  <div class="steps"><span><b>1</b>QR-Code scannen</span><span><b>2</b>Daten eintragen</span><span><b>3</b>Unterschreiben</span></div>
-  <p class="foot"><strong>Erste Hilfe for you</strong> · Erste-Hilfe-Kurse für Führerschein &amp; Beruf<br>Tel. ${esc(cfg.phone || "")} · www.ehfy.de</p>
-</div><script>let done = false; const go = () => { if (!done) { done = true; print(); } }; document.querySelector(".logo").onload = () => setTimeout(go, 200); setTimeout(go, 2500);<\/script></body></html>`);
-        w.document.close();
+      // Als PDF: so geht es auch am iPhone (in der App über „Teilen / Drucken“)
+      $("qr-print").onclick = async () => {
+        const win = openTab();
+        $("qr-msg").textContent = "PDF wird erstellt …";
+        try {
+          await ensurePdf();
+          const bytes = await qrSheetPdf(qr, c ? `Kurs am ${dayText(c.starts_at)} in Siegen` : "Erste-Hilfe-Kurs in Siegen");
+          showPdf(bytes, "QR-Code Teilnehmerdatenblatt.pdf", win);
+          $("qr-msg").textContent = "";
+        } catch (e) { if (win) win.close(); $("qr-msg").textContent = "PDF konnte nicht erstellt werden: " + e.message; }
       };
     } catch (e) { $("qr-img").innerHTML = ""; $("qr-msg").textContent = e.message; }
   }

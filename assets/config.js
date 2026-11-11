@@ -11,6 +11,8 @@ window.EHFY_CONFIG = {
   phoneIntl: "+491751567473",
   whatsapp: "491751567473",
   email: "ehfy@web.de",
+  // Google-Bewertung: öffnet direkt das Fenster „Rezension schreiben“ (für den kleinen QR-Code auf dem Ausdruck)
+  googleReviewUrl: "https://search.google.com/local/writereview?placeid=ChIJ8_rloDQdvEcRZ74ohUwTzKk",
   defaultLocation: "Siegen",
   defaultAddress: "Selims Fahrschule, Hagener Straße 20, 57072 Siegen",
   defaultCapacity: 12,
