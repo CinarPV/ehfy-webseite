@@ -2333,8 +2333,8 @@
   let bankData = null;
   async function issuer() {
     if (!bankData) bankData = await db.getSettings().catch(() => ({}));
-    // Deine hinterlegte Unterschrift kommt auf Quittung und Rechnung
-    return { ...cfg.issuer, ...bankData, signature: await signatureBytes() };
+    // Unterschrift auf Quittung und Rechnung: die gerade vor Ort gezeichnete, sonst die hinterlegte
+    return { ...cfg.issuer, ...bankData, signature: onSiteSig !== undefined ? onSiteSig : await signatureBytes() };
   }
   const BANK_FIELDS = { bank: "st-bank", accountHolder: "st-holder", iban: "st-iban", bic: "st-bic", taxNumber: "st-tax" };
   async function renderBank() {
@@ -2541,6 +2541,12 @@
 
   async function makeDoc(kind, people, course, win) {
     await ensurePdf();
+    if (["quittung", "rechnung", "alles"].includes(kind)) {
+      return withSign(kind === "rechnung" ? "Rechnung" : "Quittung", win, () => makeDocNow(kind, people, course, win));
+    }
+    return makeDocNow(kind, people, course, win);
+  }
+  async function makeDocNow(kind, people, course, win) {
     const bytes = kind === "alles"
       ? await EHFYDocs.bundle(await Promise.all(BUNDLE.map(k => docBytes(k, people, course))))
       : await docBytes(kind, people, course);
@@ -2699,6 +2705,9 @@
 
   async function invoicePdf(inv, win) {
     await ensurePdf();
+    return withSign(inv.type === "quittung" ? "Quittung" : "Rechnung", win, () => invoicePdfNow(inv, win));
+  }
+  async function invoicePdfNow(inv, win) {
     const bytes = inv.type === "quittung"
       ? await receiptPdf([inv])
       : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays);
@@ -2831,25 +2840,138 @@
 
   // ---------- Unterschrift: einmal mit Finger oder Maus zeichnen, geschützt gespeichert (als kleine PDF) ----------
   const signatureBytes = () => db.getTemplate("unterschrift").catch(() => null);
+  // ---------- Unterschrift vor Ort (Quittung/Rechnung) und großes Unterschriftsfeld ----------
+  let onSiteSig; // undefined = hinterlegte Unterschrift nehmen, null = ohne, sonst PDF-Bytes
+  async function withSign(kind, win, run) {
+    // Ein offener leerer Tab würde den Dialog verdecken: schließen, die PDF kommt dann im PDF-Dialog
+    if (win && !win.closed) win.close();
+    onSiteSig = await askSign(kind);
+    try { return await run(); } finally { onSiteSig = undefined; }
+  }
+
+  // Gezeichnete Linien (PNG) als eine PDF-Seite, wie die hinterlegte Unterschrift
+  async function sigToPdf(png) {
+    await ensurePdf();
+    const { PDFDocument } = window.PDFLib, pdf = await PDFDocument.create();
+    const img = await pdf.embedPng(png);
+    pdf.addPage([img.width, img.height]).drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+    return pdf.save();
+  }
+
+  // Kleiner Dialog vor Quittung/Rechnung: hier unterschreiben, hinterlegte nehmen oder ohne
+  function askSign(kind) {
+    return new Promise(async resolve => {
+      const stored = await signatureBytes();
+      let d = $("sign-ask");
+      if (!d) { d = document.createElement("dialog"); d.id = "sign-ask"; d.className = "qr-dlg"; document.body.appendChild(d); }
+      let png = null;
+      d.innerHTML = `<h3 style="margin:0 0 4px">${esc(kind)}: deine Unterschrift</h3>
+        <p class="small muted" style="margin:0 0 10px">Du unterschreibst als Aussteller. Tippe ins Feld – es wird groß, damit du bequem unterschreiben kannst.</p>
+        <button type="button" id="sa-field" class="sign-field"><span>✍ Zum Unterschreiben hier tippen</span></button>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn" type="button" id="sa-ok" disabled>Mit dieser Unterschrift</button>
+          ${stored ? '<button class="btn btn-ghost" type="button" id="sa-stored">Meine hinterlegte Unterschrift</button>' : ""}
+          <button class="btn btn-ghost" type="button" id="sa-none">Ohne Unterschrift</button>
+        </div>`;
+      const done = v => { d.close(); resolve(v); };
+      d.oncancel = e => { e.preventDefault(); done(stored || null); };
+      $("sa-field").onclick = async () => {
+        const res = await bigSign(`${kind} – deine Unterschrift`);
+        if (!res) return;
+        png = res;
+        $("sa-field").innerHTML = `<img src="${res}" alt="Deine Unterschrift">`;
+        $("sa-ok").disabled = false;
+      };
+      $("sa-ok").onclick = async () => { if (png) done(await sigToPdf(png)); };
+      if (stored) $("sa-stored").onclick = () => done(stored);
+      $("sa-none").onclick = () => done(null);
+      d.showModal();
+    });
+  }
+
+  // Großes Unterschriftsfeld über den ganzen Bildschirm. Ergebnis: PNG (zugeschnitten, durchsichtig) oder null bei „Zurück“
+  function bigSign(title) {
+    return new Promise(resolve => {
+      const d = document.createElement("dialog");
+      d.className = "sign-big";
+      d.innerHTML = `<div class="sb-bar"><button class="btn btn-sm btn-ghost" type="button" data-sb="back">← Zurück</button>
+          <strong>${esc(title)}</strong><button class="btn btn-sm btn-ghost" type="button" data-sb="clear">Löschen</button></div>
+        <div class="sb-area"><canvas></canvas><div class="sb-line"></div><span class="sb-hint">Hier unterschreiben · Tipp: Handy quer halten</span></div>
+        <div class="sb-foot"><button class="btn" type="button" data-sb="ok">Fertig – übernehmen</button></div>`;
+      document.body.appendChild(d);
+      const cv = d.querySelector("canvas"), area = d.querySelector(".sb-area"), ctx = cv.getContext("2d");
+      const strokes = []; let cur = null;
+      const paint = () => {
+        const r = window.devicePixelRatio || 1;
+        ctx.setTransform(r, 0, 0, r, 0, 0);
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        ctx.lineWidth = 3; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = "#0a2a8a";
+        for (const s of strokes) { ctx.beginPath(); s.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); if (s.length === 1) ctx.lineTo(s[0][0] + 0.1, s[0][1]); ctx.stroke(); }
+        d.querySelector(".sb-hint").style.display = strokes.length ? "none" : "";
+      };
+      const size = () => {
+        const b = area.getBoundingClientRect(), r = window.devicePixelRatio || 1;
+        cv.width = Math.round(b.width * r); cv.height = Math.round(b.height * r);
+        cv.style.width = b.width + "px"; cv.style.height = b.height + "px";
+        paint();
+      };
+      const pos = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+      cv.addEventListener("pointerdown", e => { cur = [pos(e)]; strokes.push(cur); cv.setPointerCapture(e.pointerId); paint(); e.preventDefault(); });
+      cv.addEventListener("pointermove", e => { if (!cur) return; cur.push(pos(e)); paint(); e.preventDefault(); });
+      const up = () => { cur = null; };
+      cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+      const finish = v => { window.removeEventListener("resize", size); d.close(); d.remove(); resolve(v); };
+      d.oncancel = e => { e.preventDefault(); finish(null); };
+      d.addEventListener("click", e => {
+        const b = e.target.closest("[data-sb]");
+        if (!b) return;
+        if (b.dataset.sb === "back") finish(null);
+        if (b.dataset.sb === "clear") { strokes.length = 0; paint(); }
+        if (b.dataset.sb === "ok") {
+          if (!strokes.length) { d.querySelector(".sb-hint").textContent = "Bitte zuerst unterschreiben."; return; }
+          // Auf die Unterschrift zuschneiden, scharf (2-fach) und mit durchsichtigem Hintergrund
+          const pts = strokes.flat(), pad = 6, k = 2;
+          const x0 = Math.min(...pts.map(p => p[0])) - pad, y0 = Math.min(...pts.map(p => p[1])) - pad;
+          const w = Math.max(...pts.map(p => p[0])) + pad - x0, h = Math.max(...pts.map(p => p[1])) + pad - y0;
+          const out = document.createElement("canvas"); out.width = Math.ceil(w * k); out.height = Math.ceil(h * k);
+          const o = out.getContext("2d");
+          o.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+          o.lineWidth = 3; o.lineCap = o.lineJoin = "round"; o.strokeStyle = "#0a2a8a";
+          for (const s of strokes) { o.beginPath(); s.forEach(([x, y], i) => i ? o.lineTo(x, y) : o.moveTo(x, y)); if (s.length === 1) o.lineTo(s[0][0] + 0.1, s[0][1]); o.stroke(); }
+          finish(out.toDataURL("image/png"));
+        }
+      });
+      d.showModal();
+      window.addEventListener("resize", size);
+      requestAnimationFrame(size);
+    });
+  }
+
+  // Einstellungen: Tippen aufs Feld öffnet das große Unterschriftsfeld, danach wird gespeichert
   function signaturePad() {
-    const cv = $("sig-pad"), ctx = cv.getContext("2d");
-    let down = false, drawn = false;
-    const clear = () => { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height); drawn = false; };
-    const pos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
-    clear();
-    ctx.lineWidth = 5; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = "#0a2a8a";
-    cv.addEventListener("pointerdown", e => { down = drawn = true; cv.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); e.preventDefault(); });
-    cv.addEventListener("pointermove", e => { if (!down) return; ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); });
-    cv.addEventListener("pointerup", () => { down = false; });
-    $("sig-clear").onclick = clear;
+    const cv = $("sig-pad");
+    let png = null;
+    const open = async () => {
+      const res = await bigSign("Deine Unterschrift");
+      if (!res) return;
+      png = res;
+      const img = new Image();
+      img.onload = () => {
+        const ctx = cv.getContext("2d"), k = Math.min(cv.width / img.width, cv.height / img.height) * 0.9;
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(img, (cv.width - img.width * k) / 2, (cv.height - img.height * k) / 2, img.width * k, img.height * k);
+      };
+      img.src = res;
+      $("sig-msg").textContent = "Jetzt „Unterschrift speichern“ tippen.";
+    };
+    cv.style.cursor = "pointer";
+    cv.addEventListener("click", open);
+    $("sig-clear").textContent = "Neu unterschreiben";
+    $("sig-clear").onclick = open;
     $("sig-save").onclick = async () => {
-      if (!drawn) { $("sig-msg").textContent = "Bitte zuerst im weißen Feld unterschreiben."; return; }
+      if (!png) { $("sig-msg").textContent = "Bitte zuerst ins weiße Feld tippen und unterschreiben."; return; }
       try {
-        await ensurePdf();
-        const { PDFDocument } = window.PDFLib, pdf = await PDFDocument.create();
-        const png = await pdf.embedPng(cv.toDataURL("image/png"));
-        pdf.addPage([cv.width, cv.height]).drawImage(png, { x: 0, y: 0, width: cv.width, height: cv.height });
-        await db.saveTemplate("unterschrift", new Blob([await pdf.save()], { type: "application/pdf" }));
+        await db.saveTemplate("unterschrift", new Blob([await sigToPdf(png)], { type: "application/pdf" }));
         $("sig-msg").textContent = "✓ Unterschrift gespeichert.";
         await showSignature();
       } catch (e) { $("sig-msg").textContent = e.message; }
