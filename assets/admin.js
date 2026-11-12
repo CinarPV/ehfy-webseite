@@ -2333,7 +2333,8 @@
   let bankData = null;
   async function issuer() {
     if (!bankData) bankData = await db.getSettings().catch(() => ({}));
-    return { ...cfg.issuer, ...bankData };
+    // Deine hinterlegte Unterschrift kommt auf Quittung und Rechnung
+    return { ...cfg.issuer, ...bankData, signature: await signatureBytes() };
   }
   const BANK_FIELDS = { bank: "st-bank", accountHolder: "st-holder", iban: "st-iban", bic: "st-bic", taxNumber: "st-tax" };
   async function renderBank() {

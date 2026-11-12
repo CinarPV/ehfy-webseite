@@ -110,12 +110,15 @@
     detail: { x: 90.1, y: 349, size: 9 },
     amount: { x: 122, y: 292, size: 10 },
     confirm: { x: 247, y: 267, size: 9.5 },
-    place: { x: 112, y: 196, size: 10 }
+    place: { x: 112, y: 196, size: 10 },
+    sign: { x: 300, y: 190, w: 120, h: 40 } // deine Unterschrift rechts neben Ort/Datum
   };
   function receiptsFromTemplate(templateBytes, list, issuer, loadFont) {
     const { rgb: color } = root.PDFLib;
     const white = color(1, 1, 1), plain = n => eur(n).replace(" €", "");
-    return fillTemplate(templateBytes, list, loadFont, (page, inv, f) => {
+    let sig;
+    return fillTemplate(templateBytes, list, loadFont, async (page, inv, f, out) => {
+      if (sig === undefined) sig = await embedSig(out, issuer);
       const r = inv.recipient || {};
       const [service = "", detail = ""] = String((inv.items && inv.items[0] && inv.items[0].text) || "").split("\n");
       text(page, fmtDate(inv.issued_on), RECEIPT.date, f.bold);
@@ -133,6 +136,7 @@
       text(page, eur(inv.total), RECEIPT.amount, f.bold);
       text(page, plain(inv.total), RECEIPT.confirm, f.bold);
       text(page, issuer.city, RECEIPT.place, f.bold);
+      drawSig(page, sig, RECEIPT.sign.x, RECEIPT.sign.y, RECEIPT.sign.w, RECEIPT.sign.h);
       if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 400, size: 64, font: f.black, color: color(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(25) });
     });
   }
@@ -230,6 +234,17 @@
     page.drawText(t, { x: x + w - 14 - wt, y: y - 1, size: 17, font: f.black, color: root.PDFLib.rgb(1, 1, 1) });
   }
 
+  // Deine hinterlegte Unterschrift (eine PDF-Seite) einmal je Dokument einbetten und in ein Feld zeichnen
+  async function embedSig(pdf, issuer) {
+    if (!issuer || !issuer.signature) return null;
+    try { return (await pdf.embedPdf(issuer.signature))[0]; } catch (e) { return null; }
+  }
+  function drawSig(page, sig, x, y, maxW, maxH) {
+    if (!sig) return;
+    const k = Math.min(maxW / sig.width, maxH / sig.height);
+    page.drawPage(sig, { x, y, width: sig.width * k, height: sig.height * k });
+  }
+
   const KLEIN = "Gemäß § 19 UStG (Kleinunternehmerregelung) wird keine Umsatzsteuer berechnet.";
 
   // Auf der Quittung steht nie der Kursort, nur das Datum (gilt auch für ältere Belege)
@@ -240,6 +255,7 @@
     const { PDFDocument } = root.PDFLib;
     const pdf = await PDFDocument.create();
     const f = await fonts(pdf, loadFont);
+    const sig = await embedSig(pdf, issuer);
     for (const inv of invoices) {
       const page = pdf.addPage(A4);
       frame(page, f, issuer, "Quittung", [["Quittungs-Nr.", inv.number], ["Datum", fmtDate(inv.issued_on)], ["Zahlungsart", "Bar"]]);
@@ -252,7 +268,8 @@
       // Ort/Datum, Unterschrift und Stempelfeld
       const sy = 170;
       page.drawText(`${issuer.city}, ${fmtDate(inv.issued_on)}`, { x: M, y: sy + 6, size: 11, font: f.regular, color: rgb(C.ink) });
-      page.drawLine({ start: { x: M, y: sy }, end: { x: M + 200, y: sy }, thickness: 0.8, color: rgb(C.ink) });
+      drawSig(page, sig, M + 110, sy + 1, 100, 40);
+      page.drawLine({ start: { x: M, y: sy }, end: { x: M + 220, y: sy }, thickness: 0.8, color: rgb(C.ink) });
       page.drawText("Ort, Datum · Unterschrift", { x: M, y: sy - 13, size: 8, font: f.regular, color: rgb(C.muted) });
       page.drawRectangle({ x: A4[0] - M - 170, y: sy - 20, width: 170, height: 90, borderColor: rgb(C.line), borderWidth: 1, borderDashArray: [4, 3] });
       page.drawText("Stempelfeld", { x: A4[0] - M - 160, y: sy - 12, size: 8, font: f.regular, color: rgb(C.muted) });
@@ -266,6 +283,7 @@
     const { PDFDocument } = root.PDFLib;
     const pdf = await PDFDocument.create();
     const f = await fonts(pdf, loadFont);
+    f.sig = await embedSig(pdf, issuer);
     for (const inv of list) invoicePage(pdf, f, inv, issuer, paymentDays);
     return pdf.save();
   }
@@ -291,6 +309,10 @@
     pay.filter(Boolean).forEach(t => { page.drawText(t, { x: M, y: yy, size: 10.5, font: f.regular, color: rgb(C.ink) }); yy -= 16; });
     page.drawText(KLEIN, { x: M, y: yy - 4, size: 8.5, font: f.regular, color: rgb(C.muted) });
     page.drawText("Herzlichen Dank für Ihr Vertrauen!", { x: M, y: yy - 34, size: 11, font: f.bold, color: rgb(C.aid) });
+    if (f.sig) {
+      drawSig(page, f.sig, M, yy - 92, 120, 44);
+      page.drawText(issuer.owner || issuer.name || "", { x: M, y: yy - 106, size: 9, font: f.regular, color: rgb(C.muted) });
+    }
     if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 420, size: 64, font: f.black, color: root.PDFLib.rgb(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(30) });
     footer(page, f, issuer);
   }

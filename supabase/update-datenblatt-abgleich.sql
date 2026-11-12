@@ -3,6 +3,7 @@
 -- Telefon/E-Mail ergänzt (wenn angegeben), Unterschrift gespeichert.
 -- Alles andere bleibt: Paket, Sehtest, Sehtest-Protokoll und -Nummer, Gebühren, Rabatt, Notizen.
 -- Bescheinigungen, Protokoll und neue Quittungen nehmen danach automatisch die neuen Daten.
+-- Außerdem: E-Mail ist beim Datenblatt Pflicht (für Quittung oder Rechnung).
 -- Einmal im Supabase SQL Editor ausführen (auch erneut möglich). Löscht nichts.
 
 -- Name vergleichbar machen: klein, ohne Akzente, ü = ue = u (Görgülü = Goerguelue = Gorgulu), ohne Leerzeichen, Bindestriche usw.
@@ -37,6 +38,8 @@ begin
   if p_birth_date is null or p_birth_date > v_today or p_birth_date < date '1900-01-01' then raise exception 'Bitte das Geburtsdatum prüfen.'; end if;
   if coalesce(trim(p_street), '') = '' or coalesce(trim(p_zip), '') = '' or coalesce(trim(p_city), '') = '' then raise exception 'Bitte die vollständige Adresse eintragen.'; end if;
   if p_signature is null or p_signature not like 'data:image/png;base64,%' or length(p_signature) > 400000 then raise exception 'Bitte unterschreiben.'; end if;
+  -- E-Mail ist Pflicht (für Quittung oder Rechnung)
+  if coalesce(trim(p_email), '') !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung).'; end if;
   v_day := (c.starts_at at time zone 'Europe/Berlin')::date;
 
   -- Schon im Kurs? Nachname gleich und Vorname passt, oder Vor-/Nachname vertauscht, oder Nachname + Geburtsdatum gleich.

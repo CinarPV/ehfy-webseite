@@ -415,6 +415,7 @@
         const c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : demoCheckin(db, d.token);
         if (!c) throw new Error("Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.");
         if (!d.signature || !d.signature.startsWith("data:image/png;base64,")) throw new Error("Bitte unterschreiben.");
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(d.email || "").trim())) throw new Error("Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung).");
         // Wie in Supabase: Steht der Schüler schon im Kurs, werden seine Daten durch das Datenblatt ersetzt (kein zweiter Eintrag)
         const key = t => String(t || "").toLowerCase().replace(/ß/g, "ss").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
           .replace(/ı/g, "i").replace(/ł/g, "l").replace(/ø/g, "o").replace(/[^a-z]/g, "").replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");

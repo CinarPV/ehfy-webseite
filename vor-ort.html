@@ -45,7 +45,7 @@
             <div class="field"><label for="vo-zip">PLZ</label><input id="vo-zip" inputmode="numeric" autocomplete="postal-code" required maxlength="10"></div>
             <div class="field"><label for="vo-city">Ort</label><input id="vo-city" autocomplete="address-level2" required maxlength="80"></div>
             <div class="field"><label for="vo-phone">Telefon <span class="muted small">(freiwillig)</span></label><input id="vo-phone" type="tel" autocomplete="tel" maxlength="40"></div>
-            <div class="field"><label for="vo-email">E-Mail <span class="muted small">(freiwillig)</span></label><input id="vo-email" type="email" autocomplete="email" maxlength="120"></div>
+            <div class="field"><label for="vo-email">E-Mail <span class="muted small">(für Quittung oder Rechnung)</span></label><input id="vo-email" type="email" autocomplete="email" inputmode="email" maxlength="120" required></div>
             <div class="field wide"><label for="vo-pkg">Gebucht</label>
               <select id="vo-pkg"><option value="kurs">Erste-Hilfe-Kurs</option><option value="komplett">Erste-Hilfe-Kurs mit Sehtest</option></select></div>
           </div>
@@ -133,7 +133,8 @@
       if (!v("vo-first") || !v("vo-last")) { err.textContent = "Bitte Vor- und Nachname eintragen."; return; }
       if (!birth) { err.textContent = "Bitte das Geburtsdatum so eingeben: TT.MM.JJJJ."; return; }
       if (!v("vo-street") || !v("vo-zip") || !v("vo-city")) { err.textContent = "Bitte die vollständige Adresse eintragen."; return; }
-      if (v("vo-email") && !$("vo-email").checkValidity()) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
+      if (!v("vo-email")) { err.textContent = "Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung)."; return; }
+      if (!$("vo-email").checkValidity() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v("vo-email"))) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
       if (!drawn) { err.textContent = "Bitte im Feld unterschreiben."; return; }
       if (!$("vo-ok").checked) { err.textContent = "Bitte bestätigen, dass deine Angaben richtig sind."; return; }
       btn.disabled = true; btn.textContent = "Wird gesendet …";
