@@ -2354,9 +2354,10 @@
   });
 
   // ---------- Dokumente als PDF ----------
-  const TEMPLATES = { bescheinigung: "Bescheinigung", datenblatt: "Teilnehmerdatenblatt", quittung: "Quittung" };
+  const TEMPLATES = { bescheinigung: "Bescheinigung", datenblatt: "Teilnehmerdatenblatt" };
   // Quittung: auf deiner Vorlage, solange keine hochgeladen ist im EHfy-Design
-  const receiptPdf = async list => EHFYDocs.receipts(list, await issuer(), loadFont, await db.getTemplate("quittung").catch(() => null));
+  // Quittung immer im EHfy-Design (eine hochgeladene Quittungs-Vorlage wird nicht mehr benutzt)
+  const receiptPdf = async list => EHFYDocs.receipts(list, await issuer(), loadFont, null);
   const eur = n => Number(n).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
   let pdfReady = null;
   const fontCache = {};
