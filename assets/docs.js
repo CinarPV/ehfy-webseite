@@ -32,7 +32,9 @@
     birth: { x1: 414, x2: 494.5, y: 464.5, size: 12 },
     date: { x1: 112.5, x2: 275.5, y: 418.5, size: 12 },
     infoYes: { x: 389.6, y: 350.7 },
-    issued: { x1: 146.5, x2: 247.5, y: 67, size: 11 }
+    issued: { x1: 146.5, x2: 247.5, y: 67, size: 11 },
+    // Deine Unterschrift (nur beim Versand per E-Mail) rechts neben dem Ausstellungsdatum
+    sign: { x: 330, y: 60, w: 170, h: 46 }
   };
   const SHEET = {
     date: { x: 166, y: 652, size: 12 },
@@ -71,7 +73,10 @@
   }
 
   function certificates(templateBytes, course, people, loadFont, opts) {
-    return fillTemplate(templateBytes, people, loadFont, (page, r, f) => {
+    let sig;
+    return fillTemplate(templateBytes, people, loadFont, async (page, r, f, out) => {
+      if (sig === undefined) sig = opts.signature ? (await out.embedPdf(opts.signature).catch(() => [null]))[0] : null;
+      if (sig) { const k = Math.min(CERT.sign.w / sig.width, CERT.sign.h / sig.height); page.drawPage(sig, { x: CERT.sign.x, y: CERT.sign.y, width: sig.width * k, height: sig.height * k }); }
       centered(page, `${r.first_name} ${r.last_name}`, CERT.name, f.bold);
       centered(page, fmtBirth(r.birth_date), CERT.birth, f.bold);
       centered(page, fmtDate(course.starts_at), CERT.date, f.bold);
@@ -245,6 +250,8 @@
     page.drawPage(sig, { x, y, width: sig.width * k, height: sig.height * k });
   }
 
+  // Steht nur auf Belegen, die per E-Mail rausgehen (dort ist deine hinterlegte Unterschrift eingefügt)
+  const SIG_NOTE = "Maschinell erstellt – mit der eingefügten digitalen Unterschrift gültig.";
   const KLEIN = "Gemäß § 19 UStG (Kleinunternehmerregelung) wird keine Umsatzsteuer berechnet.";
 
   // Auf der Quittung steht nie der Kursort, nur das Datum (gilt auch für ältere Belege)
@@ -271,6 +278,7 @@
       drawSig(page, sig, M + 110, sy + 1, 100, 40);
       page.drawLine({ start: { x: M, y: sy }, end: { x: M + 220, y: sy }, thickness: 0.8, color: rgb(C.ink) });
       page.drawText("Ort, Datum · Unterschrift", { x: M, y: sy - 13, size: 8, font: f.regular, color: rgb(C.muted) });
+      if (sig) page.drawText(SIG_NOTE, { x: M, y: sy - 26, size: 8, font: f.regular, color: rgb(C.muted) });
       page.drawRectangle({ x: A4[0] - M - 170, y: sy - 20, width: 170, height: 90, borderColor: rgb(C.line), borderWidth: 1, borderDashArray: [4, 3] });
       page.drawText("Stempelfeld", { x: A4[0] - M - 160, y: sy - 12, size: 8, font: f.regular, color: rgb(C.muted) });
       if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 420, size: 64, font: f.black, color: root.PDFLib.rgb(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(30) });
@@ -312,6 +320,7 @@
     if (f.sig) {
       drawSig(page, f.sig, M, yy - 92, 120, 44);
       page.drawText(issuer.owner || issuer.name || "", { x: M, y: yy - 106, size: 9, font: f.regular, color: rgb(C.muted) });
+      page.drawText(SIG_NOTE, { x: M, y: yy - 119, size: 8, font: f.regular, color: rgb(C.muted) });
     }
     if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 420, size: 64, font: f.black, color: root.PDFLib.rgb(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(30) });
     footer(page, f, issuer);

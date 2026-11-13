@@ -468,7 +468,7 @@
           `<option value="${k}" ${k === r.status ? "selected" : ""}>${v}</option>`).join("")}</select></td>
         <td class="no-print">${r.status === "storniert" ? "" : `<select data-print="${r.id}" aria-label="Dokument drucken">
           <option value="">Drucken …</option><option value="alles">Alles für diese Person</option><option value="bescheinigung">Bescheinigung</option><option value="datenblatt">Datenblatt</option><option value="quittung">Quittung</option><option value="rechnung">Rechnung</option>
-          <option value="quittung-mail">Quittung per E-Mail senden</option><option value="rechnung-mail">Rechnung per E-Mail senden</option></select>`}</td>
+          <option value="quittung-mail">Quittung per E-Mail senden</option><option value="rechnung-mail">Rechnung per E-Mail senden</option><option value="bescheinigung-mail">Bescheinigung per E-Mail senden</option><option value="datenblatt-mail">Datenblatt per E-Mail senden</option></select>`}</td>
         <td class="no-print"><button class="btn btn-sm btn-outline" data-del="${r.id}" title="Eintrag löschen">✕</button></td>
       </tr>`).join("") : '<tr><td colspan="10" class="muted">Noch keine Anmeldungen.</td></tr>';
   }
@@ -1297,7 +1297,7 @@
         first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
         nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
         date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
-        signature: r.sehtest_signed_at ? await signatureBytes() : null
+        signature: r.sehtest_passed != null || r.sehtest_signed_at ? await signatureBytes() : null
       }], await issuer(), loadFont);
       showPdf(bytes, `Sehtest-Protokoll${r.sehtest_nr ? "_" + r.sehtest_nr : ""}_${r.last_name}_${r.first_name}.pdf`, win);
     } catch (e) { if (win) win.close(); showError(e.message); }
@@ -1355,7 +1355,7 @@
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
-        <div class="st-group"><span class="st-label">Unterschrift:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="signed" data-val="ja">✍ Unterschreiben</button><span class="small muted">setzt deine hinterlegte Unterschrift unten rechts ins Protokoll</span></div>
+        <div class="st-group"><span class="st-label">Unterschrift:</span>${stRun.noSig ? '<span class="small" style="color:var(--danger)">Noch keine Unterschrift hinterlegt – bitte unter Mehr → Einstellungen → Unterschrift erfassen.</span>' : '<span class="small muted">✍ Deine hinterlegte Unterschrift und das Datum kommen automatisch aufs Protokoll.</span>'}</div>
       </div>
       <div class="st-sets" id="sd-sets" role="tablist"></div>
       <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test zwei Zeilen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Nicht bestanden bei mehr als 2 Fehlern in einer Zeile oder mehr als 2 Fehlern bei geraden bzw. bei schrägen Öffnungen. Die 0,32-Zeile ist zum Üben.</p>
@@ -1388,12 +1388,6 @@
       const clear = ev.target.closest("[data-clear]");
       if (clear) { delete stRun.marks[clear.dataset.clear]; return stRender(); }
       const pick = ev.target.closest("[data-pick]");
-      if (pick && pick.dataset.pick === "signed" && stRun.signed !== "ja") {
-        return signatureBytes().then(sig => {
-          if (!sig) { $("sd-error").textContent = "Noch keine Unterschrift hinterlegt. Bitte zuerst unter Mehr → Einstellungen → Unterschrift erfassen."; return; }
-          stRun.signed = "ja"; stRender();
-        });
-      }
       if (pick) { const k = pick.dataset.pick; stRun[k] = stRun[k] === pick.dataset.val ? null : pick.dataset.val; return stRender(); }
     });
     $("sd-scan").onclick = () => scanId($("sd-idinfo"), res => {
@@ -1445,7 +1439,7 @@
   }
   async function openSehtest(r, c, done) {
     const d = stDialog();
-    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr ? "" : await draftNr() };
+    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr ? "" : await draftNr(), noSig: !(await signatureBytes()) };
     // Mit der Tafel weitermachen, die schon angefangen ist
     const sets = S.overall(stRun.marks).sets;
     if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
@@ -1470,7 +1464,8 @@
       sehtest_id_no: $("sd-idno").value.trim() || null,
       ...(stRun.birth ? { birth_date: stRun.birth } : {}),
       sehtest_on: $("sd-date").value || (c ? dayOf(c.starts_at) : localDate(new Date())), sehtest_none: false,
-      sehtest_signed_at: stRun.signed ? r.sehtest_signed_at || new Date().toISOString() : null
+      // Mit Ergebnis ist das Protokoll von dir unterschrieben (hinterlegte Unterschrift, automatisch)
+      sehtest_signed_at: withResult ? r.sehtest_signed_at || new Date().toISOString() : r.sehtest_signed_at || null
     };
     const typed = $("sd-nr").value.trim();
     // Eigene Nummer nur, wenn sie von der vorgeschlagenen abweicht; sonst vergibt die Datenbank sie
@@ -1701,9 +1696,10 @@
       `Die Teilnehmerzahl unserer Kurse ist begrenzt. Ihr Platz war für Sie reserviert, und gegebenenfalls mussten wir andere Interessenten abweisen. Dadurch ist uns ein Nachteil entstanden. Die Ausfallgebühr von ${FEE},00 € fällt deshalb unabhängig vom Grund an, auch bei Krankheit.`, "",
       `Bitte bezahlen Sie die beigefügte Rechnung Nr. ${inv.number} innerhalb von ${days} Tagen per PayPal an ${cfg.issuer.paypal}.`, "",
       "Sollte die Zahlung nicht fristgerecht eingehen, behalten wir uns vor, rechtliche Schritte einzuleiten. Dadurch können weitere Kosten entstehen.", "",
+      "Diese Rechnung wurde maschinell erstellt und ist mit der eingefügten digitalen Unterschrift gültig.", "",
       "Mit freundlichen Grüßen", cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`
     ].join("\n");
-    const bytes = await EHFYDocs.invoices([inv], await issuer(), loadFont, days);
+    const bytes = await EHFYDocs.invoices([inv], await issuer(true), loadFont, days);
     const filename = `Rechnung_${inv.number}.pdf`;
     await db.sendInvoiceMail({
       invoice_id: inv.id, to: r.email, subject: `Rechnung ${inv.number} – Ausfallgebühr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body,
@@ -2331,10 +2327,10 @@
 
   // ---------- Absender: öffentliche Angaben + Bankverbindung aus der Verwaltung ----------
   let bankData = null;
-  async function issuer() {
+  async function issuer(forMail) {
     if (!bankData) bankData = await db.getSettings().catch(() => ({}));
-    // Unterschrift auf Quittung und Rechnung: die gerade vor Ort gezeichnete, sonst die hinterlegte
-    return { ...cfg.issuer, ...bankData, signature: onSiteSig !== undefined ? onSiteSig : await signatureBytes() };
+    // Deine hinterlegte Unterschrift nur auf Belegen, die per E-Mail rausgehen. Gedruckt unterschreibst du selbst.
+    return { ...cfg.issuer, ...bankData, signature: forMail ? await signatureBytes() : null };
   }
   const BANK_FIELDS = { bank: "st-bank", accountHolder: "st-holder", iban: "st-iban", bic: "st-bic", taxNumber: "st-tax" };
   async function renderBank() {
@@ -2357,7 +2353,7 @@
   const TEMPLATES = { bescheinigung: "Bescheinigung", datenblatt: "Teilnehmerdatenblatt" };
   // Quittung: auf deiner Vorlage, solange keine hochgeladen ist im EHfy-Design
   // Quittung immer im EHfy-Design (eine hochgeladene Quittungs-Vorlage wird nicht mehr benutzt)
-  const receiptPdf = async list => EHFYDocs.receipts(list, await issuer(), loadFont, null);
+  const receiptPdf = async (list, forMail) => EHFYDocs.receipts(list, await issuer(forMail), loadFont, null);
   const eur = n => Number(n).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
   let pdfReady = null;
   const fontCache = {};
@@ -2489,18 +2485,35 @@
       `Hallo ${inv.recipient.name},`, "",
       `anbei erhalten Sie Ihre ${doc} Nr. ${inv.number} über ${eur(inv.total)}.`,
       !isReceipt && inv.status === "offen" ? `Bitte überweisen Sie den Betrag innerhalb von ${cfg.documents.paymentDays} Tagen – Bankverbindung und PayPal finden Sie in der Rechnung.` : "",
+      "", `Diese ${doc} wurde maschinell erstellt und ist mit der eingefügten digitalen Unterschrift gültig.`,
       "", "Herzlichen Dank für Ihr Vertrauen!", "", "Viele Grüße",
       cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`, cfg.issuer.web
     ];
     return { invoice_id: inv.id, to: inv.recipient.email || "", subject, body: lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n") };
   }
 
+  // Bescheinigung (mit deiner Unterschrift) oder Datenblatt (ohne, das unterschreibt der Schüler) per E-Mail
+  async function docMail(kind, r, course) {
+    await ensurePdf();
+    const bytes = await docBytes(kind, [r], course, true);
+    const isCert = kind === "bescheinigung", day = EHFYDocs.fmtDate(course.starts_at);
+    const doc = isCert ? "Ihre Teilnahmebescheinigung" : "Ihr Teilnehmerdatenblatt";
+    const lines = [
+      `Hallo ${r.first_name} ${r.last_name},`, "",
+      `anbei erhalten Sie ${doc} zum Erste-Hilfe-Kurs am ${day}.`,
+      isCert ? "Die Bescheinigung wurde maschinell erstellt und ist mit der eingefügten digitalen Unterschrift gültig." : "Bitte prüfen Sie Ihre Angaben und melden Sie sich, falls etwas nicht stimmt.",
+      "", "Viele Grüße", cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`, cfg.issuer.web
+    ];
+    const name = `${isCert ? "Bescheinigung" : "Datenblatt"}_${r.last_name}_${r.first_name}.pdf`;
+    pdfDialog(bytes, name, { to: r.email || "", subject: `${isCert ? "Teilnahmebescheinigung" : "Teilnehmerdatenblatt"} Erste-Hilfe-Kurs am ${day} – Erste Hilfe for you`, body: lines.join("\n") });
+  }
+
   async function sendBill(inv) {
     if (inv.draft) throw new Error("Dieser Beleg ist noch ein Entwurf ohne Nummer. Bitte zuerst „Synchronisieren“, dann senden.");
     await ensurePdf();
     const bytes = inv.type === "quittung"
-      ? await receiptPdf([inv])
-      : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays);
+      ? await receiptPdf([inv], true)
+      : await EHFYDocs.invoice(inv, await issuer(true), loadFont, cfg.documents.paymentDays);
     pdfDialog(bytes, `${inv.type === "quittung" ? "Quittung" : "Rechnung"}_${inv.number}.pdf`, billMail(inv));
   }
 
@@ -2529,9 +2542,10 @@
   }
 
   // Ein Dokument-Typ als PDF-Bytes (eine Seite pro Teilnehmer, gleiche Reihenfolge)
-  async function docBytes(kind, people, course) {
+  async function docBytes(kind, people, course, forMail) {
     const D = window.EHFYDocs;
-    if (kind === "bescheinigung") return D.certificates(await template("bescheinigung"), course, people, loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded });
+    // Deine Unterschrift kommt nur auf Bescheinigungen, die per E-Mail rausgehen
+    if (kind === "bescheinigung") return D.certificates(await template("bescheinigung"), course, people, loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded, signature: forMail ? await signatureBytes() : null });
     if (kind === "datenblatt") return D.datasheets(await template("datenblatt"), course, people, loadFont);
     if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course), await issuer(), loadFont, cfg.documents.paymentDays);
@@ -2541,13 +2555,6 @@
   const BUNDLE = ["datenblatt", "bescheinigung", "quittung"];
 
   async function makeDoc(kind, people, course, win) {
-    await ensurePdf();
-    if (["quittung", "rechnung", "alles"].includes(kind)) {
-      return withSign(kind === "rechnung" ? "Rechnung" : "Quittung", win, () => makeDocNow(kind, people, course, win));
-    }
-    return makeDocNow(kind, people, course, win);
-  }
-  async function makeDocNow(kind, people, course, win) {
     const bytes = kind === "alles"
       ? await EHFYDocs.bundle(await Promise.all(BUNDLE.map(k => docBytes(k, people, course))))
       : await docBytes(kind, people, course);
@@ -2572,6 +2579,11 @@
     const kind = sel.value;
     sel.value = "";
     const people = regs.filter(r => r.id === sel.dataset.print);
+    if (kind === "bescheinigung-mail" || kind === "datenblatt-mail") {
+      $("doc-error").textContent = "";
+      docMail(kind.replace("-mail", ""), people[0], current).catch(e => { $("doc-error").textContent = e.message; });
+      return;
+    }
     if (kind.endsWith("-mail")) {
       $("doc-error").textContent = "";
       (async () => {
@@ -2705,10 +2717,6 @@
   }
 
   async function invoicePdf(inv, win) {
-    await ensurePdf();
-    return withSign(inv.type === "quittung" ? "Quittung" : "Rechnung", win, () => invoicePdfNow(inv, win));
-  }
-  async function invoicePdfNow(inv, win) {
     const bytes = inv.type === "quittung"
       ? await receiptPdf([inv])
       : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays);
@@ -2841,16 +2849,7 @@
 
   // ---------- Unterschrift: einmal mit Finger oder Maus zeichnen, geschützt gespeichert (als kleine PDF) ----------
   const signatureBytes = () => db.getTemplate("unterschrift").catch(() => null);
-  // ---------- Unterschrift vor Ort (Quittung/Rechnung) und großes Unterschriftsfeld ----------
-  let onSiteSig; // undefined = hinterlegte Unterschrift nehmen, null = ohne, sonst PDF-Bytes
-  async function withSign(kind, win, run) {
-    // Ein offener leerer Tab würde den Dialog verdecken: schließen, die PDF kommt dann im PDF-Dialog
-    if (win && !win.closed) win.close();
-    onSiteSig = await askSign(kind);
-    try { return await run(); } finally { onSiteSig = undefined; }
-  }
-
-  // Gezeichnete Linien (PNG) als eine PDF-Seite, wie die hinterlegte Unterschrift
+  // Gezeichnete Unterschrift (PNG) als eine PDF-Seite, wie die hinterlegte Unterschrift
   async function sigToPdf(png) {
     await ensurePdf();
     const { PDFDocument } = window.PDFLib, pdf = await PDFDocument.create();
@@ -2858,95 +2857,7 @@
     pdf.addPage([img.width, img.height]).drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
     return pdf.save();
   }
-
-  // Kleiner Dialog vor Quittung/Rechnung: hier unterschreiben, hinterlegte nehmen oder ohne
-  function askSign(kind) {
-    return new Promise(async resolve => {
-      const stored = await signatureBytes();
-      let d = $("sign-ask");
-      if (!d) { d = document.createElement("dialog"); d.id = "sign-ask"; d.className = "qr-dlg"; document.body.appendChild(d); }
-      let png = null;
-      d.innerHTML = `<h3 style="margin:0 0 4px">${esc(kind)}: deine Unterschrift</h3>
-        <p class="small muted" style="margin:0 0 10px">Du unterschreibst als Aussteller. Tippe ins Feld – es wird groß, damit du bequem unterschreiben kannst.</p>
-        <button type="button" id="sa-field" class="sign-field"><span>✍ Zum Unterschreiben hier tippen</span></button>
-        <div class="btn-row" style="margin-top:12px">
-          <button class="btn" type="button" id="sa-ok" disabled>Mit dieser Unterschrift</button>
-          ${stored ? '<button class="btn btn-ghost" type="button" id="sa-stored">Meine hinterlegte Unterschrift</button>' : ""}
-          <button class="btn btn-ghost" type="button" id="sa-none">Ohne Unterschrift</button>
-        </div>`;
-      const done = v => { d.close(); resolve(v); };
-      d.oncancel = e => { e.preventDefault(); done(stored || null); };
-      $("sa-field").onclick = async () => {
-        const res = await bigSign(`${kind} – deine Unterschrift`);
-        if (!res) return;
-        png = res;
-        $("sa-field").innerHTML = `<img src="${res}" alt="Deine Unterschrift">`;
-        $("sa-ok").disabled = false;
-      };
-      $("sa-ok").onclick = async () => { if (png) done(await sigToPdf(png)); };
-      if (stored) $("sa-stored").onclick = () => done(stored);
-      $("sa-none").onclick = () => done(null);
-      d.showModal();
-    });
-  }
-
-  // Großes Unterschriftsfeld über den ganzen Bildschirm. Ergebnis: PNG (zugeschnitten, durchsichtig) oder null bei „Zurück“
-  function bigSign(title) {
-    return new Promise(resolve => {
-      const d = document.createElement("dialog");
-      d.className = "sign-big";
-      d.innerHTML = `<div class="sb-bar"><button class="btn btn-sm btn-ghost" type="button" data-sb="back">← Zurück</button>
-          <strong>${esc(title)}</strong><button class="btn btn-sm btn-ghost" type="button" data-sb="clear">Löschen</button></div>
-        <div class="sb-area"><canvas></canvas><div class="sb-line"></div><span class="sb-hint">Hier unterschreiben · Tipp: Handy quer halten</span></div>
-        <div class="sb-foot"><button class="btn" type="button" data-sb="ok">Fertig – übernehmen</button></div>`;
-      document.body.appendChild(d);
-      const cv = d.querySelector("canvas"), area = d.querySelector(".sb-area"), ctx = cv.getContext("2d");
-      const strokes = []; let cur = null;
-      const paint = () => {
-        const r = window.devicePixelRatio || 1;
-        ctx.setTransform(r, 0, 0, r, 0, 0);
-        ctx.clearRect(0, 0, cv.width, cv.height);
-        ctx.lineWidth = 3; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = "#0a2a8a";
-        for (const s of strokes) { ctx.beginPath(); s.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); if (s.length === 1) ctx.lineTo(s[0][0] + 0.1, s[0][1]); ctx.stroke(); }
-        d.querySelector(".sb-hint").style.display = strokes.length ? "none" : "";
-      };
-      const size = () => {
-        const b = area.getBoundingClientRect(), r = window.devicePixelRatio || 1;
-        cv.width = Math.round(b.width * r); cv.height = Math.round(b.height * r);
-        cv.style.width = b.width + "px"; cv.style.height = b.height + "px";
-        paint();
-      };
-      const pos = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
-      cv.addEventListener("pointerdown", e => { cur = [pos(e)]; strokes.push(cur); cv.setPointerCapture(e.pointerId); paint(); e.preventDefault(); });
-      cv.addEventListener("pointermove", e => { if (!cur) return; cur.push(pos(e)); paint(); e.preventDefault(); });
-      const up = () => { cur = null; };
-      cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
-      const finish = v => { window.removeEventListener("resize", size); d.close(); d.remove(); resolve(v); };
-      d.oncancel = e => { e.preventDefault(); finish(null); };
-      d.addEventListener("click", e => {
-        const b = e.target.closest("[data-sb]");
-        if (!b) return;
-        if (b.dataset.sb === "back") finish(null);
-        if (b.dataset.sb === "clear") { strokes.length = 0; paint(); }
-        if (b.dataset.sb === "ok") {
-          if (!strokes.length) { d.querySelector(".sb-hint").textContent = "Bitte zuerst unterschreiben."; return; }
-          // Auf die Unterschrift zuschneiden, scharf (2-fach) und mit durchsichtigem Hintergrund
-          const pts = strokes.flat(), pad = 6, k = 2;
-          const x0 = Math.min(...pts.map(p => p[0])) - pad, y0 = Math.min(...pts.map(p => p[1])) - pad;
-          const w = Math.max(...pts.map(p => p[0])) + pad - x0, h = Math.max(...pts.map(p => p[1])) + pad - y0;
-          const out = document.createElement("canvas"); out.width = Math.ceil(w * k); out.height = Math.ceil(h * k);
-          const o = out.getContext("2d");
-          o.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
-          o.lineWidth = 3; o.lineCap = o.lineJoin = "round"; o.strokeStyle = "#0a2a8a";
-          for (const s of strokes) { o.beginPath(); s.forEach(([x, y], i) => i ? o.lineTo(x, y) : o.moveTo(x, y)); if (s.length === 1) o.lineTo(s[0][0] + 0.1, s[0][1]); o.stroke(); }
-          finish(out.toDataURL("image/png"));
-        }
-      });
-      d.showModal();
-      window.addEventListener("resize", size);
-      requestAnimationFrame(size);
-    });
-  }
+  const bigSign = title => EHFYSign.big({ title, ok: "Unterschrift bestätigen" });
 
   // Einstellungen: Tippen aufs Feld öffnet das große Unterschriftsfeld, danach wird gespeichert
   function signaturePad() {

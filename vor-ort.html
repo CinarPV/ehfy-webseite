@@ -50,9 +50,9 @@
               <select id="vo-pkg"><option value="kurs">Erste-Hilfe-Kurs</option><option value="komplett">Erste-Hilfe-Kurs mit Sehtest</option></select></div>
           </div>
 
-          <div class="vo-sign-head"><strong>Unterschrift</strong><button class="btn btn-sm btn-ghost" type="button" id="vo-clear">Löschen</button></div>
-          <canvas id="vo-pad" class="vo-pad" width="900" height="300" aria-label="Hier mit dem Finger unterschreiben"></canvas>
-          <p class="small muted" style="margin:6px 0 0">Mit dem Finger im Feld unterschreiben.</p>
+          <div class="vo-sign-head"><strong>Unterschrift</strong><button class="btn btn-sm btn-ghost hidden" type="button" id="vo-clear">Neu unterschreiben</button></div>
+          <button type="button" id="vo-pad" class="sign-preview" aria-label="Zum Unterschreiben tippen">✍ Zum Unterschreiben hier tippen</button>
+          <p class="small muted" style="margin:6px 0 0">Tippe ins Feld: Es wird groß (quer), dort mit dem Finger unterschreiben und „Unterschrift bestätigen“ tippen.</p>
 
           <label class="vo-check"><input type="checkbox" id="vo-ok"> <span>Meine Angaben sind richtig. Die Hinweise unten und die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> habe ich zur Kenntnis genommen.</span></label>
 
@@ -78,6 +78,7 @@
   <script src="assets/layout.js"></script>
   <script src="assets/vendor/supabase.js"></script>
   <script src="assets/db.js"></script>
+  <script src="assets/sign.js"></script>
   <script>
   (async function () {
     const $ = id => document.getElementById(id);
@@ -106,17 +107,17 @@
     }
     $("vo-form").classList.remove("hidden");
 
-    // Unterschrift mit dem Finger: nur die Linie wird gespeichert
-    const cv = $("vo-pad"), ctx = cv.getContext("2d");
-    let down = false, drawn = false;
-    const pos = e => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) * cv.width / b.width, (e.clientY - b.top) * cv.height / b.height]; };
-    const clear = () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn = false; };
-    ctx.lineWidth = 6; ctx.lineCap = ctx.lineJoin = "round"; ctx.strokeStyle = "#0a2a8a";
-    cv.addEventListener("pointerdown", e => { down = drawn = true; cv.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); });
-    cv.addEventListener("pointermove", e => { if (!down) return; ctx.lineTo(...pos(e)); ctx.stroke(); e.preventDefault(); });
-    cv.addEventListener("pointerup", () => { down = false; });
-    cv.addEventListener("pointercancel", () => { down = false; });
-    $("vo-clear").onclick = clear;
+    // Unterschrift mit dem Finger im großen Feld (quer): nur die Linie wird gespeichert
+    let signature = null, drawn = false;
+    const sign = async () => {
+      const png = await EHFYSign.big({ title: "Bitte unterschreiben", ok: "Unterschrift bestätigen", scale: 1.5 });
+      if (!png) return;
+      signature = png; drawn = true;
+      $("vo-pad").innerHTML = `<img src="${png}" alt="Deine Unterschrift">`;
+      $("vo-clear").classList.remove("hidden");
+    };
+    $("vo-pad").onclick = sign;
+    $("vo-clear").onclick = sign;
 
     // Geburtsdatum: Punkte automatisch
     $("vo-birth").addEventListener("input", e => {
@@ -142,7 +143,7 @@
         const name = await db.checkinRegister({
           token, course: general ? $("vo-course-sel").value : undefined, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
           street: v("vo-street"), zip: v("vo-zip"), city: v("vo-city"), phone: v("vo-phone"), email: v("vo-email"),
-          package: $("vo-pkg").value, signature: cv.toDataURL("image/png")
+          package: $("vo-pkg").value, signature
         });
         $("vo-thanks").textContent = `Danke, ${name}!`;
         $("vo-form").classList.add("hidden");

@@ -1,10 +1,10 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v73";
+const CACHE = "ehfy-app-v74";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/admin-hell.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
-  "assets/sync.js", "assets/calendar.js", "assets/import-alt.js", "assets/finanzen.js", "assets/admin.js", "assets/docs.js", "assets/sehtest.js", "assets/ausweis.js", "assets/vendor/qrcode.js",
+  "assets/sync.js", "assets/calendar.js", "assets/import-alt.js", "assets/finanzen.js", "assets/admin.js", "assets/docs.js", "assets/sehtest.js", "assets/ausweis.js", "assets/sign.js", "assets/vendor/qrcode.js",
   "assets/vendor/supabase.js", "assets/vendor/pdf-lib.min.js", "assets/vendor/fontkit.umd.min.js",
   "assets/fonts/jakarta-400.woff2", "assets/fonts/jakarta-600.woff2", "assets/fonts/jakarta-800.woff2",
   "assets/fonts/jakarta-400.ttf", "assets/fonts/jakarta-700.ttf", "assets/fonts/jakarta-800.ttf",
