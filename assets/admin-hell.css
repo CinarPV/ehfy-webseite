@@ -62,3 +62,12 @@
     body[data-page="admin"] .main-nav { padding: 4px 6px 8px; border-radius: 0 0 14px 14px; }
   }
 }
+
+/* Ausgewählte Knöpfe (Da, Sehhilfe, Ausweis, Bezahlt …) gut lesbar: farbig mit weißer Schrift */
+body[data-page="admin"] .att-btn.on-yes { background: var(--ok); border-color: var(--ok); color: #fff; }
+body[data-page="admin"] .att-btn.on-no { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+/* Fehlermeldung groß und gut sichtbar oben */
+.err-toast { position: fixed; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); z-index: 2147483000; width: min(560px, calc(100vw - 24px));
+  background: #fdecea; color: #7a1d14; border: 2px solid #c0392b; border-radius: 14px; padding: 12px 44px 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); font-weight: 600; line-height: 1.4; }
+.err-toast button { position: absolute; right: 8px; top: 8px; border: 0; background: transparent; font-size: 22px; line-height: 1; color: #7a1d14; cursor: pointer; }

@@ -1,6 +1,42 @@
 // Verwaltungsbereich: Termine anlegen/bearbeiten, Teilnehmer verwalten.
 (async function () {
   const cfg = window.EHFY_CONFIG;
+  // ---------- Fehlermeldungen: auf Deutsch übersetzen und groß oben anzeigen ----------
+  let errToast = null, errTimer = null;
+  function showError(msg) {
+    msg = window.EHFYErrText ? window.EHFYErrText(msg) : msg;
+    if (!msg) return;
+    if (!errToast) {
+      errToast = document.createElement("div");
+      errToast.className = "err-toast"; errToast.setAttribute("role", "alert");
+      errToast.innerHTML = '<span></span><button type="button" aria-label="Schließen">×</button>';
+      errToast.querySelector("button").onclick = () => errToast.remove();
+    }
+    errToast.querySelector("span").textContent = "⚠️ " + msg;
+    // Über offenen Fenstern (Dialogen) anzeigen
+    const host = [...document.querySelectorAll("dialog[open]")].pop() || document.body;
+    host.appendChild(errToast);
+    clearTimeout(errTimer);
+    errTimer = setTimeout(() => errToast && errToast.remove(), 20000);
+  }
+  // Jede Fehlerzeile der Verwaltung (rote Texte) wird übersetzt und zusätzlich oben angezeigt
+  new MutationObserver(list => {
+    for (const mu of list) {
+      const el = (mu.target.nodeType === 3 ? mu.target.parentElement : mu.target);
+      const box = el && el.closest && el.closest('[id$="-error"], [id^="tpl-err"], .form-error, [role=alert]:not(.err-toast)');
+      if (!box || box.closest(".err-toast")) continue;
+      const text = box.textContent.trim();
+      if (!text) { delete box.dataset.shown; continue; }
+      if (box.dataset.shown === text) continue;
+      const de = window.EHFYErrText ? window.EHFYErrText(text) : text;
+      box.dataset.shown = de;
+      if (de !== text) box.textContent = de;
+      showError(de);
+    }
+  }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  window.addEventListener("unhandledrejection", ev => showError((ev.reason && ev.reason.message) || String(ev.reason || "")));
+  const nativeAlert = window.alert.bind(window);
+  window.alert = msg => nativeAlert(window.EHFYErrText ? window.EHFYErrText(msg) : msg);
   const db = window.EHFY_DB;
   const { esc, fmtShortDate, fmtDate, fmtRange, fmtTime } = window.EHFY;
   const $ = id => document.getElementById(id);

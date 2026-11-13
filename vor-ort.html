@@ -149,7 +149,7 @@
         $("vo-form").classList.add("hidden");
         $("vo-done").classList.remove("hidden");
         window.scrollTo({ top: 0, behavior: "smooth" });
-      } catch (e) { err.textContent = e.message; }
+      } catch (e) { err.textContent = window.EHFYErrText ? EHFYErrText(e.message) : e.message; err.scrollIntoView({ block: "center", behavior: "smooth" }); }
       finally { btn.disabled = false; btn.textContent = "Absenden"; }
     });
 

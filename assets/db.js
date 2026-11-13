@@ -10,6 +10,37 @@
     document.body.prepend(banner);
   }
 
+  // Fehlermeldungen verständlich auf Deutsch (nur für die Anzeige; die eigentliche Meldung bleibt für die Technik unverändert)
+  window.EHFYErrText = function (raw) {
+    const m = String(raw == null ? "" : raw).trim();
+    if (!m) return "";
+    const rules = [
+      [/could not find the '([^']+)' column of '([^']+)'|column "?([\w.]+)"? (?:of relation "?\w+"? )?does not exist/i, x => `Die Datenbank ist noch nicht auf dem neuesten Stand: Das Feld „${x[1] || x[3]}“ fehlt. Bitte das zuletzt bereitgelegte SQL-Update in Supabase ausführen (SQL Editor → einfügen → Run). Danach klappt es.`],
+      [/could not find the function|function [\w.]+\(.*\) does not exist/i, () => "Die Datenbank ist noch nicht auf dem neuesten Stand: Eine Funktion fehlt. Bitte das zuletzt bereitgelegte SQL-Update in Supabase ausführen."],
+      [/could not find the table|relation "?[\w.]+"? does not exist/i, () => "Die Datenbank ist noch nicht auf dem neuesten Stand: Eine Tabelle fehlt. Bitte das zuletzt bereitgelegte SQL-Update in Supabase ausführen."],
+      [/failed to fetch|networkerror|load failed|network request failed|internet connection appears to be offline/i, () => "Keine Verbindung zum Internet oder zum Server. Bitte die Internetverbindung prüfen und es noch einmal versuchen."],
+      [/jwt expired|invalid jwt|auth session missing|not authenticated|refresh token/i, () => "Deine Anmeldung ist abgelaufen. Bitte abmelden und neu anmelden."],
+      [/invalid login credentials/i, () => "E-Mail oder Passwort stimmt nicht."],
+      [/row-level security|permission denied|not allowed/i, () => "Keine Berechtigung für diese Aktion. Bitte prüfen, ob du mit dem Verwaltungs-Konto angemeldet bist."],
+      [/duplicate key|unique constraint|already exists/i, () => "Diesen Eintrag gibt es schon. Ein doppelter Eintrag ist nicht möglich."],
+      [/violates check constraint "?([\w]+)"?/i, x => `Ein Wert ist hier nicht erlaubt (Prüfregel ${x[1]}). Bitte die Auswahl prüfen.`],
+      [/violates foreign key/i, () => "Der Eintrag gehört zu einem anderen Eintrag, der fehlt oder gelöscht wurde (z. B. ein gelöschter Termin)."],
+      [/value too long/i, () => "Eine Eingabe ist zu lang. Bitte kürzen."],
+      [/invalid input syntax for type (\w+)/i, x => `Eine Eingabe hat das falsche Format (${({ date: "Datum", uuid: "Kennung", integer: "Zahl", numeric: "Zahl", timestamp: "Datum/Uhrzeit" })[x[1].toLowerCase()] || x[1]}). Bitte prüfen.`],
+      [/timeout|timed out/i, () => "Der Server antwortet gerade nicht. Bitte gleich noch einmal versuchen."],
+      [/failed to parse pdf|no pdf header|invalid pdf|encrypted/i, () => "Die PDF-Datei lässt sich nicht lesen (beschädigt, verschlüsselt oder keine echte PDF). Bitte die Vorlage neu als PDF speichern und hochladen."],
+      [/bucket not found|object not found|not_found/i, () => "Die Datei wurde nicht gefunden (Vorlage oder Protokoll fehlt). Bitte unter Einstellungen hochladen."],
+      [/non-2xx|edge function|functionshttperror|functionsfetcherror/i, () => "Der Mail-Dienst hat einen Fehler gemeldet. Bitte später noch einmal versuchen."],
+      [/quota|storage.*full|exceeded/i, () => "Der Speicher ist voll. Bitte alte Daten löschen oder Claude fragen."],
+      [/notallowederror|permission.*camera|share/i, () => "Das Gerät hat die Aktion nicht erlaubt (z. B. Teilen oder Kamera). Bitte noch einmal tippen."],
+      [/cannot read propert|is not a function|is not defined|undefined|null|typeerror|referenceerror/i, () => `Interner Fehler in der App. Bitte die Seite neu laden und es noch einmal versuchen. Wenn es bleibt, ein Foto dieser Meldung an Claude schicken. (${m})`]
+    ];
+    for (const [re, fn] of rules) { const x = m.match(re); if (x) return fn(x); }
+    // Schon deutsch? Dann so lassen. Sonst als technischen Fehler kennzeichnen.
+    if (/[äöüß]|\b(bitte|nicht|der|die|das|und|ist|kein|keine|wurde)\b/i.test(m)) return m;
+    return `Technischer Fehler: ${m}. Bitte noch einmal versuchen. Wenn es bleibt, ein Foto dieser Meldung an Claude schicken.`;
+  };
+
   const countBooked = regs => regs.filter(r => r.status !== "storniert").length;
   const hoursUntil = iso => (new Date(iso) - Date.now()) / 36e5;
 
