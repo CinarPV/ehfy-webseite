@@ -2604,7 +2604,14 @@
   // Über das Teilen-Menü landet die PDF als Anhang direkt in deiner Mail-App (mit dem dort eingerichteten Konto).
   const pdlg = $("pdf-dialog");
   let pd = null;
-  function pdfDialog(bytes, name, mail) {
+  function pdfDialog(bytes, name, mail, fix) {
+    $("pd-fix").classList.toggle("hidden", !fix);
+    $("pd-fix").textContent = fix ? fix.label : "";
+    $("pd-fix").disabled = false;
+    $("pd-fix").onclick = fix ? async () => {
+      $("pd-fix").disabled = true; $("pd-fix").textContent = "Wird angelegt …";
+      try { await fix.run(); } catch (e) { $("pd-status").textContent = e.message; $("pd-fix").disabled = false; $("pd-fix").textContent = fix.label; }
+    } : null;
     if (pd) URL.revokeObjectURL(pd.url);
     const file = new File([bytes], name, { type: "application/pdf" });
     pd = { file, url: URL.createObjectURL(file), mail };
@@ -2723,7 +2730,8 @@
   }
 
   // Quittungen/Rechnungen: vorhandene wiederverwenden, fehlende mit neuer Nummer anlegen
-  async function billsFor(type, people, course) {
+  // preview = true: fehlende Belege nur als Vorschau ohne Nummer (die Nummer wird erst beim Drucken oder Senden fest vergeben)
+  async function billsFor(type, people, course, preview) {
     const existing = await db.invoicesForRegistrations(people.map(r => r.id));
     const day = localDate(new Date(course.starts_at));
     // Quittung = bar am Kurstag bezahlt; Rechnung = normal mit Zahlungsziel ab heute
@@ -2732,13 +2740,16 @@
     for (const r of people) {
       let inv = existing.find(i => i.registration_id === r.id && i.type === type);
       if (!inv) {
-        inv = await db.createInvoice({
+        const data = {
           type, registration_id: r.id, status: cash ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
           issued_on: cash ? day : localDate(new Date()), service_date: day,
           recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "" },
           items: [...EHFYDocs.receiptItems(r, course, cfg.packages),
             ...(Number(r.discount) > 0 ? [{ text: `Gutschein${r.discount_note ? ": " + r.discount_note : ""}`, qty: 1, price: -Number(r.discount) }] : [])]
-        });
+        };
+        inv = preview
+          ? { ...data, preview: true, number: "Vorschau", total: data.items.reduce((n, i) => n + i.qty * i.price, 0) }
+          : await db.createInvoice(data);
       }
       // Ältere Belege kennen das Geburtsdatum noch nicht
       out.push({ ...inv, recipient: { ...inv.recipient, birth_date: inv.recipient.birth_date || r.birth_date || null } });
@@ -2747,13 +2758,13 @@
   }
 
   // Ein Dokument-Typ als PDF-Bytes (eine Seite pro Teilnehmer, gleiche Reihenfolge)
-  async function docBytes(kind, people, course, forMail) {
+  async function docBytes(kind, people, course, forMail, preview) {
     const D = window.EHFYDocs;
     // Deine Unterschrift kommt nur auf Bescheinigungen, die per E-Mail rausgehen
     if (kind === "bescheinigung") return D.certificates(await template("bescheinigung"), course, people, loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded, signature: forMail ? await signatureBytes() : null });
     if (kind === "datenblatt") return D.datasheets(await template("datenblatt"), course, people, loadFont);
-    if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course));
-    if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course), await issuer(), loadFont, cfg.documents.paymentDays);
+    if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course, preview));
+    if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course, preview), await issuer(), loadFont, cfg.documents.paymentDays);
     if (kind === "teilnehmerliste") {
       const list = people.filter(r => r.on_list && r.status !== "storniert");
       if (!list.length) throw new Error("Noch niemand für die Teilnehmerliste markiert. Bitte bei den Teilnehmern „Auf Teilnehmerliste“ ankreuzen.");
@@ -2765,11 +2776,49 @@
   const BUNDLE = ["datenblatt", "bescheinigung", "quittung"];
 
   async function makeDoc(kind, people, course, win) {
-    const bytes = kind === "alles"
-      ? await EHFYDocs.bundle(await Promise.all(BUNDLE.map(k => docBytes(k, people, course))))
-      : await docBytes(kind, people, course);
+    await ensurePdf();
     const who = people.length === 1 ? `_${people[0].last_name}_${people[0].first_name}` : "";
-    showPdf(bytes, `${DOC_NAMES[kind]}_${localDate(new Date(course.starts_at))}_${course.location}${who}.pdf`, win);
+    const name = `${DOC_NAMES[kind]}_${localDate(new Date(course.starts_at))}_${course.location}${who}.pdf`;
+    const build = preview => kind === "alles"
+      ? Promise.all(BUNDLE.map(k => docBytes(k, people, course, false, preview))).then(parts => EHFYDocs.bundle(parts))
+      : docBytes(kind, people, course, false, preview);
+    // Quittung/Rechnung: Fehlt noch ein Beleg, erst fragen – Nummern werden nur beim Drucken fest vergeben
+    const type = kind === "rechnung" ? "rechnung" : ["quittung", "alles"].includes(kind) ? "quittung" : null;
+    if (type) {
+      const existing = await db.invoicesForRegistrations(people.map(r => r.id));
+      const missing = people.filter(r => !existing.some(i => i.registration_id === r.id && i.type === type)).length;
+      if (missing) {
+        if (win && !win.closed) win.close();
+        const label = type === "rechnung" ? "Rechnung" : "Quittung";
+        const many = missing > 1 ? `${missing} ${label}en` : label;
+        const choice = await askChoice(`${many} erstellen?`,
+          `${missing === 1 ? "Für diese Person gibt es noch keine " + label : "Für " + missing + " Personen gibt es noch keine " + label}. Erst mit „${many} erstellen“ wird die Nummer fest vergeben.`,
+          [["print", `${many} erstellen (Nummer fest vergeben)`], ["preview", "Nur ansehen (Vorschau ohne Nummer)"]]);
+        if (!choice) return;
+        if (choice === "preview") {
+          return pdfDialog(await build(true), name.replace(".pdf", "_Vorschau.pdf"), null, {
+            label: `${many} erstellen (Nummer fest vergeben)`,
+            run: async () => pdfDialog(await build(false), name)
+          });
+        }
+        return pdfDialog(await build(false), name);
+      }
+    }
+    showPdf(await build(false), name, win);
+  }
+  // Kleines Auswahlfenster; Ergebnis: Wert des Knopfes oder null (Abbrechen)
+  function askChoice(title, text, buttons) {
+    return new Promise(resolve => {
+      const d = document.createElement("dialog");
+      d.className = "qr-dlg";
+      d.innerHTML = `<h3 style="margin:0 0 6px">${esc(title)}</h3><p class="small" style="margin:0 0 12px">${esc(text)}</p>
+        <div class="btn-row">${buttons.map(([v, l], i) => `<button class="btn ${i ? "btn-ghost" : ""}" type="button" data-v="${v}">${esc(l)}</button>`).join("")}<button class="btn btn-ghost" type="button" data-v="">Abbrechen</button></div>`;
+      document.body.appendChild(d);
+      const done = v => { d.close(); d.remove(); resolve(v || null); };
+      d.oncancel = e => { e.preventDefault(); done(null); };
+      d.onclick = e => { const b = e.target.closest("[data-v]"); if (b) done(b.dataset.v); };
+      d.showModal();
+    });
   }
 
   async function runDoc(kind, people, course = current, showError = msg => { $("doc-error").textContent = msg; }) {
@@ -2927,6 +2976,7 @@
   }
 
   async function invoicePdf(inv, win) {
+    await ensurePdf();
     const bytes = inv.type === "quittung"
       ? await receiptPdf([inv])
       : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays);

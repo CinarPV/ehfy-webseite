@@ -142,6 +142,7 @@
       text(page, plain(inv.total), RECEIPT.confirm, f.bold);
       text(page, issuer.city, RECEIPT.place, f.bold);
       drawSig(page, sig, RECEIPT.sign.x, RECEIPT.sign.y, RECEIPT.sign.w, RECEIPT.sign.h);
+      if (inv.preview) page.drawText("VORSCHAU", { x: 120, y: 400, size: 60, font: f.black, color: root.PDFLib.rgb(0.16, 0.71, 0.71), opacity: 0.22, rotate: root.PDFLib.degrees(28) });
       if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 400, size: 64, font: f.black, color: color(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(25) });
     });
   }
@@ -281,6 +282,7 @@
       if (sig) page.drawText(SIG_NOTE, { x: M, y: sy - 26, size: 8, font: f.regular, color: rgb(C.muted) });
       page.drawRectangle({ x: A4[0] - M - 170, y: sy - 20, width: 170, height: 90, borderColor: rgb(C.line), borderWidth: 1, borderDashArray: [4, 3] });
       page.drawText("Stempelfeld", { x: A4[0] - M - 160, y: sy - 12, size: 8, font: f.regular, color: rgb(C.muted) });
+      if (inv.preview) page.drawText("VORSCHAU", { x: 120, y: 400, size: 60, font: f.black, color: root.PDFLib.rgb(0.16, 0.71, 0.71), opacity: 0.22, rotate: root.PDFLib.degrees(28) });
       if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 420, size: 64, font: f.black, color: root.PDFLib.rgb(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(30) });
       footer(page, f, issuer);
     }
@@ -322,7 +324,8 @@
       page.drawText(issuer.owner || issuer.name || "", { x: M, y: yy - 106, size: 9, font: f.regular, color: rgb(C.muted) });
       page.drawText(SIG_NOTE, { x: M, y: yy - 119, size: 8, font: f.regular, color: rgb(C.muted) });
     }
-    if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 420, size: 64, font: f.black, color: root.PDFLib.rgb(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(30) });
+    if (inv.preview) page.drawText("VORSCHAU", { x: 120, y: 400, size: 60, font: f.black, color: root.PDFLib.rgb(0.16, 0.71, 0.71), opacity: 0.22, rotate: root.PDFLib.degrees(28) });
+      if (inv.status === "storniert") page.drawText("STORNIERT", { x: 150, y: 420, size: 64, font: f.black, color: root.PDFLib.rgb(0.85, 0.2, 0.15), opacity: 0.25, rotate: root.PDFLib.degrees(30) });
     footer(page, f, issuer);
   }
 
