@@ -41,7 +41,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-top no-print">
-            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 77</span></h1>
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 78</span></h1>
             <div class="sync-mini" id="sync-bar" role="status">
               <span class="sync-dot" id="sync-dot"></span>
               <span id="sync-text" class="small"></span>
@@ -299,10 +299,13 @@
             </div>
             <div class="card" style="margin-top:22px" id="backup-card">
               <h3 style="margin-top:0">Sicherung</h3>
-              <p class="small muted">Speichert alle Kurse, Schüler, Belege und Einstellungen als Datei auf diesem Gerät. Die Datei enthält persönliche Daten und deine Bankdaten, bewahre sie also sicher auf. PDF-Vorlagen und Protokolle sind nicht enthalten.</p>
+              <p class="small muted"><strong>Sicherung mit allen Dokumenten (ZIP):</strong> alle Daten plus Sehtest-Protokolle, Erste-Hilfe-Bescheinigungen, Teilnehmerdatenblätter, Rechnungen und Quittungen als PDF, sortiert in Ordnern. <strong>Nur Daten:</strong> kleine Datei zum Wiederherstellen. Beide enthalten persönliche Daten und deine Bankdaten, bewahre sie also sicher auf.</p>
               <p class="small" id="bk-last"></p>
-              <div class="btn-row"><button class="btn" id="bk-save" type="button">Sicherung herunterladen</button></div>
-              <div class="field" style="margin:16px 0 8px"><label for="bk-file">Aus einer Sicherung wiederherstellen</label><input type="file" id="bk-file" accept="application/json,.json"></div>
+              <div class="btn-row"><button class="btn" id="bk-zip" type="button">Sicherung mit allen Dokumenten (ZIP)</button><button class="btn btn-ghost" id="bk-save" type="button">Nur Daten sichern</button></div>
+              <p class="small muted" style="margin:6px 0 0">Die Sicherung hat immer denselben Namen. Am iPhone: „Speichern“ → „In Dateien sichern“ → gleichen Ordner wählen → „Ersetzen“. Am Computer: die vorhandene Datei auswählen → ersetzen.</p>
+              <p id="bk-done" class="small" role="status" style="margin:8px 0 0"></p>
+              <div class="btn-row" style="margin-top:8px"><button class="btn hidden" id="bk-store" type="button">Jetzt speichern (alte Sicherung ersetzen)</button></div>
+              <div class="field" style="margin:16px 0 8px"><label for="bk-file">Aus einer Sicherung wiederherstellen</label><input type="file" id="bk-file" accept="application/json,.json,application/zip,.zip"></div>
               <div id="bk-preview" class="small" role="status"></div>
               <div class="btn-row" style="margin-top:8px"><button class="btn btn-ghost hidden" id="bk-restore" type="button">Fehlende Daten wiederherstellen</button></div>
               <p class="form-error" id="bk-error" role="alert"></p>

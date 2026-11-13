@@ -1286,19 +1286,22 @@
     if (!$("start-view").classList.contains("hidden") || !$("attendance-view").classList.contains("hidden")) loadCourses();
   }
 
-  // Sehtest-Protokoll als PDF, mit allem, was schon eingetragen ist
+  // Sehtest-Protokoll als PDF-Bytes, mit allem, was schon eingetragen ist
+  async function protocolBytes(r, c) {
+    await ensurePdf();
+    const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : "");
+    return EHFYDocs.sehtestProtocols([{
+      first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
+      nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
+      date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
+      signature: r.sehtest_passed != null || r.sehtest_signed_at ? await signatureBytes() : null
+    }], await issuer(), loadFont);
+  }
   async function sehtestPdf(r, c, showError) {
     showError("");
     const win = openTab();
     try {
-      await ensurePdf();
-      const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : "");
-      const bytes = await EHFYDocs.sehtestProtocols([{
-        first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
-        nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
-        date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
-        signature: r.sehtest_passed != null || r.sehtest_signed_at ? await signatureBytes() : null
-      }], await issuer(), loadFont);
+      const bytes = await protocolBytes(r, c);
       showPdf(bytes, `Sehtest-Protokoll${r.sehtest_nr ? "_" + r.sehtest_nr : ""}_${r.last_name}_${r.first_name}.pdf`, win);
     } catch (e) { if (win) win.close(); showError(e.message); }
   }
@@ -2226,16 +2229,148 @@
       const data = await db.backupData();
       const now = new Date();
       const file = JSON.stringify({ app: "ehfy", version: 1, created_at: now.toISOString(), ...data });
-      const url = URL.createObjectURL(new Blob([file], { type: "application/json" }));
-      const a = document.createElement("a");
-      a.href = url; a.download = `EHfy-Sicherung-${localDate(now)}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      try { localStorage.setItem(BK_KEY, now.toISOString()); } catch (e) { /* ohne Speicher */ }
-      showLastBackup();
+      bkReady = new File([file], "EHfy-Sicherung-Daten.json", { type: "application/json" });
+      $("bk-done").textContent = "✓ Daten-Sicherung ist fertig. Jetzt speichern und die alte ersetzen:";
+      $("bk-store").classList.remove("hidden");
     } catch (e) { $("bk-error").textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = label; }
   };
+  // ---------- Sicherung mit allen Dokumenten als ZIP (Ordner je Dokumentart, darin je Kurstag) ----------
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  // Einfache ZIP-Datei ohne Kompression (PDFs sind schon gepackt); Dateinamen in UTF-8
+  function makeZip(files) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    const now = new Date(), dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    let offset = 0;
+    for (const f of files) {
+      const name = enc.encode(f.name), data = f.data instanceof Uint8Array ? f.data : new Uint8Array(f.data), crc = crc32(data);
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+      h.setUint16(10, dosTime, true); h.setUint16(12, dosDate, true); h.setUint32(14, crc, true);
+      h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+      parts.push(h, name, data);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+      c.setUint16(12, dosTime, true); c.setUint16(14, dosDate, true); c.setUint32(16, crc, true);
+      c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true);
+      c.setUint32(42, offset, true);
+      central.push(c, name);
+      offset += 30 + name.length + data.length;
+    }
+    const size = central.reduce((n, x) => n + x.byteLength, 0);
+    const e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+    e.setUint32(12, size, true); e.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, e], { type: "application/zip" });
+  }
+  const fileSafe = t => String(t || "").replace(/[\/\\:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 80);
+
+  async function backupZip(progress) {
+    await ensurePdf();
+    const data = await db.backupData(), now = new Date();
+    const files = [{ name: "EHfy-Daten (zum Wiederherstellen).json", data: new TextEncoder().encode(JSON.stringify({ app: "ehfy", version: 1, created_at: now.toISOString(), ...data })) }];
+    const notes = [];
+    const courses = new Map((data.courses || []).map(c => [c.id, c]));
+    const regs = (data.registrations || []).filter(r => r.status !== "storniert");
+    const who = r => fileSafe(`${r.last_name}, ${r.first_name}`);
+    const folderDay = (r, c) => c ? `${dayOf(c.starts_at)} ${fileSafe(c.location || "")}`.trim() : (r.sehtest_on || r.legacy_course_date || "ohne Datum");
+    const tpl = {};
+    for (const k of ["bescheinigung", "datenblatt"]) tpl[k] = await db.getTemplate(k).catch(() => null);
+    const jobs = [];
+    for (const r of regs) {
+      const c = courses.get(r.course_id) || null;
+      // Sehtest-Protokoll: nur abgeschlossene (Ergebnis übernommen), nicht Ausschuss
+      if (r.sehtest_passed != null && !r.sehtest_void_at) {
+        jobs.push(async () => files.push({ name: `Sehtest-Protokolle/${folderDay(r, c)}/${r.sehtest_nr ? "Nr " + fileSafe(r.sehtest_nr) + " - " : ""}${who(r)}.pdf`, data: await protocolBytes(r, c) }));
+      }
+      // Hochgeladene (eingescannte) Protokolle
+      if (r.protocol_added_on) {
+        jobs.push(async () => { const b = await db.getTemplate(`protokolle/${r.id}`).catch(() => null); if (b) files.push({ name: `Sehtest-Protokolle/${folderDay(r, c)}/${who(r)} (hochgeladen).pdf`, data: new Uint8Array(await new Response(b).arrayBuffer()) }); });
+      }
+      if (!c || c.virtual) continue;
+      // Teilnehmerdatenblatt für jeden im Kurs, Erste-Hilfe-Bescheinigung für alle, die teilgenommen haben
+      if (tpl.datenblatt) jobs.push(async () => files.push({ name: `Teilnehmerdatenblaetter/${folderDay(r, c)}/${who(r)}.pdf`, data: await EHFYDocs.datasheets(tpl.datenblatt, c, [r], loadFont) }));
+      if (tpl.bescheinigung && r.status === "teilgenommen") jobs.push(async () => files.push({ name: `Erste-Hilfe-Bescheinigungen/${folderDay(r, c)}/${who(r)}.pdf`, data: await EHFYDocs.certificates(tpl.bescheinigung, c, [r], loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded }) }));
+    }
+    if (!tpl.datenblatt) notes.push("Teilnehmerdatenblätter fehlen: Die Vorlage „Teilnehmerdatenblatt“ ist noch nicht hochgeladen.");
+    if (!tpl.bescheinigung) notes.push("Bescheinigungen fehlen: Die Vorlage „Bescheinigung“ ist noch nicht hochgeladen.");
+    // Vorhandene Rechnungen und Quittungen (ohne Unterschrift, wie gedruckt)
+    for (const inv of (data.invoices || []).filter(i => !i.draft && i.number)) {
+      const folder = inv.type === "quittung" ? "Quittungen" : "Rechnungen";
+      const year = String(inv.issued_on || "").slice(0, 4) || "ohne Jahr";
+      jobs.push(async () => files.push({
+        name: `${folder}/${year}/${fileSafe(inv.number)} - ${fileSafe((inv.recipient && inv.recipient.name) || "")}${inv.status === "storniert" ? " (storniert)" : ""}.pdf`,
+        data: inv.type === "quittung" ? await receiptPdf([inv]) : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays)
+      }));
+    }
+    for (let i = 0; i < jobs.length; i++) {
+      progress(i + 1, jobs.length);
+      try { await jobs[i](); } catch (e) { notes.push(`Ein Dokument konnte nicht erstellt werden: ${e.message}`); }
+    }
+    files.push({ name: "LIESMICH.txt", data: new TextEncoder().encode([
+      `EHfy-Sicherung vom ${now.toLocaleString("de-DE")}`, "",
+      "Ordner:", "- Sehtest-Protokolle: abgeschlossene Protokolle, je Kurstag",
+      "- Erste-Hilfe-Bescheinigungen und Teilnehmerdatenblaetter: je Kurstag",
+      "- Rechnungen und Quittungen: je Jahr", "- EHfy-Daten (zum Wiederherstellen).json: alle Daten für „Aus einer Sicherung wiederherstellen“", "",
+      "Die Datei enthält persönliche Daten. Bitte sicher aufbewahren.", ...(notes.length ? ["", "Hinweise:", ...notes] : [])
+    ].join("\r\n")) });
+    // Immer derselbe Name: Beim Speichern wird die alte Sicherung ersetzt
+    return { blob: makeZip(files), count: files.length - 2, name: "EHfy-Sicherung.zip" };
+  }
+  // Speichern mit festem Namen, damit die alte Sicherung ersetzt wird:
+  // Computer: Speichern-Fenster (gleiche Datei wählen → ersetzen); iPhone: Teilen → „In Dateien sichern“ → „Ersetzen“
+  let bkReady = null;
+  async function storeBackup(file) {
+    if (window.showSaveFilePicker) {
+      const h = await window.showSaveFilePicker({ suggestedName: file.name, types: [{ description: file.type === "application/zip" ? "ZIP-Datei" : "Sicherung", accept: { [file.type]: [file.name.slice(file.name.lastIndexOf("."))] } }] });
+      const w = await h.createWritable(); await w.write(file); await w.close();
+    } else if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: file.name });
+    } else {
+      const url = URL.createObjectURL(file), a = document.createElement("a");
+      a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+    try { localStorage.setItem(BK_KEY, new Date().toISOString()); } catch (e) { /* ohne Speicher */ }
+    showLastBackup();
+  }
+  $("bk-store").onclick = async () => {
+    if (!bkReady) return;
+    $("bk-error").textContent = "";
+    try {
+      await storeBackup(bkReady);
+      $("bk-done").textContent = `✓ ${bkReady.name} gespeichert.`;
+      $("bk-store").classList.add("hidden");
+    } catch (e) { if (e.name !== "AbortError") $("bk-error").textContent = e.message; }
+  };
+  $("bk-zip").onclick = async ev => {
+    const btn = ev.target, label = btn.textContent;
+    $("bk-error").textContent = "";
+    btn.disabled = true; btn.textContent = "Wird erstellt …";
+    try {
+      const pending = db.status().pending;
+      if (pending && !confirm(`${pending} Änderung(en) sind noch nicht synchronisiert. Trotzdem sichern?`)) return;
+      const res = await backupZip((i, n) => { btn.textContent = `Dokumente ${i} von ${n} …`; });
+      bkReady = new File([res.blob], res.name, { type: "application/zip" });
+      $("bk-done").innerHTML = `✓ Sicherung mit ${res.count} Dokumenten ist fertig. Jetzt speichern und die alte ersetzen:`;
+      $("bk-store").classList.remove("hidden");
+    } catch (e) { $("bk-error").textContent = e.message; }
+    finally { btn.disabled = false; btn.textContent = label; }
+  };
+
+  // Aus unserer eigenen ZIP-Sicherung die Daten-Datei (.json) lesen (ohne Kompression gespeichert)
+  function jsonFromZip(b) {
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength), dec = new TextDecoder();
+    for (let p = 0; p + 30 <= b.length && v.getUint32(p, true) === 0x04034b50;) {
+      const method = v.getUint16(p + 8, true), size = v.getUint32(p + 18, true), nl = v.getUint16(p + 26, true), xl = v.getUint16(p + 28, true);
+      const name = dec.decode(b.subarray(p + 30, p + 30 + nl)), start = p + 30 + nl + xl;
+      if (/\.json$/i.test(name) && method === 0) return dec.decode(b.subarray(start, start + size));
+      p = start + size;
+    }
+    throw new Error("In dieser ZIP-Datei ist keine EHfy-Sicherung.");
+  }
   let bkData = null;
   $("bk-file").addEventListener("change", async ev => {
     const file = ev.target.files[0];
@@ -2244,7 +2379,7 @@
     $("bk-restore").classList.add("hidden");
     if (!file) return;
     try {
-      const data = JSON.parse(await file.text());
+      const data = JSON.parse(/\.zip$/i.test(file.name) ? jsonFromZip(new Uint8Array(await file.arrayBuffer())) : await file.text());
       if (data.app !== "ehfy" || !Array.isArray(data.courses) || !Array.isArray(data.registrations)) throw new Error("Das ist keine EHfy-Sicherung.");
       bkData = data;
       $("bk-preview").innerHTML = `<p>Sicherung vom ${new Date(data.created_at).toLocaleString("de-DE")}: <strong>${data.courses.length} Kurse</strong>, <strong>${data.registrations.length} Anmeldungen</strong>, ${(data.invoices || []).length} Belege.</p>
