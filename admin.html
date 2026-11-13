@@ -41,7 +41,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-top no-print">
-            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 82</span></h1>
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 83</span></h1>
             <div class="sync-mini" id="sync-bar" role="status">
               <span class="sync-dot" id="sync-dot"></span>
               <span id="sync-text" class="small"></span>
@@ -297,6 +297,12 @@
               <button class="btn" type="button" id="sig-open" style="width:100%;min-height:56px;font-size:17px">✍ Unterschreiben (großes Feld, quer)</button>
               <div id="sig-preview" class="sign-preview hidden" style="margin-top:10px"></div>
               <p class="small" id="sig-msg" role="status"></p>
+            </div>
+            <div class="card" style="margin-top:22px" id="exam-card">
+              <h3 style="margin-top:0">Sehtest-Prüfer</h3>
+              <p class="small muted">Wer den Sehtest durchführt. Ein Name pro Zeile. Der erste Name ist vorausgewählt; im Sehtest kannst du einen anderen antippen. Der Name steht auf dem Protokoll bei „Prüfer“.</p>
+              <textarea id="exam-names" rows="3" placeholder="Kürşat Cinar"></textarea>
+              <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="exam-save">Prüfer speichern</button><span class="small" id="exam-msg" role="status"></span></div>
             </div>
             <div class="card" style="margin-top:22px" id="backup-card">
               <h3 style="margin-top:0">Sicherung</h3>

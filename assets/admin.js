@@ -1334,6 +1334,7 @@
       first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
       nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
       date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
+      examiner: r.sehtest_examiner || (r.sehtest_passed != null ? (await issuer(), examiners()[0]) : ""),
       signature: r.sehtest_passed != null || r.sehtest_signed_at ? await signatureBytes() : null
     }], await issuer(), loadFont);
   }
@@ -1395,6 +1396,7 @@
       <div class="st-extra st-top">
         <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
+        <div class="st-group" id="sd-exam"><span class="st-label">Prüfer:</span></div>
         <div class="st-group" id="sd-pay"><span class="st-label">Bezahlt:</span>${PAY_KINDS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-sdpay="${k}">${l}</button>`).join("")}</div>
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="60" placeholder="beliebig, wie auf dem Dokument"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
@@ -1492,6 +1494,15 @@
     if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
     $("sd-date").value = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : localDate(new Date()));
     $("sd-idno").value = r.sehtest_id_no || "";
+    // Prüfer: Namen aus den Einstellungen, vorausgewählt der bisherige oder der erste
+    await issuer();
+    stRun.examiner = r.sehtest_examiner || examiners()[0] || "";
+    const examDraw = () => {
+      const names = [...new Set([...examiners(), stRun.examiner].filter(Boolean))];
+      $("sd-exam").innerHTML = '<span class="st-label">Prüfer:</span>' + names.map(n => `<button class="btn btn-sm btn-ghost att-btn ${n === stRun.examiner ? "on-yes" : ""}" type="button" data-sdexam="${esc(n)}">${esc(n)}</button>`).join("");
+    };
+    examDraw();
+    $("sd-exam").onclick = e => { const b = e.target.closest("[data-sdexam]"); if (b) { stRun.examiner = b.dataset.sdexam; examDraw(); } };
     const payMark = () => $("sd-pay").querySelectorAll("[data-sdpay]").forEach(b => b.classList.toggle("on-yes", r.payment_method === b.dataset.sdpay));
     payMark();
     $("sd-pay").onclick = async e => {
@@ -1516,6 +1527,7 @@
     $("sd-error").textContent = "";
     const all = S.overall(marks);
     const patch = {
+      sehtest_examiner: stRun.examiner || null,
       sehtest_marks: marks, sehtest_flow: flow, sehtest_aid_kind: aid, sehtest_aid: aid ? aid !== "ohne" : null, sehtest_id_doc: idDoc,
       sehtest_id_no: $("sd-idno").value.trim() || null,
       ...(stRun.birth ? { birth_date: stRun.birth } : {}),
@@ -2574,9 +2586,22 @@
     return { ...cfg.issuer, ...bankData, signature: forMail ? await signatureBytes() : null };
   }
   const BANK_FIELDS = { bank: "st-bank", accountHolder: "st-holder", iban: "st-iban", bic: "st-bic", taxNumber: "st-tax" };
+  // Sehtest-Prüfer (Namen aus den Einstellungen; ohne Eintrag: du selbst)
+  const examiners = () => {
+    const list = (bankData && Array.isArray(bankData.examiners) ? bankData.examiners : []).map(x => String(x).trim()).filter(Boolean);
+    return list.length ? list : [cfg.issuer.owner].filter(Boolean);
+  };
+  $("exam-save").onclick = async () => {
+    $("exam-msg").textContent = "";
+    const value = { ...(await db.getSettings().catch(() => ({}))) };
+    value.examiners = $("exam-names").value.split("\n").map(x => x.trim()).filter(Boolean);
+    try { await db.saveSettings(value); bankData = value; $("exam-msg").textContent = "Gespeichert ✓"; }
+    catch (e) { $("exam-msg").textContent = e.message; }
+  };
   async function renderBank() {
     bankData = await db.getSettings().catch(() => ({}));
     for (const [k, id] of Object.entries(BANK_FIELDS)) $(id).value = bankData[k] || "";
+    $("exam-names").value = (bankData.examiners || []).join("\n");
     $("st-status").textContent = "";
   }
   $("bank-form").addEventListener("submit", async ev => {
