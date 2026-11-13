@@ -178,7 +178,11 @@
         ? `Dieser Termin hat ${c.booked} Anmeldung(en). Termin UND alle Anmeldungen endgültig löschen?\n\nTipp: Stattdessen „Bearbeiten → Status: abgesagt“ wählen, dann bleiben die Daten erhalten.`
         : "Diesen Termin endgültig löschen?";
       if (!confirm(msg)) return;
-      try { await db.deleteCourse(c.id); await window.EHFYFinance.courseCancelled(c.id); await loadCourses(); } catch (e) { alert(e.message); }
+      try {
+        // Abgeschlossene Sehtest-Protokolle bleiben erhalten (als „nur Sehtest“)
+        for (const r of await db.listRegistrations(c.id)) if (protoDone(r)) await keepProtocolOnly(r, c);
+        await db.deleteCourse(c.id); await window.EHFYFinance.courseCancelled(c.id); await loadCourses();
+      } catch (e) { alert(e.message); }
     }
   });
 
@@ -1355,6 +1359,7 @@
       <div class="st-extra st-top">
         <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
+        <div class="st-group" id="sd-pay"><span class="st-label">Bezahlt:</span>${PAY_KINDS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-sdpay="${k}">${l}</button>`).join("")}</div>
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="60" placeholder="beliebig, wie auf dem Dokument"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
@@ -1451,6 +1456,15 @@
     if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
     $("sd-date").value = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : localDate(new Date()));
     $("sd-idno").value = r.sehtest_id_no || "";
+    const payMark = () => $("sd-pay").querySelectorAll("[data-sdpay]").forEach(b => b.classList.toggle("on-yes", r.payment_method === b.dataset.sdpay));
+    payMark();
+    $("sd-pay").onclick = async e => {
+      const b = e.target.closest("[data-sdpay]");
+      if (!b) return;
+      r.payment_method = r.payment_method === b.dataset.sdpay ? null : b.dataset.sdpay;
+      payMark();
+      try { await db.updateRegistration(r.id, { payment_method: r.payment_method }); } catch (err) { $("sd-error").textContent = err.message; }
+    };
     $("sd-idinfo").innerHTML = "";
     $("sd-birth").textContent = r.birth_date ? `geb. ${birthText(r.birth_date)}` : "";
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
@@ -1508,7 +1522,19 @@
     if (r.sehtest_passed === false) return `nicht bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
     return stStarted(r) ? "zwischengespeichert" : "";
   }
-  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span>${issuedTag(r)}${issuedBtn(r)}` : ""}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
+  // Bezahlt (bar / PayPal / Überweisung) und Häkchen „auf die Teilnehmerliste“
+  const PAY_KINDS = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"]];
+  const payRow = r => `<div class="att-btns pay-row"><span class="small">Bezahlt:</span>${PAY_KINDS.map(([k, l]) =>
+      `<button class="btn btn-sm btn-ghost att-btn ${r.payment_method === k ? "on-yes" : ""}" type="button" data-pay="${k}" aria-pressed="${r.payment_method === k}">${l}</button>`).join("")}
+    <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
+  async function payClick(ev, r) {
+    const pay = ev.target.closest("[data-pay]");
+    if (pay) { await db.updateRegistration(r.id, { payment_method: r.payment_method === pay.dataset.pay ? null : pay.dataset.pay }); return true; }
+    const box = ev.target.closest("[data-onlist]");
+    if (box) { await db.updateRegistration(r.id, { on_list: box.checked }); return true; }
+    return false;
+  }
+  const sehtestQuick = r => payRow(r) + `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span>${issuedTag(r)}${issuedBtn(r)}` : ""}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
   const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
 
   // ---------- Gutschein oder Rabatt je Teilnehmer ----------
@@ -1839,6 +1865,9 @@
     const row = ev.target.closest("[data-att]");
     if (!row) return;
     const r = attRegs.find(x => x.id === row.dataset.att) || regs.find(x => x.id === row.dataset.att);
+    if (r) {
+      try { if (await payClick(ev, r)) { await loadCourses(); return; } } catch (e) { errBox.textContent = e.message; return; }
+    }
     if (r && ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseOf(r), msg => { errBox.textContent = msg; });
     if (r && ev.target.closest("[data-st-run]")) return openSehtest(r, courseOf(r), loadCourses).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-st-again]")) return againSehtest(r, loadCourses).catch(e => { errBox.textContent = e.message; });
@@ -1901,7 +1930,26 @@
       </article>`;
     }).join("") + (sorted.length > limit ? `<p class="muted small">Es werden die neuesten ${limit} angezeigt. Bitte die Suche genauer eingeben.</p>` : "")
       : '<p class="muted">Keine Schüler gefunden.</p>';
+    // Eigene Spalte: abgeschlossene Sehtest-Protokolle (auch von gelöschten Schülern)
+    const protos = studentRegs.filter(r => protoDone(r) && words.every(w => [r.first_name, r.last_name, birthText(r.birth_date), r.sehtest_nr, r.sehtest_on && birthText(r.sehtest_on)].join(" ").toLowerCase().includes(w)))
+      .sort((a, b) => String(b.sehtest_on || "").localeCompare(String(a.sehtest_on || "")));
+    $("sc-protos").innerHTML = `<h3 style="margin:0 0 8px">Sehtest-Protokolle <span class="small muted">(${protos.length})</span></h3>` + (protos.length ? protos.slice(0, 100).map(r => `<div class="sc-proto" data-proto-id="${r.id}">
+        <div><strong>${r.sehtest_nr ? "Nr. " + esc(r.sehtest_nr) : "ohne Nr."}</strong> · ${esc(r.last_name)}, ${esc(r.first_name)}<br>
+        <span class="small muted">${r.sehtest_on ? birthText(r.sehtest_on) : ""} · ${r.sehtest_passed === true ? "bestanden" : r.sehtest_passed === false ? "nicht bestanden" : "hochgeladen"}${r.sehtest_only && !r.course_id ? " · nur Sehtest" : ""}</span></div>
+        <button class="btn btn-sm btn-ghost" type="button" data-proto-open>Protokoll</button></div>`).join("") : '<p class="small muted">Keine Protokolle gefunden.</p>');
   }
+  $("sc-protos").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-proto-open]");
+    if (!b) return;
+    const r = studentRegs.find(x => x.id === b.closest("[data-proto-id]").dataset.protoId);
+    if (!r) return;
+    const show = m => { $("sc-error").textContent = m; };
+    if (r.sehtest_passed == null && r.protocol_added_on) {
+      const win = openTab();
+      return db.getTemplate(`protokolle/${r.id}`).then(async bytes => showPdf(new Uint8Array(await new Response(bytes).arrayBuffer()), `Sehtest-Protokoll_${r.last_name}_${r.first_name}.pdf`, win)).catch(e => { if (win) win.close(); show(e.message); });
+    }
+    sehtestPdf(r, courseFor(r), show);
+  });
   // Andere Kurstage zur Auswahl (letzte 60 und nächste 120 Tage, dazu der aktuelle)
   function moveOptions(cur) {
     const from = Date.now() - 60 * 864e5, to = Date.now() + 120 * 864e5;
@@ -1934,8 +1982,18 @@
       <div><button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
     </div>`;
   }
-  // Anmeldung löschen; ein hinterlegtes Protokoll geht mit
+  // Anmeldung löschen. Hat die Person den Sehtest abgeschlossen (oder ein hochgeladenes Protokoll),
+  // bleibt das Protokoll erhalten: Der Eintrag wird zu „nur Sehtest“ und steht weiter unter Sehtests.
+  const protoDone = r => (r.sehtest_passed != null && !r.sehtest_void_at) || !!r.protocol_added_on;
+  async function keepProtocolOnly(r, c) {
+    c = c || attById[r.course_id] || studentCourses[r.course_id] || null;
+    await db.updateRegistration(r.id, {
+      course_id: null, sehtest_only: true, status: "teilgenommen", on_list: false,
+      sehtest_on: r.sehtest_on || (c ? dayOf(c.starts_at) : localDate(new Date())), sehtest_none: false
+    });
+  }
   async function removeRegistration(r) {
+    if (protoDone(r)) return keepProtocolOnly(r);
     if (r.protocol_added_on) await db.removeTemplate(`protokolle/${r.id}`);
     await db.deleteRegistration(r.id);
   }
@@ -2022,7 +2080,7 @@
     const printKind = ev.target.closest("[data-sc-print]");
     if (printKind) return runDoc(printKind.dataset.scPrint, [r], courseFor(r), show);
     if (ev.target.closest("[data-sc-del]")) {
-      if (!confirm(`${r.first_name} ${r.last_name} endgültig aus der Liste löschen?`)) return;
+      if (!confirm(`${r.first_name} ${r.last_name} endgültig aus der Liste löschen?${protoDone(r) ? "\n\nDas Sehtest-Protokoll bleibt erhalten (unter Sehtests)." : ""}`)) return;
       try { await removeRegistration(r); await loadStudents(); } catch (e) { show(e.message); }
       return;
     }
@@ -2090,7 +2148,7 @@
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>
           <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>${issuedBtn(r)}
           ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}
-          ${r.sehtest_only ? '<button class="btn btn-sm btn-ghost" type="button" data-se-del style="color:var(--danger)">Löschen</button>' : ""}</div>
+          ${r.sehtest_only && !protoDone(r) ? '<button class="btn btn-sm btn-ghost" type="button" data-se-del style="color:var(--danger)">Löschen</button>' : ""}</div>
       </article>`;
   }
   // Ordner: ein Kurs (Kursdatum) oder ein Tag mit Personen nur für den Sehtest
@@ -2293,6 +2351,11 @@
       // Teilnehmerdatenblatt für jeden im Kurs, Erste-Hilfe-Bescheinigung für alle, die teilgenommen haben
       if (tpl.datenblatt) jobs.push(async () => files.push({ name: `Teilnehmerdatenblaetter/${folderDay(r, c)}/${who(r)}.pdf`, data: await EHFYDocs.datasheets(tpl.datenblatt, c, [r], loadFont) }));
       if (tpl.bescheinigung && r.status === "teilgenommen") jobs.push(async () => files.push({ name: `Erste-Hilfe-Bescheinigungen/${folderDay(r, c)}/${who(r)}.pdf`, data: await EHFYDocs.certificates(tpl.bescheinigung, c, [r], loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded }) }));
+    }
+    // Teilnehmerlisten je Kurs (nur markierte Teilnehmer)
+    for (const c of courses.values()) {
+      const list = regs.filter(r => r.course_id === c.id && r.on_list).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, "de"));
+      if (list.length) jobs.push(async () => files.push({ name: `Teilnehmerlisten/${dayOf(c.starts_at)} ${fileSafe(c.location || "")}.pdf`, data: await EHFYDocs.participantList(c, list, await issuer(), loadFont, cfg.packages) }));
     }
     if (!tpl.datenblatt) notes.push("Teilnehmerdatenblätter fehlen: Die Vorlage „Teilnehmerdatenblatt“ ist noch nicht hochgeladen.");
     if (!tpl.bescheinigung) notes.push("Bescheinigungen fehlen: Die Vorlage „Bescheinigung“ ist noch nicht hochgeladen.");
@@ -2691,8 +2754,13 @@
     if (kind === "datenblatt") return D.datasheets(await template("datenblatt"), course, people, loadFont);
     if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course), await issuer(), loadFont, cfg.documents.paymentDays);
+    if (kind === "teilnehmerliste") {
+      const list = people.filter(r => r.on_list && r.status !== "storniert");
+      if (!list.length) throw new Error("Noch niemand für die Teilnehmerliste markiert. Bitte bei den Teilnehmern „Auf Teilnehmerliste“ ankreuzen.");
+      return D.participantList(course, list, await issuer(), loadFont, cfg.packages);
+    }
   }
-  const DOC_NAMES = { bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
+  const DOC_NAMES = { teilnehmerliste: "Teilnehmerliste", bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
   // „alles“: pro Teilnehmer Datenblatt, Bescheinigung und Quittung hintereinander
   const BUNDLE = ["datenblatt", "bescheinigung", "quittung"];
 

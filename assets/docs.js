@@ -33,8 +33,8 @@
     date: { x1: 112.5, x2: 275.5, y: 418.5, size: 12 },
     infoYes: { x: 389.6, y: 350.7 },
     issued: { x1: 146.5, x2: 247.5, y: 67, size: 11 },
-    // Deine Unterschrift (nur beim Versand per E-Mail) rechts neben dem Ausstellungsdatum
-    sign: { x: 330, y: 60, w: 170, h: 46 }
+    // Deine Unterschrift (nur beim Versand per E-Mail) über „Unterschrift Lehrgangsleiter“
+    sign: { x: 252, y: 98, w: 165, h: 44 }
   };
   const SHEET = {
     date: { x: 166, y: 652, size: 12 },
@@ -509,5 +509,77 @@
     return pdf.save();
   }
 
-  root.EHFYDocs = { certificates, datasheets, receipts, invoice, invoices, bundle, receiptItems, fmtDate, sehtestProtocols };
+  // ---------- Teilnehmerliste (z. B. fürs Finanzamt): wer da war, Sehtest, Zahlart, Betrag, Unterschrift ----------
+  const PAY = { bar: "bar", paypal: "PayPal", ueberweisung: "Überweisung" };
+  async function participantList(course, people, issuer, loadFont, packages) {
+    const { PDFDocument } = root.PDFLib;
+    const pdf = await PDFDocument.create();
+    const f = await fonts(pdf, loadFont);
+    const W = 841.89, H = 595.28, M = 28;
+    const cols = [["Nr.", 20], ["Name, Vorname", 150], ["Geb.-Datum", 62], ["Adresse", 196], ["EH-Kurs", 40], ["Sehtest", 40], ["Bezahlt", 68], ["Betrag", 48]];
+    const signW = W - 2 * M - cols.reduce((n, c) => n + c[1], 0);
+    cols.push(["Unterschrift", signW]);
+    const rowH = 30, perPage = 12;
+    const price = r => { const p = packages.find(x => x.key === r.package) || packages[0]; return Math.max(0, p.price - (Number(r.discount) || 0)); };
+    const sums = { bar: 0, paypal: 0, ueberweisung: 0, offen: 0 };
+    people.forEach(r => { sums[r.payment_method && sums[r.payment_method] != null ? r.payment_method : "offen"] += price(r); });
+    const total = people.reduce((n, r) => n + price(r), 0);
+    const pages = Math.max(1, Math.ceil(people.length / perPage));
+    const fit = (t, font, size, w) => { t = String(t || ""); while (t && font.widthOfTextAtSize(t, size) > w) t = t.slice(0, -1); return t; };
+    const sigs = new Map();
+    for (const r of people) if (r.signature_png && /^data:image\/png;base64,/.test(r.signature_png)) { try { sigs.set(r.id, await pdf.embedPng(r.signature_png)); } catch (e) { /* ohne */ } }
+    for (let pg = 0; pg < pages; pg++) {
+      const page = pdf.addPage([W, H]);
+      const t = (txt, x, y, size, font = f.regular, color = C.ink) => page.drawText(String(txt || ""), { x, y, size, font, color: rgb(color) });
+      // Kopf
+      t("Teilnehmerliste · Erste-Hilfe-Ausbildung nach § 68 FeV", M, H - 40, 15, f.black);
+      t(`Seite ${pg + 1} von ${pages}`, W - M - 60, H - 40, 9, f.regular, C.muted);
+      const head = [["Ausbildungsstelle", issuer.name || "Erste Hilfe for you"], ["Datum", fmtLongDate(course.starts_at)],
+        ["Zeit", `${new Date(course.starts_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ })} – ${course.ends_at ? new Date(course.ends_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ }) : ""} Uhr`],
+        ["Ausbildungsort", course.address || course.location || ""], ["Lehrkraft", issuer.owner || ""]];
+      let hx = M;
+      head.forEach(([k, v]) => { const w = k === "Ausbildungsort" ? 300 : 112; t(k.toUpperCase(), hx, H - 62, 7, f.bold, C.aid); t(fit(v, f.bold, 9.5, w), hx, H - 75, 9.5, f.bold); hx += w + 8; });
+      // Tabelle
+      let y = H - 100;
+      page.drawRectangle({ x: M, y: y - 6, width: W - 2 * M, height: 20, color: rgb(C.ink) });
+      let x = M;
+      cols.forEach(([k, w]) => { t(k, x + 4, y, 8, f.bold, [1, 1, 1]); x += w; });
+      y -= 6;
+      const list = people.slice(pg * perPage, pg * perPage + perPage);
+      list.forEach((r, i) => {
+        const top = y, mid = top - rowH / 2 - 3;
+        if (i % 2) page.drawRectangle({ x: M, y: top - rowH, width: W - 2 * M, height: rowH, color: rgb(C.soft) });
+        const cells = [String(pg * perPage + i + 1), `${r.last_name}, ${r.first_name}`, fmtBirth(r.birth_date),
+          [r.street, [r.zip, r.city].filter(Boolean).join(" ")].filter(Boolean).join(", "), "✓", (r.package === "komplett" || r.sehtest_passed != null) ? "ja" : "nein",
+          PAY[r.payment_method] || "–", eur(price(r))];
+        let cx = M;
+        cells.forEach((v, k) => {
+          const w = cols[k][1], font = k === 1 ? f.bold : f.regular;
+          let size = 8.5; while (size > 6 && font.widthOfTextAtSize(v, size) > w - 6) size -= 0.25;
+          t(fit(v === "✓" ? "X" : v, font, size, w - 6), cx + 4, mid, size, font);
+          cx += w;
+        });
+        const sig = sigs.get(r.id);
+        if (sig) { const k = Math.min((signW - 10) / sig.width, (rowH - 4) / sig.height); page.drawImage(sig, { x: cx + 5, y: top - rowH + 2, width: sig.width * k, height: sig.height * k }); }
+        page.drawLine({ start: { x: M, y: top - rowH }, end: { x: W - M, y: top - rowH }, thickness: 0.5, color: rgb(C.line) });
+        y -= rowH;
+      });
+      if (pg === pages - 1) {
+        // Summen je Zahlart
+        y -= 18;
+        const parts = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"], ["offen", "ohne Angabe"]].filter(([k]) => sums[k] || k !== "offen");
+        let sx = M;
+        parts.forEach(([k, l]) => { t(`${l}: ${eur(sums[k])}`, sx, y, 10, f.bold); sx += 150; });
+        t(`Gesamt: ${eur(total)}`, W - M - 140, y, 11, f.black);
+        y -= 30;
+        t("Alle oben als „bar“ aufgeführten Beträge am Lehrgangstag erhalten:", M, y, 9.5);
+        page.drawLine({ start: { x: M + 330, y: y - 2 }, end: { x: M + 560, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
+        t("(Unterschrift Lehrkraft)", M + 565, y, 8, f.regular, C.muted);
+      }
+      t("Unterschrift: vom Teilnehmerdatenblatt übernommen (digital per QR-Code) oder hier von Hand. EH-Kurs = Erste-Hilfe-Kurs teilgenommen.", M, 22, 7.5, f.regular, C.muted);
+    }
+    return pdf.save();
+  }
+
+  root.EHFYDocs = { participantList, certificates, datasheets, receipts, invoice, invoices, bundle, receiptItems, fmtDate, sehtestProtocols };
 })(typeof window !== "undefined" ? window : globalThis);

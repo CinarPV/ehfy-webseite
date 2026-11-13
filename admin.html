@@ -41,7 +41,7 @@
         <!-- Übersicht -->
         <div id="app-view" class="hidden">
           <div class="admin-top no-print">
-            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 78</span></h1>
+            <h1>Verwaltung <span class="small muted" style="font-weight:600">Version 79</span></h1>
             <div class="sync-mini" id="sync-bar" role="status">
               <span class="sync-dot" id="sync-dot"></span>
               <span id="sync-text" class="small"></span>
@@ -170,6 +170,7 @@
               <div class="btn-row" style="justify-content:space-between">
                 <div><strong>Dokumente zum Drucken</strong><br><span class="muted small">Für alle angemeldeten Teilnehmer, alphabetisch – fertig ausgefüllt als PDF.<br>Einzelne Personen: „Drucken …“ in ihrer Zeile.</span></div>
                 <div class="btn-row">
+                  <button class="btn btn-sm btn-teal" data-doc="teilnehmerliste" title="Nur angekreuzte Teilnehmer: Name, Adresse, Sehtest, Bezahlt, Betrag, Unterschrift">Teilnehmerliste (Finanzamt)</button>
                   <button class="btn btn-sm btn-teal" data-doc="alles" title="Pro Teilnehmer: Datenblatt, Bescheinigung, Quittung">Alles mit einem Klick</button>
                   <button class="btn btn-sm" data-doc="datenblatt">Datenblätter</button>
                   <button class="btn btn-sm" data-doc="bescheinigung">Bescheinigungen</button>
@@ -194,7 +195,7 @@
             <div class="field no-print" style="margin:0 0 14px"><label for="sc-search">Schüler suchen</label>
               <input id="sc-search" type="search" autocomplete="off" placeholder="Name, Geburtsdatum, E-Mail oder Telefon"></div>
             <p class="form-error" id="sc-error" role="alert"></p>
-            <div id="sc-list" class="sc-list"></div>
+            <div class="sc-cols"><div id="sc-list" class="sc-list"></div><aside id="sc-protos" class="sc-protos"></aside></div>
             <details class="card" style="margin-top:22px" id="import-card">
               <summary class="small"><strong>Teilnehmer importieren</strong> (WordPress oder alte App, selten gebraucht)</summary>
               <p class="small muted">WordPress-Datei (<code>.csv</code>) oder alte App (<code>.json</code>) auswählen. Es gehen keine Mails raus, und vorhandene Einträge bleiben unverändert.</p>
