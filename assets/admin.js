@@ -2790,35 +2790,17 @@
       if (missing) {
         if (win && !win.closed) win.close();
         const label = type === "rechnung" ? "Rechnung" : "Quittung";
+        // Immer erst Vorschau ohne Nummer; erstellt (mit fester Nummer) wird nur über den Knopf
         const many = missing > 1 ? `${missing} ${label}en` : label;
-        const choice = await askChoice(`${many} erstellen?`,
-          `${missing === 1 ? "Für diese Person gibt es noch keine " + label : "Für " + missing + " Personen gibt es noch keine " + label}. Erst mit „${many} erstellen“ wird die Nummer fest vergeben.`,
-          [["print", `${many} erstellen (Nummer fest vergeben)`], ["preview", "Nur ansehen (Vorschau ohne Nummer)"]]);
-        if (!choice) return;
-        if (choice === "preview") {
-          return pdfDialog(await build(true), name.replace(".pdf", "_Vorschau.pdf"), null, {
-            label: `${many} erstellen (Nummer fest vergeben)`,
-            run: async () => pdfDialog(await build(false), name)
-          });
-        }
-        return pdfDialog(await build(false), name);
+        pdfDialog(await build(true), name.replace(".pdf", "_Vorschau.pdf"), null, {
+          label: `${many} erstellen (Nummer fest vergeben)`,
+          run: async () => pdfDialog(await build(false), name)
+        });
+        $("pd-title").textContent = `${label}-Vorschau – noch keine Nummer`;
+        return;
       }
     }
     showPdf(await build(false), name, win);
-  }
-  // Kleines Auswahlfenster; Ergebnis: Wert des Knopfes oder null (Abbrechen)
-  function askChoice(title, text, buttons) {
-    return new Promise(resolve => {
-      const d = document.createElement("dialog");
-      d.className = "qr-dlg";
-      d.innerHTML = `<h3 style="margin:0 0 6px">${esc(title)}</h3><p class="small" style="margin:0 0 12px">${esc(text)}</p>
-        <div class="btn-row">${buttons.map(([v, l], i) => `<button class="btn ${i ? "btn-ghost" : ""}" type="button" data-v="${v}">${esc(l)}</button>`).join("")}<button class="btn btn-ghost" type="button" data-v="">Abbrechen</button></div>`;
-      document.body.appendChild(d);
-      const done = v => { d.close(); d.remove(); resolve(v || null); };
-      d.oncancel = e => { e.preventDefault(); done(null); };
-      d.onclick = e => { const b = e.target.closest("[data-v]"); if (b) done(b.dataset.v); };
-      d.showModal();
-    });
   }
 
   async function runDoc(kind, people, course = current, showError = msg => { $("doc-error").textContent = msg; }) {
