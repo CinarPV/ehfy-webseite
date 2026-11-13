@@ -1150,7 +1150,7 @@
   });
 
   // ---------- Sehtest abhaken: gemacht, Ergebnis, Verlauf, Sehhilfe, Ausweis, Protokoll ----------
-  const ID_DOCS = [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["fuehrerschein", "Führerschein"], ["aufenthaltstitel", "Aufenthaltstitel"]];
+  const ID_DOCS = [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["aufenthaltstitel", "Aufenthaltstitel"], ["sonstiges", "Sonstiges (z. B. Duldung)"]];
   const aidKind = r => r.sehtest_aid_kind || (r.sehtest_aid === false ? "ohne" : null);
   // Nur Anzeige: Alle Angaben (Ergebnis, Verlauf, Sehhilfe, Ausweis, Datum) werden im Protokoll eingetragen
   function sehtestControls(r, c) {
@@ -1352,7 +1352,7 @@
       <div class="st-extra st-top">
         <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
-        <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
+        <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="60" placeholder="beliebig, wie auf dem Dokument"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
         <div class="st-group"><span class="st-label">Unterschrift:</span><span class="small" id="sd-signinfo"></span></div>

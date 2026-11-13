@@ -410,12 +410,19 @@
     choice(page, f, x, y - 16, "Kontaktlinse", p.aid === "linse");
     y -= 38;
     page.drawText("AUSWEISDOKUMENT", { x: M, y, size: 8, font: f.bold, color: rgb(C.aid) });
+    // Nummer in eigener, breiter Zeile rechts neben der Überschrift; lange Nummern (Pässe aus aller Welt, Duldung …) werden kleiner
+    const nx = M + 112, room = W - M - nx - 22;
+    page.drawText("Nr.", { x: nx, y: y - 1, size: 9, font: f.regular, color: rgb(C.ink) });
+    page.drawLine({ start: { x: nx + 18, y: y - 3 }, end: { x: W - M, y: y - 3 }, thickness: 0.7, color: rgb(C.muted) });
+    if (p.idNo) {
+      const t = String(p.idNo).replace(/\s+/g, " ").trim();
+      let size = 10;
+      while (size > 5 && f.bold.widthOfTextAtSize(t, size) > room) size -= 0.25;
+      page.drawText(t, { x: nx + 20, y: y - 1, size, font: f.bold, color: rgb(C.ink) });
+    }
     x = M;
-    [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["fuehrerschein", "Führerschein"], ["aufenthaltstitel", "Aufenthaltstitel"]]
+    [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["aufenthaltstitel", "Aufenthaltstitel"], ["sonstiges", "Sonstiges (z. B. Duldung)"]]
       .forEach(([k, label]) => { x += choice(page, f, x, y - 16, label, p.idDoc === k); });
-    page.drawText("Nr.", { x: x - 4, y: y - 16, size: 10, font: f.regular, color: rgb(C.ink) });
-    page.drawLine({ start: { x: x + 14, y: y - 18 }, end: { x: W - M, y: y - 18 }, thickness: 0.7, color: rgb(C.muted) });
-    if (p.idNo) page.drawText(String(p.idNo), { x: x + 16, y: y - 16, size: 10, font: f.bold, color: rgb(C.ink) });
 
     // Ringtafeln: links Test 1–3, rechts gleichwertig Test 4–6
     const top = y - 36, visW = 30, colW = (W - 2 * M - visW) / 2, cellH = 104, headH = 18, rowH = 16.5;
