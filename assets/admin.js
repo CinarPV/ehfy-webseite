@@ -2860,28 +2860,15 @@
   const bigSign = title => EHFYSign.big({ title, ok: "Unterschrift bestätigen" });
 
   // Einstellungen: Tippen aufs Feld öffnet das große Unterschriftsfeld, danach wird gespeichert
+  // Einstellungen: Knopf öffnet sofort das große Feld (quer); nach „Unterschrift bestätigen“ wird gleich gespeichert
   function signaturePad() {
-    const cv = $("sig-pad");
-    let png = null;
-    const open = async () => {
-      const res = await bigSign("Deine Unterschrift");
-      if (!res) return;
-      png = res;
-      const img = new Image();
-      img.onload = () => {
-        const ctx = cv.getContext("2d"), k = Math.min(cv.width / img.width, cv.height / img.height) * 0.9;
-        ctx.clearRect(0, 0, cv.width, cv.height);
-        ctx.drawImage(img, (cv.width - img.width * k) / 2, (cv.height - img.height * k) / 2, img.width * k, img.height * k);
-      };
-      img.src = res;
-      $("sig-msg").textContent = "Jetzt „Unterschrift speichern“ tippen.";
-    };
-    cv.style.cursor = "pointer";
-    cv.addEventListener("click", open);
-    $("sig-clear").textContent = "Neu unterschreiben";
-    $("sig-clear").onclick = open;
-    $("sig-save").onclick = async () => {
-      if (!png) { $("sig-msg").textContent = "Bitte zuerst ins weiße Feld tippen und unterschreiben."; return; }
+    $("sig-open").onclick = async () => {
+      $("sig-msg").textContent = "";
+      const png = await bigSign("Deine Unterschrift");
+      if (!png) return;
+      $("sig-preview").innerHTML = `<img src="${png}" alt="Deine Unterschrift">`;
+      $("sig-preview").classList.remove("hidden");
+      $("sig-msg").textContent = "Wird gespeichert …";
       try {
         await db.saveTemplate("unterschrift", new Blob([await sigToPdf(png)], { type: "application/pdf" }));
         $("sig-msg").textContent = "✓ Unterschrift gespeichert.";
@@ -2890,9 +2877,11 @@
     };
   }
   async function showSignature() {
-    $("sig-state").innerHTML = (await signatureBytes()) ? '<span class="pill">Unterschrift hinterlegt</span> Neu zeichnen ersetzt sie.' : '<span class="pill pill-warn">fehlt noch</span>';
+    const has = !!(await signatureBytes());
+    $("sig-state").innerHTML = has ? '<span class="pill">Unterschrift hinterlegt</span> Neu unterschreiben ersetzt sie.' : '<span class="pill pill-warn">fehlt noch</span>';
+    $("sig-open").textContent = has ? "✍ Neu unterschreiben (großes Feld, quer)" : "✍ Unterschreiben (großes Feld, quer)";
   }
-  if ($("sig-pad")) { signaturePad(); }
+  if ($("sig-open")) { signaturePad(); }
 
   // ---------- Vorlagen ----------
   async function renderTemplates() {
