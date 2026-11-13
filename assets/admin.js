@@ -1157,11 +1157,11 @@
     const day = sehtestDay(r, c);
     const res = r.sehtest_passed === true ? '<strong style="color:var(--ok)">bestanden</strong>'
       : r.sehtest_passed === false ? '<strong style="color:var(--danger)">nicht bestanden</strong>'
-      : r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen, noch kein Ergebnis" : "—";
+      : stStarted(r) ? "zwischengespeichert, noch kein Ergebnis" : "—";
     return `<div class="st-row st-sum">
-      <div class="st-group"><span class="st-label">Sehtest:</span><strong>${day || r.sehtest_passed != null ? "gemacht" : "nicht gemacht"}</strong>${day ? ` <span class="small muted">am ${birthText(day)}</span>` : ""}</div>
+      <div class="st-group"><span class="st-label">Sehtest:</span><strong>${r.sehtest_passed != null ? "gemacht" : stStarted(r) ? "angefangen" : "nicht gemacht"}</strong>${r.sehtest_passed != null && day ? ` <span class="small muted">am ${birthText(day)}</span>` : ""}</div>
       <div class="st-group"><span class="st-label">Ergebnis:</span>${res}${r.sehtest_nr ? ` <span class="small muted">· Nr. ${esc(r.sehtest_nr)}</span>` : ""}${issuedTag(r)}</div>
-      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>${r.sehtest_passed != null || day ? "Protokoll öffnen" : "Sehtest durchführen"}</button>${issuedBtn(r)}${r.sehtest_passed != null ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll (PDF)</button>' : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>
+      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>${issuedBtn(r)}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll (PDF)</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>
     </div>`;
   }
   async function handleSehtest(btn, r, c) {
@@ -1355,7 +1355,7 @@
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" maxlength="40"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
         <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
-        <div class="st-group"><span class="st-label">Unterschrift:</span>${stRun.noSig ? '<span class="small" style="color:var(--danger)">Noch keine Unterschrift hinterlegt – bitte unter Mehr → Einstellungen → Unterschrift erfassen.</span>' : '<span class="small muted">✍ Deine hinterlegte Unterschrift und das Datum kommen automatisch aufs Protokoll.</span>'}</div>
+        <div class="st-group"><span class="st-label">Unterschrift:</span><span class="small" id="sd-signinfo"></span></div>
       </div>
       <div class="st-sets" id="sd-sets" role="tablist"></div>
       <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test zwei Zeilen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Nicht bestanden bei mehr als 2 Fehlern in einer Zeile oder mehr als 2 Fehlern bei geraden bzw. bei schrägen Öffnungen. Die 0,32-Zeile ist zum Üben.</p>
@@ -1439,7 +1439,10 @@
   }
   async function openSehtest(r, c, done) {
     const d = stDialog();
-    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr ? "" : await draftNr(), noSig: !(await signatureBytes()) };
+    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr ? "" : await draftNr() };
+    const noSig = !(await signatureBytes());
+    $("sd-signinfo").textContent = noSig ? "Noch keine Unterschrift hinterlegt – bitte unter Mehr → Einstellungen → Unterschrift erfassen." : "✍ Deine hinterlegte Unterschrift und das Datum kommen automatisch aufs Protokoll.";
+    $("sd-signinfo").style.color = noSig ? "var(--danger)" : "var(--muted)";
     // Mit der Tafel weitermachen, die schon angefangen ist
     const sets = S.overall(stRun.marks).sets;
     if (sets[0] === "leer" && sets[1] !== "leer") stRun.set = 1;
@@ -1492,14 +1495,17 @@
     } catch (e) { $("sd-error").textContent = e.message; }
     finally { btn.disabled = withResult ? S.overall(stRun.marks).state === "offen" : false; }
   }
+  // Knopf je nach Stand: bestätigt → Protokoll öffnen; etwas zwischengespeichert → weitermachen; sonst durchführen
+  const stStarted = r => !!(r.sehtest_marks && Object.keys(r.sehtest_marks).length) || !!r.sehtest_flow || !!r.sehtest_id_doc || !!r.sehtest_id_no || !!r.sehtest_aid_kind;
+  const stRunLabel = r => r.sehtest_passed != null ? "Protokoll öffnen" : stStarted(r) ? "Sehtest weitermachen" : "Sehtest durchführen";
   // Kurzer Stand und sichtbarer Knopf „Sehtest durchführen“
   function sehtestState(r) {
     if (r.sehtest_void_at) return "";
     if (r.sehtest_passed === true) return `bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
     if (r.sehtest_passed === false) return `nicht bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}`;
-    return r.sehtest_marks && Object.keys(r.sehtest_marks).length ? "angefangen" : "";
+    return stStarted(r) ? "zwischengespeichert" : "";
   }
-  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span> <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${issuedTag(r)}${issuedBtn(r)}` : ""}${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
+  const sehtestQuick = r => `<div class="att-btns st-quick"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>${sehtestState(r) ? `<span class="small">Sehtest: <strong>${sehtestState(r)}</strong></span>${issuedTag(r)}${issuedBtn(r)}` : ""}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>`;
   const courseDone = r => (r.status === "teilgenommen" ? "Ja" : r.status === "nicht_erschienen" ? "Nein, nicht erschienen" : r.status === "storniert" ? "Nein, abgesagt" : "Noch nicht abgehakt");
 
   // ---------- Gutschein oder Rabatt je Teilnehmer ----------
@@ -1918,6 +1924,7 @@
       ${off ? "" : discountControls(r)}
       ${off ? "" : `<div class="btn-row">
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
+        <button class="btn btn-sm btn-ghost" type="button" data-sc-print="datenblatt">Datenblatt</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="quittung">Quittung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="rechnung">Rechnung</button>
       </div>`}
@@ -2077,7 +2084,7 @@
         <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
         <div class="se-day small">${day ? birthText(day) : "–"}</div>
         <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${r.sehtest_void_at ? "" : state || "noch offen"}${issuedTag(r)}</div>
-        <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>Sehtest durchführen</button>
+        <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>
           <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll drucken</button>${issuedBtn(r)}
           ${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}
           ${r.sehtest_only ? '<button class="btn btn-sm btn-ghost" type="button" data-se-del style="color:var(--danger)">Löschen</button>' : ""}</div>
