@@ -1655,10 +1655,16 @@
   }
   // Bezahlt (bar / PayPal / Überweisung) und Häkchen „auf die Teilnehmerliste“
   const PAY_KINDS = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"]];
-  const payRow = r => `<div class="att-btns pay-row"><span class="small">Bezahlt:</span>${PAY_KINDS.map(([k, l]) =>
+  // Sehtest gewünscht? (bei Online-Anmeldung schon gewählt, bei QR/von Hand hier umschalten) – nicht bei „nur Sehtest“
+  const pkgRow = r => r.sehtest_only ? "" : `<div class="att-btns pkg-row"><span class="small">Sehtest:</span>
+      <button class="btn btn-sm btn-ghost att-btn ${r.package !== "komplett" ? "on-no" : ""}" type="button" data-pkg="kurs" aria-pressed="${r.package !== "komplett"}">Ohne Sehtest</button>
+      <button class="btn btn-sm btn-ghost att-btn ${r.package === "komplett" ? "on-yes" : ""}" type="button" data-pkg="komplett" aria-pressed="${r.package === "komplett"}">👁 Mit Sehtest</button></div>`;
+  const payRow = r => pkgRow(r) + `<div class="att-btns pay-row"><span class="small">${r.payment_method ? `<strong style="color:var(--ok)">✓ Bezahlt</strong>` : '<strong style="color:var(--danger)">Noch nicht bezahlt</strong>'} · per</span>${PAY_KINDS.map(([k, l]) =>
       `<button class="btn btn-sm btn-ghost att-btn ${r.payment_method === k ? "on-yes" : ""}" type="button" data-pay="${k}" aria-pressed="${r.payment_method === k}">${l}</button>`).join("")}
     <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
   async function payClick(ev, r) {
+    const pkg = ev.target.closest("[data-pkg]");
+    if (pkg) { if (r.package !== pkg.dataset.pkg) await db.updateRegistration(r.id, { package: pkg.dataset.pkg }); return true; }
     const pay = ev.target.closest("[data-pay]");
     if (pay) { await db.updateRegistration(r.id, { payment_method: r.payment_method === pay.dataset.pay ? null : pay.dataset.pay }); return true; }
     const box = ev.target.closest("[data-onlist]");
