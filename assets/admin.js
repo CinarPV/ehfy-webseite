@@ -1547,7 +1547,8 @@
   // ---------- ④ Bescheinigung schreiben: alle Angaben auf einen Blick, danach gleich der nächste Schüler ----------
   const ID_LABEL = Object.fromEntries(ID_DOCS);
   const AID_LABEL = { ohne: "ohne Sehhilfe", brille: "mit Brille", linse: "mit Kontaktlinsen" };
-  const PAY_LABEL = Object.fromEntries(PAY_KINDS);
+  // Erst beim Aufruf nachschlagen: PAY_KINDS steht weiter unten in der Datei
+  const payLabel = k => (Object.fromEntries(PAY_KINDS)[k] || k);
   // Wer im selben Kurs (oder am selben Tag „nur Sehtest“) noch auf den Sehtest wartet
   async function nextForSehtest(r, c) {
     const all = await db.listAllRegistrations().catch(() => []);
@@ -1585,7 +1586,7 @@
         ${line("Ausweis", `${r.sehtest_id_doc ? esc(ID_LABEL[r.sehtest_id_doc] || r.sehtest_id_doc) + " · " : ""}${r.sehtest_id_no ? esc(r.sehtest_id_no) : '<span style="color:var(--danger)">keine Nr.</span>'}`)}
         ${line("Sehhilfe", AID_LABEL[aidKind(r)] || "–")}
         ${line("Datum", day ? birthText(day) : "–")}
-        ${line("Bezahlt", r.payment_method ? esc(PAY_LABEL[r.payment_method] || r.payment_method) : '<span style="color:var(--danger)">nein</span>')}
+        ${line("Bezahlt", r.payment_method ? esc(payLabel(r.payment_method)) : '<span style="color:var(--danger)">nein</span>')}
       </table>${ok ? "" : '<p class="small muted">Nicht bestanden: keine Bescheinigung. Protokoll trotzdem aufbewahren.</p>'}`;
     $("cs-error").textContent = "";
     const next = await nextForSehtest(r, c);
@@ -2273,7 +2274,7 @@
     const c = seCourse(r), state = sehtestState(r), day = sehtestDay(r, c);
     return `<article class="se-row" data-se="${r.id}">
         <div class="se-nr">${r.sehtest_nr ? esc(r.sehtest_nr) : '<span class="muted">ohne Nr.</span>'}</div>
-        <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}${r.payment_method ? ` · bezahlt (${esc(PAY_LABEL[r.payment_method] || r.payment_method)})` : ""}</span></div>
+        <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}${r.payment_method ? ` · bezahlt (${esc(payLabel(r.payment_method))})` : ""}</span></div>
         <div class="se-day small">${day ? birthText(day) : "–"}</div>
         <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${r.sehtest_void_at ? "" : state || "noch offen"}${issuedTag(r)}</div>
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>
