@@ -38,6 +38,7 @@
         <form id="vo-form" class="card hidden" novalidate>
           <div class="vo-grid">
             <div class="field wide hidden" id="vo-course-box"><label for="vo-course-sel">Kursdatum</label><select id="vo-course-sel"></select></div>
+            <div class="field wide hidden" id="vo-day-box"><label for="vo-day">An welchem Tag ist dein Kurs?</label><input id="vo-day" type="date"></div>
             <div class="field"><label for="vo-first">Vorname</label><input id="vo-first" autocomplete="given-name" required maxlength="80"></div>
             <div class="field"><label for="vo-last">Nachname</label><input id="vo-last" autocomplete="family-name" required maxlength="80"></div>
             <div class="field wide"><label for="vo-birth">Geburtsdatum</label><input id="vo-birth" inputmode="numeric" autocomplete="bday" placeholder="TT.MM.JJJJ" required maxlength="10"></div>
@@ -94,12 +95,17 @@
       if (!list) { $("vo-invalid").classList.remove("hidden"); return; }
       const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
       const dayOf = iso => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
-      // Der heutige Tag steht immer zur Auswahl und ist vorausgewählt (gibt es noch keinen Kurs, legt der Server einen internen an)
-      const opts = list.map(c => ({ value: c.id, day: dayOf(c.starts_at), text: dayText(c.starts_at) }));
-      if (!opts.some(o => o.day === today)) opts.push({ value: "heute", day: today, text: dayText(new Date().toISOString()) });
-      opts.sort((a, b) => a.day.localeCompare(b.day));
-      const pick = opts.find(o => o.day === today);
-      $("vo-course-sel").innerHTML = opts.map(o => `<option value="${o.value}"${o === pick ? " selected" : ""}>${o.day === today ? "Heute, " : ""}${o.text}</option>`).join("");
+      // „Heute“ steht immer ganz oben und ist vorausgewählt, darunter die Termine, ganz unten „Anderer Tag …“.
+      // Gibt es am gewählten Tag keinen Kurs, legt der Server intern einen an.
+      const shift = n => new Date(Date.now() + n * 864e5).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+      const dayLabel = d => new Date(`${d}T12:00:00`).toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+      const todayCourse = list.find(c => dayOf(c.starts_at) === today);
+      const opts = [{ value: todayCourse ? todayCourse.id : "day:" + today, text: "Heute, " + dayLabel(today) }]
+        .concat(list.filter(c => c !== todayCourse).map(c => ({ value: c.id, text: dayLabel(dayOf(c.starts_at)) })))
+        .concat([{ value: "other", text: "Anderer Tag …" }]);
+      $("vo-course-sel").innerHTML = opts.map((o, i) => `<option value="${o.value}"${i === 0 ? " selected" : ""}>${o.text}</option>`).join("");
+      $("vo-day").min = shift(-7); $("vo-day").max = shift(30); $("vo-day").value = today;
+      $("vo-course-sel").addEventListener("change", () => $("vo-day-box").classList.toggle("hidden", $("vo-course-sel").value !== "other"));
       $("vo-course-box").classList.remove("hidden");
       $("vo-course").textContent = "Erste-Hilfe-Kurs in Siegen";
     } else {
@@ -141,10 +147,21 @@
       if (!$("vo-email").checkValidity() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v("vo-email"))) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
       if (!drawn) { err.textContent = "Bitte im Feld unterschreiben."; return; }
       if (!$("vo-ok").checked) { err.textContent = "Bitte bestätigen, dass deine Angaben richtig sind."; return; }
+      // Gewählter Kurs oder Tag
+      const chosen = {};
+      if (general) {
+        const sel = $("vo-course-sel").value;
+        if (sel === "other") {
+          const d = $("vo-day").value;
+          if (!d || d < $("vo-day").min || d > $("vo-day").max) { err.textContent = "Bitte den Tag deines Kurses auswählen."; return; }
+          chosen.day = d;
+        } else if (sel.startsWith("day:")) chosen.day = sel.slice(4);
+        else chosen.course = sel;
+      }
       btn.disabled = true; btn.textContent = "Wird gesendet …";
       try {
         const name = await db.checkinRegister({
-          token, course: general && $("vo-course-sel").value !== "heute" ? $("vo-course-sel").value : undefined, today: !!general && $("vo-course-sel").value === "heute", first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
+          token, course: chosen.course, day: chosen.day, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
           street: v("vo-street"), zip: v("vo-zip"), city: v("vo-city"), phone: v("vo-phone"), email: v("vo-email"),
           package: $("vo-pkg").value, signature
         });

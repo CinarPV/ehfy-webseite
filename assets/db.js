@@ -155,8 +155,12 @@
       async checkinGeneralToken(renew) { return check(await sb.rpc("checkin_general_token", { p_new: Boolean(renew) })); },
       async checkinCourses(token) { return check(await sb.rpc("checkin_courses", { p_token: token })); },
       async checkinRegister(d) {
-        if (d.course || d.today) return check(await sb.rpc("checkin_register_general", {
-          p_token: d.token, p_course: d.today ? null : d.course, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
+        if (d.day) return check(await sb.rpc("checkin_register_day", {
+          p_token: d.token, p_day: d.day, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
+          p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
+        }));
+        if (d.course) return check(await sb.rpc("checkin_register_general", {
+          p_token: d.token, p_course: d.course, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
           p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
         }));
         return check(await sb.rpc("checkin_register", {
@@ -441,12 +445,12 @@
       },
       async checkinRegister(d) {
         // Erst die Kursliste prüfen, danach laden (sonst speichert save() einen anderen Stand)
-        const list = d.course || d.today ? await this.checkinCourses(d.token) : null;
+        const list = d.course || d.day ? await this.checkinCourses(d.token) : null;
         const db = load();
-        let c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : d.today ? null : demoCheckin(db, d.token);
-        if (d.today && list) {
-          // „Heute“ gewählt: Kurs von heute nehmen oder einen internen anlegen (wie in Supabase)
-          const now = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+        let c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : d.day ? null : demoCheckin(db, d.token);
+        if (d.day && list) {
+          // Tag gewählt: Kurs an diesem Tag nehmen oder einen internen anlegen (wie in Supabase)
+          const now = d.day;
           c = db.courses.find(x => x.status !== "abgesagt" && new Date(x.starts_at).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) === now);
           if (!c) {
             c = { id: uid(), starts_at: new Date(`${now}T10:00`).toISOString(), ends_at: new Date(`${now}T17:30`).toISOString(),
