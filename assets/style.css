@@ -791,3 +791,11 @@ dialog.sign-big::backdrop { background: #fff; }
 .pay-row { align-items: center; flex-wrap: wrap; }
 .pay-row .onlist { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; font-weight: 600; }
 .pay-row .onlist input { width: 20px; height: 20px; }
+
+/* Sehtest-Dialog: Schritte ① Ausweis ② Bezahlt ③ Sehtest */
+.st-step { margin: 10px 0 4px; font-size: 1rem; }
+.st-step:first-child { margin-top: 0; }
+.st-step.done { color: var(--ok); }
+.st-step.done::after { content: " ✓"; }
+.st-more { margin-top: 6px; }
+.st-more summary { cursor: pointer; }

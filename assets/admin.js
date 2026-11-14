@@ -1395,14 +1395,19 @@
       <div class="st-head"><div><h3 id="sd-name"></h3><p class="small muted" id="sd-birth"></p></div>
         <div class="field st-nr"><label for="sd-nr">Protokoll-Nr. <span class="small muted" id="sd-nr-hint"></span></label><input id="sd-nr" autocomplete="off"></div></div>
       <div class="st-extra st-top">
-        <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
+        <h4 class="st-step" id="sd-step1">① Ausweis kontrollieren</h4>
         <div class="st-group"><span class="st-label">Ausweis:</span>${ID_DOCS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="idDoc" data-val="${k}">${l}</button>`).join("")}</div>
-        <div class="st-group" id="sd-exam"><span class="st-label">Prüfer:</span></div>
-        <div class="st-group" id="sd-pay"><span class="st-label">Bezahlt:</span>${PAY_KINDS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-sdpay="${k}">${l}</button>`).join("")}</div>
         <div class="st-group"><label class="st-label" for="sd-idno">Ausweis-Nr.:</label><input id="sd-idno" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="60" placeholder="beliebig, wie auf dem Dokument"><button class="btn btn-sm" type="button" id="sd-scan">📷 Ausweis fotografieren</button></div>
         <p class="small" id="sd-idinfo" role="status"></p>
-        <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
-        <div class="st-group"><span class="st-label">Unterschrift:</span><span class="small" id="sd-signinfo"></span></div>
+        <h4 class="st-step" id="sd-step2">② Geld kassieren <span class="small muted" style="font-weight:400">(nur Vermerk für dich – auf die Teilnehmerliste kommt nur, wen du dort ankreuzt)</span></h4>
+        <div class="st-group" id="sd-pay"><span class="st-label">Bezahlt:</span>${PAY_KINDS.map(([k, l]) => `<button class="btn btn-sm btn-ghost att-btn" type="button" data-sdpay="${k}">${l}</button>`).join("")}</div>
+        <h4 class="st-step">③ Sehtest</h4>
+        <div class="st-group"><span class="st-label">Sehhilfe:</span><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="ohne">Keine</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="brille">Brille</button><button class="btn btn-sm btn-ghost att-btn" type="button" data-pick="aid" data-val="linse">Kontaktlinse</button></div>
+        <details class="st-more"><summary class="small">Prüfer, Datum, Unterschrift <span class="muted" id="sd-more-info"></span></summary>
+          <div class="st-group" id="sd-exam"><span class="st-label">Prüfer:</span></div>
+          <div class="st-group"><label class="st-label" for="sd-date">Datum:</label><input type="date" id="sd-date"></div>
+          <div class="st-group"><span class="st-label">Unterschrift:</span><span class="small" id="sd-signinfo"></span></div>
+        </details>
       </div>
       <div class="st-sets" id="sd-sets" role="tablist"></div>
       <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Je Test werden zwei Zeilen abgefragt (10 Ringe): 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Bestanden mit höchstens 4 Fehlern, ab 5 Fehlern nicht bestanden. Die 0,32-Zeile ist zum Üben.</p>
@@ -1448,6 +1453,7 @@
         + (same && birthOk ? ' <strong style="color:var(--ok)">✓ passt zur Person</strong>' : ' <strong style="color:var(--danger)">Name oder Geburtsdatum weichen ab – bitte prüfen</strong>')
         + (!r.birth_date && res.birth ? " · Geburtsdatum wird übernommen" : "");
     });
+    $("sd-idno").addEventListener("input", () => stRun && stRender());
     $("sd-close").onclick = () => d.close();
     $("sd-keep").onclick = () => stSave(false);
     $("sd-save").onclick = () => stSave(true);
@@ -1483,6 +1489,10 @@
     document.querySelectorAll("#st-dialog [data-pick]").forEach(b => { const on = stRun[b.dataset.pick] === b.dataset.val; b.classList.toggle("on-yes", on); b.setAttribute("aria-pressed", on); });
     $("sd-save").disabled = all.state === "offen";
     $("sd-name").textContent = `${r.first_name} ${r.last_name}`;
+    // Schritte abhaken: ① Ausweis-Nr. eingetragen, ② bezahlt
+    $("sd-step1").classList.toggle("done", !!$("sd-idno").value.trim());
+    $("sd-step2").classList.toggle("done", !!r.payment_method);
+    $("sd-more-info").textContent = [stRun.examiner, $("sd-date").value && birthText($("sd-date").value)].filter(Boolean).join(" · ");
   }
   async function openSehtest(r, c, done) {
     const d = stDialog();
@@ -1508,7 +1518,7 @@
     $("sd-exam").onclick = async e => {
       const b = e.target.closest("[data-sdexam]");
       if (!b) return;
-      stRun.examiner = b.dataset.sdexam; examDraw();
+      stRun.examiner = b.dataset.sdexam; examDraw(); stRender();
       try { localStorage.setItem("ehfy-pruefer", stRun.examiner); } catch (err) { /* egal */ }
       // Auch für die anderen Geräte merken
       try {
@@ -1522,17 +1532,75 @@
       const b = e.target.closest("[data-sdpay]");
       if (!b) return;
       r.payment_method = r.payment_method === b.dataset.sdpay ? null : b.dataset.sdpay;
-      payMark();
+      payMark(); stRender();
       try { await db.updateRegistration(r.id, { payment_method: r.payment_method }); } catch (err) { $("sd-error").textContent = err.message; }
     };
     $("sd-idinfo").innerHTML = "";
-    $("sd-birth").textContent = r.birth_date ? `geb. ${birthText(r.birth_date)}` : "";
+    $("sd-birth").innerHTML = r.birth_date ? `geb. <strong>${birthText(r.birth_date)}</strong>` : '<span style="color:var(--danger)">Geburtsdatum fehlt – Ausweis fotografieren oder in der Teilnehmerliste eintragen</span>';
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
     $("sd-nr-hint").textContent = r.sehtest_reissue ? "(geändert – Bescheinigung neu ausstellen)" : r.sehtest_issued_at ? "(fest – Bescheinigung ausgestellt)" : r.sehtest_nr ? "(änderbar, spätere rücken nach)" : "(vorläufig – fest erst bei „Ergebnis übernehmen“)";
     $("sd-error").textContent = "";
     stRender();
     d.showModal();
     d.scrollTop = 0;
+  }
+  // ---------- ④ Bescheinigung schreiben: alle Angaben auf einen Blick, danach gleich der nächste Schüler ----------
+  const ID_LABEL = Object.fromEntries(ID_DOCS);
+  const AID_LABEL = { ohne: "ohne Sehhilfe", brille: "mit Brille", linse: "mit Kontaktlinsen" };
+  const PAY_LABEL = Object.fromEntries(PAY_KINDS);
+  // Wer im selben Kurs (oder am selben Tag „nur Sehtest“) noch auf den Sehtest wartet
+  async function nextForSehtest(r, c) {
+    const all = await db.listAllRegistrations().catch(() => []);
+    const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : localDate(new Date()));
+    const waiting = all.filter(x => x.id !== r.id && x.status !== "storniert" && x.sehtest_passed == null && !x.sehtest_void_at
+      && (c ? x.course_id === c.id && (x.package === "komplett" || stStarted(x)) : !x.course_id && x.sehtest_only && sehtestDay(x, null) === day))
+      .sort(byName);
+    return waiting[0] || null;
+  }
+  function certDlg() {
+    let d = $("cs-dialog");
+    if (d) return d;
+    d = document.createElement("dialog");
+    d.id = "cs-dialog"; d.className = "qr-dlg";
+    d.innerHTML = `<h3 style="margin:0 0 4px">④ Bescheinigung schreiben</h3>
+      <div id="cs-body"></div>
+      <p class="small" id="cs-error" style="color:var(--danger)"></p>
+      <div class="btn-row" style="margin-top:10px;flex-wrap:wrap">
+        <button class="btn" type="button" id="cs-done">✓ Bescheinigung geschrieben</button>
+        <button class="btn btn-ghost" type="button" id="cs-pdf">Protokoll (PDF)</button>
+        <button class="btn btn-ghost" type="button" id="cs-close">Später</button></div>`;
+    document.body.appendChild(d);
+    $("cs-close").onclick = () => d.close();
+    d.addEventListener("close", refreshViews);
+    return d;
+  }
+  async function certSheet(r, c) {
+    const d = certDlg(), ok = r.sehtest_passed === true;
+    const line = (k, v) => `<tr><th style="text-align:left;padding:4px 10px 4px 0;font-weight:400;color:var(--muted)">${k}</th><td style="padding:4px 0"><strong>${v}</strong></td></tr>`;
+    const day = sehtestDay(r, c);
+    $("cs-body").innerHTML = `<p style="margin:0 0 8px;font-size:1.05em" class="${ok ? "" : ""}"><strong style="color:${ok ? "var(--ok)" : "var(--danger)"}">${ok ? "Bestanden" : "Nicht bestanden"}</strong>${r.sehtest_nr ? ` · Nr. ${esc(r.sehtest_nr)}` : ""}</p>
+      <table style="border-collapse:collapse;font-size:1.05em">
+        ${line("Name", `${esc(r.last_name)}, ${esc(r.first_name)}`)}
+        ${line("Geburtsdatum", r.birth_date ? birthText(r.birth_date) : '<span style="color:var(--danger)">fehlt</span>')}
+        ${line("Ausweis", `${r.sehtest_id_doc ? esc(ID_LABEL[r.sehtest_id_doc] || r.sehtest_id_doc) + " · " : ""}${r.sehtest_id_no ? esc(r.sehtest_id_no) : '<span style="color:var(--danger)">keine Nr.</span>'}`)}
+        ${line("Sehhilfe", AID_LABEL[aidKind(r)] || "–")}
+        ${line("Datum", day ? birthText(day) : "–")}
+        ${line("Bezahlt", r.payment_method ? esc(PAY_LABEL[r.payment_method] || r.payment_method) : '<span style="color:var(--danger)">nein</span>')}
+      </table>${ok ? "" : '<p class="small muted">Nicht bestanden: keine Bescheinigung. Protokoll trotzdem aufbewahren.</p>'}`;
+    $("cs-error").textContent = "";
+    const next = await nextForSehtest(r, c);
+    $("cs-done").textContent = (ok ? "✓ Bescheinigung geschrieben" : "✓ Erledigt") + (next ? ` → weiter mit ${next.first_name} ${next.last_name}` : "");
+    $("cs-done").onclick = async () => {
+      $("cs-done").disabled = true;
+      try {
+        if (ok && !r.sehtest_issued_at) await db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString() });
+        d.close();
+        if (next) await openSehtest(next, c, stRun && stRun.done);
+      } catch (e) { $("cs-error").textContent = e.message; }
+      finally { $("cs-done").disabled = false; }
+    };
+    $("cs-pdf").onclick = () => sehtestPdf(r, c, msg => { $("cs-error").textContent = msg; });
+    d.showModal();
   }
   async function stSave(withResult) {
     const { r, c, marks, flow, aid, idDoc, draft } = stRun;
@@ -1554,6 +1622,8 @@
     // (dann die zu diesem Zeitpunkt nächste freie Nummer, auch wenn inzwischen ein anderer Sehtest fertig wurde)
     const own = typed && typed !== (r.sehtest_nr || draft) && (withResult || r.sehtest_nr) ? typed : "";
     if (withResult) patch.sehtest_passed = all.state === "bestanden";
+    if (withResult && !r.payment_method) { $("sd-error").textContent = "Bitte zuerst bei ② eintragen, wie bezahlt wurde (Bar, PayPal oder Überweisung)."; $("sd-step2").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+    if (withResult && !patch.sehtest_id_no && !confirm("Es ist keine Ausweis-Nr. eingetragen. Trotzdem abschließen?")) { $("sd-idno").focus(); return; }
     btn.disabled = true;
     try {
       if (own && r.sehtest_nr) {
@@ -1567,9 +1637,8 @@
       $("st-dialog").close();
       const fresh = (await db.listAllRegistrations()).find(x => x.id === r.id) || { ...r, ...patch };
       if (stRun.done) await stRun.done();
-      if (withResult) await sehtestPdf(fresh, c, msg => { if (msg) alert(msg); });
-      // Gleich nach dem Bestätigen fragen, ob die Bescheinigung schon geschrieben ist
-      if (withResult) setTimeout(() => askCertificates([r.id]), 600);
+      // ④ Alles für die Bescheinigung auf einen Blick, ein Tipp auf „geschrieben“, dann direkt der Nächste
+      if (withResult) await certSheet(fresh, c);
     } catch (e) { $("sd-error").textContent = e.message; }
     finally { btn.disabled = withResult ? S.overall(stRun.marks).state === "offen" : false; }
   }
@@ -1651,7 +1720,8 @@
   function attRow(r) {
     const late = lateCancel(r);
     return `<div class="att-row" data-att="${r.id}">
-      <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}</div>
+      <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}
+        <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
       ${late ? "" : `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
@@ -2203,7 +2273,7 @@
     const c = seCourse(r), state = sehtestState(r), day = sehtestDay(r, c);
     return `<article class="se-row" data-se="${r.id}">
         <div class="se-nr">${r.sehtest_nr ? esc(r.sehtest_nr) : '<span class="muted">ohne Nr.</span>'}</div>
-        <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
+        <div class="se-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong><br><span class="small muted">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}${r.payment_method ? ` · bezahlt (${esc(PAY_LABEL[r.payment_method] || r.payment_method)})` : ""}</span></div>
         <div class="se-day small">${day ? birthText(day) : "–"}</div>
         <div class="se-res small ${r.sehtest_passed === true ? "ok" : r.sehtest_passed === false ? "no" : ""}">${r.sehtest_void_at ? "" : state || "noch offen"}${issuedTag(r)}</div>
         <div class="se-act"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>
