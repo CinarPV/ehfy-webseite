@@ -1496,13 +1496,25 @@
     $("sd-idno").value = r.sehtest_id_no || "";
     // Prüfer: Namen aus den Einstellungen, vorausgewählt der bisherige oder der erste
     await issuer();
-    stRun.examiner = r.sehtest_examiner || examiners()[0] || "";
+    // Zuletzt gewählter Prüfer bleibt voreingestellt, bis ein anderer gewählt wird
+    let lastEx = ""; try { lastEx = localStorage.getItem("ehfy-pruefer") || ""; } catch (e) { /* egal */ }
+    stRun.examiner = r.sehtest_examiner || (bankData && bankData.lastExaminer) || lastEx || examiners()[0] || "";
     const examDraw = () => {
       const names = [...new Set([...examiners(), stRun.examiner].filter(Boolean))];
       $("sd-exam").innerHTML = '<span class="st-label">Prüfer:</span>' + names.map(n => `<button class="btn btn-sm btn-ghost att-btn ${n === stRun.examiner ? "on-yes" : ""}" type="button" data-sdexam="${esc(n)}">${esc(n)}</button>`).join("");
     };
     examDraw();
-    $("sd-exam").onclick = e => { const b = e.target.closest("[data-sdexam]"); if (b) { stRun.examiner = b.dataset.sdexam; examDraw(); } };
+    $("sd-exam").onclick = async e => {
+      const b = e.target.closest("[data-sdexam]");
+      if (!b) return;
+      stRun.examiner = b.dataset.sdexam; examDraw();
+      try { localStorage.setItem("ehfy-pruefer", stRun.examiner); } catch (err) { /* egal */ }
+      // Auch für die anderen Geräte merken
+      try {
+        const value = { ...(await db.getSettings().catch(() => ({}))), lastExaminer: stRun.examiner };
+        await db.saveSettings(value); bankData = value;
+      } catch (err) { /* nicht schlimm, dann nur auf diesem Gerät */ }
+    };
     const payMark = () => $("sd-pay").querySelectorAll("[data-sdpay]").forEach(b => b.classList.toggle("on-yes", r.payment_method === b.dataset.sdpay));
     payMark();
     $("sd-pay").onclick = async e => {
