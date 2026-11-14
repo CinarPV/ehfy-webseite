@@ -805,3 +805,12 @@ dialog.sign-big::backdrop { background: #fff; }
 .pay-tag { display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: .86rem; font-weight: 800; }
 .pay-tag.paid { background: var(--aid); color: var(--ink); }
 .pay-tag.unpaid { background: var(--danger); color: #fff; }
+
+/* Kurs-Abrechnung unten */
+.course-sum { margin: 16px 0 4px; padding: 14px; border: 2px solid var(--line); border-radius: 16px; background: var(--soft); }
+.sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.sum-cell { background: #fff; border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; }
+.sum-cell span { font-size: .8rem; color: var(--muted); }
+.sum-cell b { font-size: 1.15rem; }
+.sum-cell.strong { background: var(--aid); }
+.sum-cell.strong span { color: var(--ink); }

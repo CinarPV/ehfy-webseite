@@ -512,6 +512,7 @@
           <option value="quittung-mail">Quittung per E-Mail senden</option><option value="rechnung-mail">Rechnung per E-Mail senden</option><option value="bescheinigung-mail">Bescheinigung per E-Mail senden</option><option value="datenblatt-mail">Datenblatt per E-Mail senden</option></select>`}</td>
         <td class="no-print"><button class="btn btn-sm btn-outline" data-del="${r.id}" title="Eintrag löschen">✕</button></td>
       </tr>`).join("") : '<tr><td colspan="10" class="muted">Noch keine Anmeldungen.</td></tr>';
+    $("p-sum").innerHTML = current.status === "abgesagt" ? "" : courseSummary(regs);
   }
   const byName = (a, b) => a.last_name.localeCompare(b.last_name, "de") || a.first_name.localeCompare(b.first_name, "de");
 
@@ -1667,6 +1668,22 @@
   const payRow = r => pkgRow(r) + `<div class="att-btns pay-row">${r.payment_method ? '<span class="pay-tag paid">✓ Bezahlt</span>' : '<span class="pay-tag unpaid">Nicht bezahlt</span>'}${PAY_KINDS.map(([k, l]) =>
       `<button class="btn btn-sm btn-ghost att-btn ${r.payment_method === k ? "on-paid" : ""}" type="button" data-pay="${k}" aria-pressed="${r.payment_method === k}">${l}</button>`).join("")}
     <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
+  // ---------- Kurs-Abrechnung (ganz unten bei jedem Kurs): mit/ohne Sehtest, Geld je Zahlart, gesamt ----------
+  const priceOf = r => { const p = cfg.packages.find(x => x.key === r.package) || cfg.packages[0]; return Math.max(0, Number(p.price) - (Number(r.discount) || 0)); };
+  function courseSummary(list) {
+    const people = list.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen");
+    if (!people.length) return "";
+    const withST = people.filter(r => r.package === "komplett").length;
+    const sums = { bar: 0, paypal: 0, ueberweisung: 0 }; let open = 0, openN = 0;
+    people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else { open += priceOf(r); openN++; } });
+    const paid = sums.bar + sums.paypal + sums.ueberweisung;
+    const cell = (k, v, strong) => `<div class="sum-cell${strong ? " strong" : ""}"><span>${k}</span><b>${v}</b></div>`;
+    return `<div class="course-sum">
+      <div class="sum-grid">${cell("Teilnehmer", people.length)}${cell("Mit Sehtest", withST)}${cell("Ohne Sehtest", people.length - withST)}</div>
+      <div class="sum-grid">${PAY_KINDS.map(([k, l]) => cell(l, eur(sums[k]))).join("")}${cell("Gesamt eingenommen", eur(paid), true)}</div>
+      ${openN ? `<p class="small" style="margin:6px 0 0;color:var(--danger)"><strong>Noch offen: ${eur(open)}</strong> (${openN} ${openN === 1 ? "Person" : "Personen"} nicht bezahlt)</p>` : '<p class="small" style="margin:6px 0 0;color:var(--ok)"><strong>✓ Alle haben bezahlt</strong></p>'}
+    </div>`;
+  }
   async function payClick(ev, r) {
     const pkg = ev.target.closest("[data-pkg]");
     if (pkg) { if (r.package !== pkg.dataset.pkg) await db.updateRegistration(r.id, { package: pkg.dataset.pkg }); return true; }
@@ -1769,7 +1786,7 @@
     const tools = courseTools(c);
     return `<details class="att-folder" data-folder="${c.id}" ${open ? "open" : ""}>
       <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${off ? "ABGESAGT" : `${list.length} angemeldet · ${yes} da · ${no} nicht da`}</small></summary>
-      <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list)) : ""}</div></details>`;
+      <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list) + (attWords().length ? "" : courseSummary(list))) : ""}</div></details>`;
   }
   const attBody = list => (list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
   function chanceRow(r) {
