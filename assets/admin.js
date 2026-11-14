@@ -512,7 +512,7 @@
           <option value="quittung-mail">Quittung per E-Mail senden</option><option value="rechnung-mail">Rechnung per E-Mail senden</option><option value="bescheinigung-mail">Bescheinigung per E-Mail senden</option><option value="datenblatt-mail">Datenblatt per E-Mail senden</option></select>`}</td>
         <td class="no-print"><button class="btn btn-sm btn-outline" data-del="${r.id}" title="Eintrag löschen">✕</button></td>
       </tr>`).join("") : '<tr><td colspan="10" class="muted">Noch keine Anmeldungen.</td></tr>';
-    $("p-sum").innerHTML = current.status === "abgesagt" ? "" : courseSummary(regs);
+    $("p-sum").innerHTML = current.status === "abgesagt" ? "" : courseSummary(regs, current);
   }
   const byName = (a, b) => a.last_name.localeCompare(b.last_name, "de") || a.first_name.localeCompare(b.first_name, "de");
 
@@ -1670,7 +1670,7 @@
     <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
   // ---------- Kurs-Abrechnung (ganz unten bei jedem Kurs): mit/ohne Sehtest, Geld je Zahlart, gesamt ----------
   const priceOf = r => { const p = cfg.packages.find(x => x.key === r.package) || cfg.packages[0]; return Math.max(0, Number(p.price) - (Number(r.discount) || 0)); };
-  function courseSummary(list) {
+  function courseSummary(list, c) {
     const people = list.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen");
     if (!people.length) return "";
     const withST = people.filter(r => r.package === "komplett").length;
@@ -1681,9 +1681,49 @@
     return `<div class="course-sum">
       <div class="sum-grid">${cell("Teilnehmer", people.length)}${cell("Mit Sehtest", withST)}${cell("Ohne Sehtest", people.length - withST)}</div>
       <div class="sum-grid">${PAY_KINDS.map(([k, l]) => cell(l, eur(sums[k]))).join("")}${cell("Gesamt eingenommen", eur(paid), true)}</div>
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-sum-print="${c ? c.id : ""}">🖨 Abrechnung drucken</button></div>
       ${openN ? `<p class="small" style="margin:6px 0 0;color:var(--danger)"><strong>Noch offen: ${eur(open)}</strong> (${openN} ${openN === 1 ? "Person" : "Personen"} nicht bezahlt)</p>` : '<p class="small" style="margin:6px 0 0;color:var(--ok)"><strong>✓ Alle haben bezahlt</strong></p>'}
     </div>`;
   }
+  // Abrechnung als eigene Druckseite (ohne die Knöpfe der Verwaltung)
+  async function printSummary(courseId) {
+    const c = courses.find(x => x.id === courseId);
+    if (!c) return;
+    const all = await db.listRegistrations(c.id);
+    const people = all.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen").sort(byName);
+    const sums = { bar: 0, paypal: 0, ueberweisung: 0 }; let open = 0;
+    people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else open += priceOf(r); });
+    const paid = sums.bar + sums.paypal + sums.ueberweisung, withST = people.filter(r => r.package === "komplett").length;
+    const pay = Object.fromEntries(PAY_KINDS);
+    const html = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Abrechnung ${dayOf(c.starts_at)}</title>
+      <style>body{font:12pt/1.35 -apple-system,Segoe UI,Arial,sans-serif;margin:18mm;color:#111}h1{font-size:17pt;margin:0}p{margin:2px 0 12px}
+      table{border-collapse:collapse;width:100%;margin-top:8px}th,td{border:1px solid #999;padding:5px 7px;text-align:left}th{background:#eee}
+      td.r,th.r{text-align:right}.tot td{font-weight:700;background:#f4f4f4}.open{color:#b3261e}@page{size:A4;margin:0}</style></head><body>
+      <h1>${esc(cfg.name)} – Abrechnung</h1>
+      <p>${esc(dayText(c.starts_at))} · ${esc(c.location)} · gedruckt am ${new Date().toLocaleDateString("de-DE")}</p>
+      <table><thead><tr><th>#</th><th>Name</th><th>Geb.-Datum</th><th>Sehtest</th><th>Bezahlt</th><th class="r">Betrag</th></tr></thead><tbody>
+      ${people.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.last_name)}, ${esc(r.first_name)}</td><td>${birthText(r.birth_date)}</td><td>${r.package === "komplett" ? "ja" : "nein"}</td>
+        <td class="${r.payment_method ? "" : "open"}">${r.payment_method ? esc(pay[r.payment_method] || r.payment_method) : "offen"}</td><td class="r">${eur(priceOf(r))}</td></tr>`).join("")}
+      </tbody></table>
+      <table style="width:60%;margin-top:16px"><tbody>
+        <tr><td>Teilnehmer</td><td class="r">${people.length}</td></tr>
+        <tr><td>davon mit Sehtest</td><td class="r">${withST}</td></tr>
+        <tr><td>davon ohne Sehtest</td><td class="r">${people.length - withST}</td></tr>
+        ${PAY_KINDS.map(([k, l]) => `<tr><td>${l}</td><td class="r">${eur(sums[k])}</td></tr>`).join("")}
+        <tr class="tot"><td>Gesamt eingenommen</td><td class="r">${eur(paid)}</td></tr>
+        ${open ? `<tr class="open"><td>Noch offen</td><td class="r">${eur(open)}</td></tr>` : ""}
+      </tbody></table></body></html>`;
+    // Unsichtbarer Rahmen: Druckfenster öffnen, ohne die Verwaltung zu verlassen
+    const f = document.createElement("iframe");
+    f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+    document.body.appendChild(f);
+    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } finally { setTimeout(() => f.remove(), 60000); } }, 300);
+  }
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-sum-print]");
+    if (b) printSummary(b.dataset.sumPrint).catch(e => showError(e.message));
+  });
   async function payClick(ev, r) {
     const pkg = ev.target.closest("[data-pkg]");
     if (pkg) { if (r.package !== pkg.dataset.pkg) await db.updateRegistration(r.id, { package: pkg.dataset.pkg }); return true; }
@@ -1786,7 +1826,7 @@
     const tools = courseTools(c);
     return `<details class="att-folder" data-folder="${c.id}" ${open ? "open" : ""}>
       <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${off ? "ABGESAGT" : `${list.length} angemeldet · ${yes} da · ${no} nicht da`}</small></summary>
-      <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list) + (attWords().length ? "" : courseSummary(list))) : ""}</div></details>`;
+      <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list) + (attWords().length ? "" : courseSummary(list, c))) : ""}</div></details>`;
   }
   const attBody = list => (list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
   function chanceRow(r) {
