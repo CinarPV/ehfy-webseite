@@ -799,3 +799,9 @@ dialog.sign-big::backdrop { background: #fff; }
 .st-step.done::after { content: " ✓"; }
 .st-more { margin-top: 6px; }
 .st-more summary { cursor: pointer; }
+
+/* Bezahlt-Vermerk: bezahlt in der Farbe von „Sehtest durchführen“, nicht bezahlt rot */
+.att-btn.on-paid { background: var(--aid); border-color: var(--aid); color: var(--ink); }
+.pay-tag { display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: .86rem; font-weight: 800; }
+.pay-tag.paid { background: var(--aid); color: var(--ink); }
+.pay-tag.unpaid { background: var(--danger); color: #fff; }

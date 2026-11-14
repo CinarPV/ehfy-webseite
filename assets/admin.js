@@ -1662,10 +1662,10 @@
   const unsurePkg = r => !r.sehtest_only && r.package !== "komplett" && r.message === "manuell eingetragen";
   // Sehtest gewünscht? (bei Online-Anmeldung schon gewählt, bei QR/von Hand hier umschalten) – nicht bei „nur Sehtest“
   const pkgRow = r => r.sehtest_only ? "" : `<div class="att-btns pkg-row"><span class="small">Sehtest:</span>
-      <button class="btn btn-sm btn-ghost att-btn ${r.package !== "komplett" ? "on-no" : ""}" type="button" data-pkg="kurs" aria-pressed="${r.package !== "komplett"}">Ohne Sehtest</button>
+      <button class="btn btn-sm btn-ghost att-btn ${r.package !== "komplett" ? "on-yes" : ""}" type="button" data-pkg="kurs" aria-pressed="${r.package !== "komplett"}">Ohne Sehtest</button>
       <button class="btn btn-sm btn-ghost att-btn ${r.package === "komplett" ? "on-yes" : ""}" type="button" data-pkg="komplett" aria-pressed="${r.package === "komplett"}">👁 Mit Sehtest</button></div>`;
-  const payRow = r => pkgRow(r) + `<div class="att-btns pay-row"><span class="small">${r.payment_method ? `<strong style="color:var(--ok)">✓ Bezahlt</strong>` : '<strong style="color:var(--danger)">Noch nicht bezahlt</strong>'} · per</span>${PAY_KINDS.map(([k, l]) =>
-      `<button class="btn btn-sm btn-ghost att-btn ${r.payment_method === k ? "on-yes" : ""}" type="button" data-pay="${k}" aria-pressed="${r.payment_method === k}">${l}</button>`).join("")}
+  const payRow = r => pkgRow(r) + `<div class="att-btns pay-row">${r.payment_method ? '<span class="pay-tag paid">✓ Bezahlt</span>' : '<span class="pay-tag unpaid">Nicht bezahlt</span>'}${PAY_KINDS.map(([k, l]) =>
+      `<button class="btn btn-sm btn-ghost att-btn ${r.payment_method === k ? "on-paid" : ""}" type="button" data-pay="${k}" aria-pressed="${r.payment_method === k}">${l}</button>`).join("")}
     <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
   async function payClick(ev, r) {
     const pkg = ev.target.closest("[data-pkg]");
