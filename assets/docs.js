@@ -33,12 +33,12 @@
     date: { x1: 112.5, x2: 275.5, y: 418.5, size: 12 },
     infoYes: { x: 389.6, y: 350.7 },
     // Uhrzeiten: Die Linien „von: ___ bis: ___“ der Vorlage sind leer; Beginn und Ende kommen aus dem Kalender
-    timeFrom: { cover: { x: 343.5, y: 416, w: 49, h: 9.8 }, x1: 343.5, x2: 413, y: 416.5, size: 10.5 },
-    timeTo: { cover: { x: 449.5, y: 416, w: 50.5, h: 9.8 }, x1: 432, x2: 505, y: 416.5, size: 10.5 },
-    // Neue Vorlage (Aktenzeichen 25.01.30-001/2019-001, Nov. 2026): „Ort, Datum: Siegen, den ___“ ganz unten
-    issued: { x1: 146.5, x2: 247.5, y: 42, size: 11 },
-    // Deine Unterschrift (nur beim Versand per E-Mail) über „Unterschrift Lehrgangsleiter“
-    sign: { x: 350, y: 76, w: 150, h: 42 }
+    timeFrom: { x1: 333, x2: 416, y: 416.5, size: 10.5 },
+    timeTo: { x1: 436, x2: 505, y: 416.5, size: 10.5 },
+    // Vorlage vom 14.11.2026 (Aktenzeichen 25.01.30-001/2019-001): „Ort, Datum: Siegen, den ___“ (Text bei y 63,6–74,4)
+    issued: { x1: 146.5, x2: 247.5, y: 66.5, size: 11 },
+    // Deine Unterschrift (nur beim Versand per E-Mail) über „Unterschrift Lehrgangsleiter“ (y 86–97), unter „Stempelfeld“ (y 130)
+    sign: { x: 355, y: 98, w: 140, h: 30 }
   };
   const SHEET = {
     date: { x: 166, y: 652, size: 12 },
