@@ -155,8 +155,8 @@
       async checkinGeneralToken(renew) { return check(await sb.rpc("checkin_general_token", { p_new: Boolean(renew) })); },
       async checkinCourses(token) { return check(await sb.rpc("checkin_courses", { p_token: token })); },
       async checkinRegister(d) {
-        if (d.course) return check(await sb.rpc("checkin_register_general", {
-          p_token: d.token, p_course: d.course, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
+        if (d.course || d.today) return check(await sb.rpc("checkin_register_general", {
+          p_token: d.token, p_course: d.today ? null : d.course, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date,
           p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
         }));
         return check(await sb.rpc("checkin_register", {
@@ -254,7 +254,7 @@
       live: false,
       async getOpenCourses() {
         const db = load();
-        return db.courses.filter(c => c.status === "offen" && new Date(c.starts_at) > new Date())
+        return db.courses.filter(c => c.status === "offen" && !c.intern && new Date(c.starts_at) > new Date())
           .sort(byDate).map(c => { const { address, ...rest } = withBooked(db, c); return rest; });
       },
       async register(d) {
@@ -441,9 +441,21 @@
       },
       async checkinRegister(d) {
         // Erst die Kursliste prüfen, danach laden (sonst speichert save() einen anderen Stand)
-        const list = d.course ? await this.checkinCourses(d.token) : null;
+        const list = d.course || d.today ? await this.checkinCourses(d.token) : null;
         const db = load();
-        const c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : demoCheckin(db, d.token);
+        let c = d.course ? (list && list.some(x => x.id === d.course) ? db.courses.find(x => x.id === d.course) : null) : d.today ? null : demoCheckin(db, d.token);
+        if (d.today && list) {
+          // „Heute“ gewählt: Kurs von heute nehmen oder einen internen anlegen (wie in Supabase)
+          const now = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+          c = db.courses.find(x => x.status !== "abgesagt" && new Date(x.starts_at).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) === now);
+          if (!c) {
+            c = { id: uid(), starts_at: new Date(`${now}T10:00`).toISOString(), ends_at: new Date(`${now}T17:30`).toISOString(),
+              location: "Siegen", address: "Selims Fahrschule, Hagener Straße 20, 57072 Siegen", capacity: 30, online_booking: false,
+              status: "offen", intern: true, note: "Intern – automatisch über das Teilnehmerdatenblatt angelegt. Ort und Uhrzeit bitte prüfen.",
+              created_at: new Date().toISOString() };
+            db.courses.push(c);
+          }
+        }
         if (!c) throw new Error("Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.");
         if (!d.signature || !d.signature.startsWith("data:image/png;base64,")) throw new Error("Bitte unterschreiben.");
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(d.email || "").trim())) throw new Error("Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung).");

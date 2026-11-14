@@ -92,11 +92,14 @@
       let list = null;
       try { list = await db.checkinCourses(general); } catch (e) { list = null; }
       if (!list) { $("vo-invalid").classList.remove("hidden"); return; }
-      if (!list.length) { $("vo-invalid").innerHTML = '<p><strong>Zurzeit ist kein Kurs eingetragen.</strong></p><p class="muted">Bitte wende dich an deinen Kursleiter.</p>'; $("vo-invalid").classList.remove("hidden"); return; }
       const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
       const dayOf = iso => new Date(iso).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
-      const pick = list.find(c => dayOf(c.starts_at) === today) || list.find(c => dayOf(c.starts_at) > today) || list[list.length - 1];
-      $("vo-course-sel").innerHTML = list.map(c => `<option value="${c.id}"${c === pick ? " selected" : ""}>${dayText(c.starts_at)}${dayOf(c.starts_at) === today ? " (heute)" : ""}</option>`).join("");
+      // Der heutige Tag steht immer zur Auswahl und ist vorausgewählt (gibt es noch keinen Kurs, legt der Server einen internen an)
+      const opts = list.map(c => ({ value: c.id, day: dayOf(c.starts_at), text: dayText(c.starts_at) }));
+      if (!opts.some(o => o.day === today)) opts.push({ value: "heute", day: today, text: dayText(new Date().toISOString()) });
+      opts.sort((a, b) => a.day.localeCompare(b.day));
+      const pick = opts.find(o => o.day === today);
+      $("vo-course-sel").innerHTML = opts.map(o => `<option value="${o.value}"${o === pick ? " selected" : ""}>${o.day === today ? "Heute, " : ""}${o.text}</option>`).join("");
       $("vo-course-box").classList.remove("hidden");
       $("vo-course").textContent = "Erste-Hilfe-Kurs in Siegen";
     } else {
@@ -141,7 +144,7 @@
       btn.disabled = true; btn.textContent = "Wird gesendet …";
       try {
         const name = await db.checkinRegister({
-          token, course: general ? $("vo-course-sel").value : undefined, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
+          token, course: general && $("vo-course-sel").value !== "heute" ? $("vo-course-sel").value : undefined, today: !!general && $("vo-course-sel").value === "heute", first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
           street: v("vo-street"), zip: v("vo-zip"), city: v("vo-city"), phone: v("vo-phone"), email: v("vo-email"),
           package: $("vo-pkg").value, signature
         });

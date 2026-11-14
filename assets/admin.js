@@ -150,6 +150,7 @@
     if (filter === "past") list = courses.filter(isPast).reverse();
     $("course-rows").innerHTML = list.length ? list.map(c => {
       const pill = c.status === "abgesagt" ? '<span class="pill pill-full">abgesagt</span>'
+        : c.intern ? '<span class="pill pill-muted">intern</span>'
         : !c.online_booking ? '<span class="pill pill-muted">nur telefonisch</span>'
         : '<span class="pill pill-ok">offen</span>';
       return `
