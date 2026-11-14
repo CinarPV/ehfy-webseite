@@ -32,7 +32,7 @@
     birth: { x1: 414, x2: 494.5, y: 464.5, size: 12 },
     date: { x1: 112.5, x2: 275.5, y: 418.5, size: 12 },
     infoYes: { x: 389.6, y: 350.7 },
-    // Uhrzeiten: die festen „10.00 Uhr“ / „17.30 Uhr“ der Vorlage werden überdeckt und durch die Zeiten aus dem Kalender ersetzt
+    // Uhrzeiten: Die Linien „von: ___ bis: ___“ der Vorlage sind leer; Beginn und Ende kommen aus dem Kalender
     timeFrom: { cover: { x: 343.5, y: 416, w: 49, h: 9.8 }, x1: 343.5, x2: 413, y: 416.5, size: 10.5 },
     timeTo: { cover: { x: 449.5, y: 416, w: 50.5, h: 9.8 }, x1: 432, x2: 505, y: 416.5, size: 10.5 },
     // Neue Vorlage (Aktenzeichen 25.01.30-001/2019-001, Nov. 2026): „Ort, Datum: Siegen, den ___“ ganz unten
@@ -86,10 +86,8 @@
       centered(page, fmtDate(course.starts_at), CERT.date, f.bold);
       // Uhrzeit von/bis aus dem Kalender (wie in der Vorlage: 10.00 Uhr)
       const hm = d => new Date(d).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ }).replace(":", ".") + " Uhr";
-      const white = root.PDFLib.rgb(1, 1, 1);
       [[course.starts_at, CERT.timeFrom], [course.ends_at, CERT.timeTo]].forEach(([d, pos]) => {
         if (!d) return;
-        page.drawRectangle({ x: pos.cover.x, y: pos.cover.y, width: pos.cover.w, height: pos.cover.h, color: white });
         centered(page, hm(d), pos, f.bold);
       });
       // Die Anschrift der Ausbildungsstelle (Siegen) steht fest in der Vorlage und bleibt immer gleich
