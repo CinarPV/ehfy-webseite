@@ -1623,6 +1623,9 @@
     // (dann die zu diesem Zeitpunkt nächste freie Nummer, auch wenn inzwischen ein anderer Sehtest fertig wurde)
     const own = typed && typed !== (r.sehtest_nr || draft) && (withResult || r.sehtest_nr) ? typed : "";
     if (withResult) patch.sehtest_passed = all.state === "bestanden";
+    // Sehtest gemacht → automatisch „Mit Sehtest“, aber nur bei QR/von Hand Eingetragenen (online weiß man es schon).
+    // Nur beim ersten Ergebnis, damit eine spätere Änderung von Hand bleibt.
+    if (withResult && unsurePkg(r) && r.sehtest_passed == null) patch.package = "komplett";
     if (withResult && !r.payment_method) { $("sd-error").textContent = "Bitte zuerst bei ② eintragen, wie bezahlt wurde (Bar, PayPal oder Überweisung)."; $("sd-step2").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     if (withResult && !patch.sehtest_id_no && !confirm("Es ist keine Ausweis-Nr. eingetragen. Trotzdem abschließen?")) { $("sd-idno").focus(); return; }
     btn.disabled = true;
@@ -1655,6 +1658,8 @@
   }
   // Bezahlt (bar / PayPal / Überweisung) und Häkchen „auf die Teilnehmerliste“
   const PAY_KINDS = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"]];
+  // Nicht online angemeldet (QR-Datenblatt oder von Hand): ob mit Sehtest, ist nicht sicher
+  const unsurePkg = r => !r.sehtest_only && r.package !== "komplett" && r.message === "manuell eingetragen";
   // Sehtest gewünscht? (bei Online-Anmeldung schon gewählt, bei QR/von Hand hier umschalten) – nicht bei „nur Sehtest“
   const pkgRow = r => r.sehtest_only ? "" : `<div class="att-btns pkg-row"><span class="small">Sehtest:</span>
       <button class="btn btn-sm btn-ghost att-btn ${r.package !== "komplett" ? "on-no" : ""}" type="button" data-pkg="kurs" aria-pressed="${r.package !== "komplett"}">Ohne Sehtest</button>
@@ -1780,7 +1785,16 @@
   async function renderAttendance() {
     // Nicht neu aufbauen, solange du in einem Feld tippst
     if (document.activeElement && document.activeElement.matches("#att-section input[data-discount],#att-section input[data-discount-note]")) return;
-    const [regsAll] = await Promise.all([db.listAllRegistrations()]);
+    let [regsAll] = await Promise.all([db.listAllRegistrations()]);
+    // Einmalig: Wer schon einen bestätigten Sehtest hat, aber (QR/von Hand) noch „Ohne Sehtest“ steht → „Mit Sehtest“
+    try {
+      if (!localStorage.getItem("ehfy-pkgfix-1")) {
+        localStorage.setItem("ehfy-pkgfix-1", "1");
+        const fix = regsAll.filter(r => unsurePkg(r) && r.sehtest_passed != null && !r.sehtest_void_at && r.status !== "storniert");
+        for (const r of fix) await db.updateRegistration(r.id, { package: "komplett" });
+        if (fix.length) regsAll = await db.listAllRegistrations();
+      }
+    } catch (e) { /* nicht schlimm */ }
     attRegs = regsAll;
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
     const today = localDate(new Date());
