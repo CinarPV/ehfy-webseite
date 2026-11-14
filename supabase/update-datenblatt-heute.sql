@@ -8,7 +8,6 @@
 alter table public.courses add column if not exists intern boolean not null default false;
 
 -- Öffentlicher Kalender: interne Kurse ausblenden (sonst wie bisher)
-drop function if exists public.get_open_courses();
 create or replace function public.get_open_courses()
 returns table (id uuid, starts_at timestamptz, ends_at timestamptz, location text,
                seats text, online_booking boolean, note text)
@@ -57,7 +56,7 @@ create or replace function public.checkin_register_day(
   p_token uuid, p_day date, p_first_name text, p_last_name text, p_birth_date date,
   p_street text, p_zip text, p_city text, p_phone text, p_email text, p_package text, p_signature text)
 returns text language plpgsql security definer set search_path = public as $$
-declare c public.courses; v_today date := (now() at time zone 'Europe/Berlin')::date;
+declare c public.courses; v_today date := (now() at time zone 'Europe/Berlin')::date; v_id uuid;
 begin
   if p_token is null or not exists (select 1 from public.checkin_settings where id = 1 and token = p_token) then
     raise exception 'Dieser QR-Code ist nicht mehr gültig. Bitte wende dich an deinen Kursleiter.';
@@ -67,7 +66,8 @@ begin
   if coalesce(trim(p_first_name), '') = '' or coalesce(trim(p_last_name), '') = '' then raise exception 'Bitte Vor- und Nachname eintragen.'; end if;
   if p_signature is null or p_signature not like 'data:image/png;base64,%' then raise exception 'Bitte unterschreiben.'; end if;
   if coalesce(trim(p_email), '') !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then raise exception 'Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung).'; end if;
-  select * into c from public.courses where id = public.ehfy_day_course(p_day);
+  v_id := public.ehfy_day_course(p_day);
+  select * into c from public.courses where id = v_id;
   return public.checkin_insert(c, p_first_name, p_last_name, p_birth_date, p_street, p_zip, p_city, p_phone, p_email, p_package, p_signature);
 end $$;
 grant execute on function public.checkin_register_day(uuid, date, text, text, date, text, text, text, text, text, text, text) to anon, authenticated;
