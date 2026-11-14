@@ -23,11 +23,9 @@
   // Kreuze je Test: Text mit einem Zeichen je Ring: "r" = richtig, "f" = falsch, "." = noch offen
   const marksOf = (marks, n) => String((marks && marks[n]) || "").padEnd(test(n).rings.length, ".");
 
-  // Nicht bestanden, sobald bei den zwei gewerteten Zeilen
-  //  – in einer Zeile mehr als 2 Fehler sind, oder
-  //  – zusammen mehr als 2 Ringe mit gerader Öffnung (oben, unten, links, rechts) falsch sind, oder
-  //  – zusammen mehr als 2 Ringe mit schräger Öffnung falsch sind.
-  // Bestanden, wenn zwei vollständig abgefragte Zeilen das einhalten. Gewertet werden die angefangenen Zeilen.
+  // Je Test werden zwei Zeilen abgefragt (10 Ringe): 2× 0,7 (Mindestmaß), 0,7 + 1,0 oder 2× 1,0.
+  // Bestanden mit höchstens 4 Fehlern bei diesen 10 Ringen (mindestens 6 richtig), nicht bestanden ab 5 Fehlern.
+  const MAX_ERR = 4;
   function rowInfo(m, rings, row) {
     const cells = rings.map((ring, i) => ({ ring, mk: m[i] })).filter(x => x.ring.row === row);
     const wrong = cells.filter(x => x.mk === "f");
@@ -38,7 +36,7 @@
   }
   function pairInfo(a, b) {
     const straight = a.straight + b.straight, oblique = a.oblique + b.oblique;
-    const failed = a.err > 2 || b.err > 2 || straight > 2 || oblique > 2;
+    const failed = a.err + b.err > MAX_ERR;
     return { rows: [a, b], straight, oblique, err: a.err + b.err, failed, complete: a.complete && b.complete,
       pass: a.complete && b.complete && !failed };
   }
@@ -58,7 +56,7 @@
     else if (!started.length) state = m.replace(/\./g, "") ? "offen" : "leer";
     else if (started.length === 1) {
       const r = started[0];
-      state = r.err > 2 || r.straight > 2 || r.oblique > 2 ? "nicht" : "offen";
+      state = r.err > MAX_ERR ? "nicht" : "offen";
     } else if (pairs.some(p => !p.failed)) {
       state = "offen";
       pair = pairs.find(p => !p.failed);
@@ -66,7 +64,8 @@
     const shown = pair ? pair.rows : used;
     const straight = shown.reduce((k, r) => k + r.straight, 0), oblique = shown.reduce((k, r) => k + r.oblique, 0);
     // Hinweis, wenn ein weiterer Fehler den Test kippen würde
-    const warn = state === "offen" && (shown.some(r => r.err === 2) || straight === 2 || oblique === 2);
+    const wrongNow = shown.reduce((k, r) => k + r.err, 0);
+    const warn = state === "offen" && wrongNow === MAX_ERR;
     return { state, rows, used: shown, pair, wrong: shown.reduce((k, r) => k + r.err, 0), straight, oblique, warn,
       visusText: visusText(shown), groups: shown };
   }
@@ -112,5 +111,5 @@
   const ringPath = (d, dir, cx = 0, cy = 0) =>
     ringPoints(d, dir).map(([x, y], i) => `${i ? "L" : "M"}${(cx + x).toFixed(2)} ${(cy - y).toFixed(2)}`).join(" ") + " Z";
 
-  root.EHFYSehtest = { VISUS, TESTS, GROUPS, SETS, test, marksOf, evaluate, rowsToFill, overall, ringPath, STRAIGHT };
+  root.EHFYSehtest = { MAX_ERR, VISUS, TESTS, GROUPS, SETS, test, marksOf, evaluate, rowsToFill, overall, ringPath, STRAIGHT };
 })(typeof window !== "undefined" ? window : globalThis);

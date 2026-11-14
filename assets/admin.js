@@ -1404,7 +1404,7 @@
         <div class="st-group"><span class="st-label">Unterschrift:</span><span class="small" id="sd-signinfo"></span></div>
       </div>
       <div class="st-sets" id="sd-sets" role="tablist"></div>
-      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Gewertet werden je Test zwei Zeilen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Nicht bestanden bei mehr als 2 Fehlern in einer Zeile oder mehr als 2 Fehlern bei geraden bzw. bei schrägen Öffnungen. Die 0,32-Zeile ist zum Üben.</p>
+      <p class="small muted" style="margin:6px 0 8px">Ring antippen: 1× = richtig ✓, 2× = falsch ✗, 3× = wieder leer. Je Test werden zwei Zeilen abgefragt (10 Ringe): 2× 0,7, 0,7 + 1,0 oder 2× 1,0. Bestanden mit höchstens 4 Fehlern, ab 5 Fehlern nicht bestanden. Die 0,32-Zeile ist zum Üben.</p>
       <div id="sd-grid"></div>
       <p class="st-result" id="sd-result"></p>
       <div class="st-extra">
@@ -1462,9 +1462,9 @@
         <svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="${S.ringPath(20, dir)}"/></svg><span>${mk === "r" ? "✓" : mk === "f" ? "✗" : ""}</span></button>`;
     }).join("")}</div>`).join("");
     const rowText = r => `${r.name}: ${r.err} Fehler${r.open ? ` (${r.open} offen)` : ""}`;
-    const info = ev.used.length ? ev.used.map(rowText).join(" · ") + (ev.wrong ? ` · gerade ${ev.straight}, schräg ${ev.oblique}` : "")
+    const info = ev.used.length ? ev.used.map(rowText).join(" · ") + (ev.used.length >= 2 ? ` · zusammen ${ev.wrong} von höchstens 4 Fehlern` : "")
       : "Zwei Zeilen abfragen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0.";
-    const warn = ev.warn ? '<p class="small st-warn">Achtung: Ein weiterer Fehler (in derselben Zeile, bei geraden oder bei schrägen Öffnungen) und der Test ist nicht bestanden.</p>' : "";
+    const warn = ev.warn ? '<p class="small st-warn">Achtung: Schon 4 Fehler – noch ein Fehler und der Test ist nicht bestanden.</p>' : "";
     return `<section class="st-block is-${ev.state}">
       <div class="st-block-head"><h4>${t.title}</h4><span class="st-badge">${STATE_TEXT[ev.state]}</span></div>
       <p class="small muted" style="margin:0 0 6px">${info}</p>
