@@ -32,9 +32,10 @@
     birth: { x1: 414, x2: 494.5, y: 464.5, size: 12 },
     date: { x1: 112.5, x2: 275.5, y: 418.5, size: 12 },
     infoYes: { x: 389.6, y: 350.7 },
-    issued: { x1: 146.5, x2: 247.5, y: 67, size: 11 },
+    // Neue Vorlage (Aktenzeichen 25.01.30-001/2019-001, Nov. 2026): „Ort, Datum: Siegen, den ___“ ganz unten
+    issued: { x1: 146.5, x2: 247.5, y: 42, size: 11 },
     // Deine Unterschrift (nur beim Versand per E-Mail) über „Unterschrift Lehrgangsleiter“
-    sign: { x: 252, y: 98, w: 165, h: 44 }
+    sign: { x: 350, y: 76, w: 150, h: 42 }
   };
   const SHEET = {
     date: { x: 166, y: 652, size: 12 },
@@ -81,7 +82,7 @@
       centered(page, fmtBirth(r.birth_date), CERT.birth, f.bold);
       centered(page, fmtDate(course.starts_at), CERT.date, f.bold);
       // Die Anschrift der Ausbildungsstelle (Siegen) steht fest in der Vorlage und bleibt immer gleich
-      if (opts.infoLeafletHanded) text(page, "X", { x: CERT.infoYes.x - 4.6, y: CERT.infoYes.y - 3.6, size: 10 }, f.bold);
+      // „Ja ☒“ (Informationsschrift) ist in der neuen Vorlage schon angekreuzt – kein zweites Kreuz
       // Oben steht der Kurstag, unten das Ausstellungsdatum (Tag des Ausdrucks)
       centered(page, fmtDate(new Date()), CERT.issued, f.bold);
     });
