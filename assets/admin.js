@@ -1550,15 +1550,6 @@
   const AID_LABEL = { ohne: "ohne Sehhilfe", brille: "mit Brille", linse: "mit Kontaktlinsen" };
   // Erst beim Aufruf nachschlagen: PAY_KINDS steht weiter unten in der Datei
   const payLabel = k => (Object.fromEntries(PAY_KINDS)[k] || k);
-  // Wer im selben Kurs (oder am selben Tag „nur Sehtest“) noch auf den Sehtest wartet
-  async function nextForSehtest(r, c) {
-    const all = await db.listAllRegistrations().catch(() => []);
-    const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : localDate(new Date()));
-    const waiting = all.filter(x => x.id !== r.id && x.status !== "storniert" && x.sehtest_passed == null && !x.sehtest_void_at
-      && (c ? x.course_id === c.id && (x.package === "komplett" || stStarted(x)) : !x.course_id && x.sehtest_only && sehtestDay(x, null) === day))
-      .sort(byName);
-    return waiting[0] || null;
-  }
   function certDlg() {
     let d = $("cs-dialog");
     if (d) return d;
@@ -1590,14 +1581,12 @@
         ${line("Bezahlt", r.payment_method ? esc(payLabel(r.payment_method)) : '<span style="color:var(--danger)">nein</span>')}
       </table>${ok ? "" : '<p class="small muted">Nicht bestanden: keine Bescheinigung. Protokoll trotzdem aufbewahren.</p>'}`;
     $("cs-error").textContent = "";
-    const next = await nextForSehtest(r, c);
-    $("cs-done").textContent = (ok ? "✓ Bescheinigung geschrieben" : "✓ Erledigt") + (next ? ` → weiter mit ${next.first_name} ${next.last_name}` : "");
+    $("cs-done").textContent = ok ? "✓ Bescheinigung geschrieben" : "✓ Erledigt";
     $("cs-done").onclick = async () => {
       $("cs-done").disabled = true;
       try {
         if (ok && !r.sehtest_issued_at) await db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString() });
         d.close();
-        if (next) await openSehtest(next, c, stRun && stRun.done);
       } catch (e) { $("cs-error").textContent = e.message; }
       finally { $("cs-done").disabled = false; }
     };
@@ -1889,7 +1878,7 @@
     const section = (title, hint, list, html) => `<article class="card att-card" style="margin-bottom:14px"><h3 style="margin-top:0">${title} (${list.length})</h3><p class="small muted" style="margin:0 0 6px">${hint}</p>${list.length ? list.sort(byDay).map(html).join("") : '<p class="small muted">Niemand.</p>'}</article>`;
     $("fee-list").innerHTML =
       section("Rechnung gesendet – Zahlung offen", "Wenn bezahlt ist: „Bezahlt“ drücken. Dann verschwindet die Person aus der Liste, und die Rechnung steht auf bezahlt.", bills,
-        r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Bezahlt</button>`))
+        r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Bezahlt</button> <button class="btn btn-sm btn-ghost" type="button" data-fee="tochance">Auf zweite Chance umstellen</button>`))
       + section("Zweite Chance läuft", "Die Person darf sich innerhalb der Frist für einen neuen Kurs anmelden.", chances, r => chanceRow(r).replace('<div class="att-fee">', `<div class="att-fee">`))
       + section("Nicht erschienen – noch nicht angeschrieben", "Rechnung oder zweite Chance per E-Mail senden. Ohne E-Mail-Adresse: anrufen und danach „Erledigt“.", notYet,
         r => row(r, `${feeControls(r)} ${done}`));
@@ -1951,14 +1940,14 @@
     });
     await db.updateRegistration(r.id, { fee_state: "rechnung", fee_state_at: new Date().toISOString() });
   }
-  async function sendChance(r) {
+  async function sendChance(r, afterBill) {
     const until = new Date(); until.setDate(until.getDate() + 7);
     const untilDay = localDate(until);
     const link = new URL("anmelden.html", location.href).href;
     const body = [
       `Guten Tag ${r.first_name} ${r.last_name},`, "",
       `Sie waren für den Erste-Hilfe-Kurs am ${feeDate(r)} angemeldet, sind aber nicht erschienen oder haben sich nicht rechtzeitig abgemeldet. Normalerweise müssten Sie dafür eine Ausfallgebühr von ${FEE},00 € bezahlen.`, "",
-      "Wir geben Ihnen noch eine Chance:", "",
+      afterBill ? "Die Ihnen zugesandte Rechnung über die Ausfallgebühr ist storniert. Wir geben Ihnen stattdessen noch eine Chance:" : "Wir geben Ihnen noch eine Chance:", "",
       `Wenn Sie sich bis zum ${shortDay(untilDay)} für den nächsten Kurs anmelden und daran teilnehmen, bezahlen Sie nur den Betrag für den absolvierten Kurs. Die Ausfallgebühr wird Ihnen dann gutgeschrieben.`, "",
       `Zur Anmeldung: ${link}`, "",
       `Melden Sie sich nicht rechtzeitig an, wird die Ausfallgebühr von ${FEE},00 € fällig. Melden Sie sich an und erscheinen wieder nicht, müssen Sie für beide Termine bezahlen.`, "",
@@ -1995,7 +1984,14 @@
       } else {
         if (!db.isOnline()) throw new Error("Zum Senden braucht es Internet.");
         await ensurePdf();
-        if (fee.dataset.fee === "chance") {
+        if (fee.dataset.fee === "tochance") {
+          if (!confirm(`Rechnung von ${r.first_name} ${r.last_name} stornieren und stattdessen die zweite Chance per E-Mail an ${r.email} senden?`)) return true;
+          await sendChance(r, true);
+          // Offene Ausfallgebühr-Rechnung stornieren (nicht löschen, Nummer bleibt nachvollziehbar)
+          for (const inv of await db.invoicesForRegistrations([r.id])) {
+            if (inv.type === "rechnung" && inv.status === "offen" && String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) await db.setInvoiceStatus(inv.id, "storniert");
+          }
+        } else if (fee.dataset.fee === "chance") {
           if (!confirm(`Zweite Chance per E-Mail an ${r.email} senden?`)) return true;
           await sendChance(r);
         } else if (fee.dataset.fee === "both") {
