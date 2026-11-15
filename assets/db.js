@@ -205,6 +205,10 @@
       async setInvoiceStatus(id, status) {
         check(await sb.from("invoices").update({ status, paid_on: status === "bezahlt" ? new Date().toISOString().slice(0, 10) : null }).eq("id", id));
       },
+      // Beleg nachträglich einem Schüler zuordnen
+      async linkInvoice(id, registrationId) {
+        check(await sb.from("invoices").update({ registration_id: registrationId }).eq("id", id));
+      },
       // Beleg direkt über dein Postfach info@ehfy.de senden (Funktion "beleg-mail")
       async sendInvoiceMail(m) {
         const { data, error } = await sb.functions.invoke("beleg-mail", { body: m });
@@ -543,6 +547,10 @@
       async setInvoiceStatus(id, status) {
         const inv = (load().invoices || []).find(i => i.id === id);
         inv.status = status; inv.paid_on = status === "bezahlt" ? new Date().toISOString().slice(0, 10) : null; save();
+      },
+      async linkInvoice(id, registrationId) {
+        const inv = (load().invoices || []).find(i => i.id === id);
+        inv.registration_id = registrationId; save();
       },
       async sendInvoiceMail(m) {
         // Im Demo-Modus wird nichts verschickt – nur vermerkt

@@ -301,6 +301,16 @@
           <div id="templates-view" class="hidden" data-section="vorlagen">
             <h2 style="font-size:1.4rem">Einstellungen</h2>
             <div class="card" style="margin-bottom:20px">
+              <h3>Preise</h3>
+              <p class="muted small">Gilt für Abrechnung, Zahlungen, Teilnehmerliste, Quittungen und Rechnungen. Schon erstellte Belege behalten ihren Betrag.</p>
+              <div class="form-grid">
+                <div class="field"><label for="price-kurs">Erste-Hilfe-Kurs ohne Sehtest (€)</label><input id="price-kurs" inputmode="decimal"></div>
+                <div class="field"><label for="price-komplett">Erste-Hilfe-Kurs mit Sehtest (€)</label><input id="price-komplett" inputmode="decimal"></div>
+              </div>
+              <div class="btn-row"><button class="btn btn-sm" type="button" id="price-save">Preise speichern</button></div>
+              <p class="small" id="price-info" role="status"></p>
+            </div>
+            <div class="card" style="margin-bottom:20px">
               <h3>Mitteilungen bei neuen Anmeldungen</h3>
               <p class="muted small" id="push-status"></p>
               <div class="btn-row">

@@ -81,6 +81,7 @@
   async function showApp() {
     $("app-view").classList.remove("hidden");
     renderSync();
+    await applyPrices().catch(() => {}); // eigene Preise aus den Einstellungen
     await loadCourses();
     db.startAuto(); // Änderungen gehen sofort raus, Neues kommt sofort rein
     askToSync(); // Noch offene Änderungen vom letzten Mal
@@ -1162,7 +1163,7 @@
     if (b.dataset.view === "zahlungen") { $("pay-view").classList.remove("hidden"); loadPayments().catch(e => { $("pay-error").textContent = e.message; }); }
     if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
-    if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
+    if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); applyPrices().then(renderPrices); }
   });
 
   $("nav-more-btn").onclick = () => {
@@ -3032,6 +3033,26 @@
     try { await db.saveSettings(value); bankData = value; $("exam-msg").textContent = "Gespeichert ✓"; }
     catch (e) { $("exam-msg").textContent = e.message; }
   };
+  // Preise (Einstellungen): überschreiben die Standardpreise aus config.js, gelten sofort für Abrechnung, Liste und Belege
+  async function applyPrices() {
+    const p = (await db.getSettings().catch(() => ({}))).prices || {};
+    cfg.packages.forEach(x => { if (Number(p[x.key]) > 0) x.price = Number(p[x.key]); });
+    if (Number(p.noShowFee) > 0) cfg.documents.noShowFee = Number(p.noShowFee);
+  }
+  function renderPrices() {
+    $("price-kurs").value = String(cfg.packages.find(x => x.key === "kurs").price).replace(".", ",");
+    $("price-komplett").value = String(cfg.packages.find(x => x.key === "komplett").price).replace(".", ",");
+  }
+  $("price-save").onclick = async () => {
+    const n = id => Number(String($(id).value).replace(",", "."));
+    const kurs = n("price-kurs"), komplett = n("price-komplett");
+    if (!(kurs > 0) || !(komplett > 0)) { $("price-info").textContent = "Bitte gültige Preise eingeben."; return; }
+    try {
+      await db.saveSettings({ ...(await db.getSettings().catch(() => ({}))), prices: { kurs, komplett } });
+      await applyPrices();
+      $("price-info").textContent = "✓ Gespeichert. Gilt ab sofort für neue Abrechnungen, Listen, Quittungen und Rechnungen.";
+    } catch (e) { $("price-info").textContent = e.message; }
+  };
   async function renderBank() {
     bankData = await db.getSettings().catch(() => ({}));
     for (const [k, id] of Object.entries(BANK_FIELDS)) $(id).value = bankData[k] || "";
@@ -3440,7 +3461,7 @@
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
         <td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
         <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td>
-        <td>${esc(i.recipient.name)}</td>
+        <td>${esc(i.recipient.name)}${i.registration_id ? "" : `<br><button class="btn btn-sm" data-inv="link" data-id="${i.id}">Schüler zuordnen</button>`}</td>
         <td><strong>${eur(i.total)}</strong></td>
         <td>${INV_STATUS[i.status]}${i.sent_at ? `<br><span class="small muted" title="${esc(i.sent_to || "")}">✉ ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}</td>
         <td><div class="btn-row">
@@ -3452,6 +3473,42 @@
       </tr>`).join("") : '<tr><td colspan="7" class="muted">Für diese Auswahl gibt es keine Rechnungen oder Quittungen.</td></tr>';
   }
 
+  // Beleg ohne Schüler: passenden Schüler suchen, zuordnen und fehlende Daten (Adresse, E-Mail, Geburtsdatum) ergänzen
+  async function linkInvoiceAsk(inv) {
+    const all = (await db.listAllRegistrations()).filter(r => r.status !== "storniert");
+    const norm = t => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+    const name = norm(inv.recipient.name);
+    const hits = all.filter(r => { const a = norm(`${r.first_name} ${r.last_name}`), b = norm(`${r.last_name} ${r.first_name}`); return a === name || b === name || name.includes(norm(r.last_name)) && name.includes(norm(r.first_name)); })
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    const courseText = r => { const c = courses.find(x => x.id === r.course_id); return c ? `Kurs ${dayText(c.starts_at)}` : "nur Sehtest"; };
+    let r = null;
+    if (hits.length === 1 && confirm(`${inv.number} (${inv.recipient.name}) diesem Schüler zuordnen?\n\n${hits[0].first_name} ${hits[0].last_name} · geb. ${birthText(hits[0].birth_date)} · ${courseText(hits[0])}`)) r = hits[0];
+    else if (hits.length > 1) {
+      const pick = prompt(`Mehrere passende Schüler für ${inv.recipient.name}. Nummer eingeben:\n\n${hits.slice(0, 9).map((x, n) => `${n + 1}) ${x.first_name} ${x.last_name} · geb. ${birthText(x.birth_date)} · ${courseText(x)}`).join("\n")}`, "1");
+      r = hits[Number(pick) - 1] || null;
+    }
+    if (!r) {
+      const q = norm(prompt(`Keinen eindeutigen Schüler gefunden. Nachname des Schülers für ${inv.number} eingeben:`, (inv.recipient.name || "").split(" ").pop()) || "");
+      if (!q) return;
+      const list = all.filter(x => norm(x.last_name).includes(q) || norm(x.first_name).includes(q)).slice(0, 9);
+      if (!list.length) { alert("Kein Schüler mit diesem Namen gefunden."); return; }
+      const pick = prompt(`Nummer eingeben:\n\n${list.map((x, n) => `${n + 1}) ${x.first_name} ${x.last_name} · geb. ${birthText(x.birth_date)} · ${courseText(x)}`).join("\n")}`, "1");
+      r = list[Number(pick) - 1];
+      if (!r) return;
+    }
+    await db.linkInvoice(inv.id, r.id);
+    // Fehlende Schüler-Daten aus der Rechnung ergänzen (vorhandene bleiben unverändert)
+    const rc = inv.recipient || {}, patch = {};
+    if (!r.street && rc.street) patch.street = rc.street;
+    if (!r.zip && rc.zip) patch.zip = rc.zip;
+    if (!r.city && rc.city) patch.city = rc.city;
+    if (!r.email && rc.email) patch.email = rc.email;
+    if (!r.birth_date && rc.birth_date) patch.birth_date = rc.birth_date;
+    if (inv.type === "rechnung" && !r.payment_method && inv.status === "bezahlt") patch.payment_method = inv.payment === "bar" ? "bar" : "ueberweisung";
+    if (Object.keys(patch).length) await db.updateRegistration(r.id, patch);
+    const added = Object.keys(patch).map(k => ({ street: "Straße", zip: "PLZ", city: "Ort", email: "E-Mail", birth_date: "Geburtsdatum", payment_method: "Zahlart" }[k]));
+    alert(`${inv.number} ist jetzt ${r.first_name} ${r.last_name} zugeordnet.${added.length ? `\nErgänzt: ${added.join(", ")}.` : ""}${!(r.street || patch.street) ? "\n\nAdresse fehlt noch: bitte unter Kurstag → Daten ändern eintragen." : ""}`);
+  }
   async function invoicePdf(inv, win) {
     await ensurePdf();
     const bytes = inv.type === "quittung"
@@ -3470,6 +3527,7 @@
         try { await invoicePdf(inv, win); } catch (e) { if (win) win.close(); throw e; }
       }
       if (b.dataset.inv === "mail") await sendBill(inv);
+      if (b.dataset.inv === "link") { await linkInvoiceAsk(inv); await loadInvoices(); }
       if (b.dataset.inv === "paid") { await db.setInvoiceStatus(inv.id, "bezahlt"); await loadInvoices(); }
       if (b.dataset.inv === "cancel" && confirm(`${inv.number} stornieren?\n\nDie Nummer bleibt erhalten und wird als storniert markiert.`)) {
         await db.setInvoiceStatus(inv.id, "storniert"); await loadInvoices();

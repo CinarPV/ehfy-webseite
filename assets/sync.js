@@ -387,6 +387,13 @@
       if (draft) { draft.row.status = status; }
       await (draft ? (applyOp(state, { type: "inv-status", id, status }), finish()) : queue({ type: "inv-status", id, status }));
     },
+    async linkInvoice(id, registrationId) {
+      if (!isOnline()) throw new Error("Zum Zuordnen braucht es Internet.");
+      await remote.linkInvoice(id, registrationId);
+      const inv = state.invoices.find(i => i.id === id);
+      if (inv) inv.registration_id = registrationId;
+      await finish();
+    },
     async sendInvoiceMail(m) {
       if (!isOnline()) throw new Error("Zum Versenden braucht es Internet.");
       const res = await remote.sendInvoiceMail(m);
