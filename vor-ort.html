@@ -47,8 +47,8 @@
             <div class="field"><label for="vo-city">Ort</label><input id="vo-city" autocomplete="address-level2" required maxlength="80"></div>
             <div class="field"><label for="vo-phone">Telefon <span class="muted small">(freiwillig)</span></label><input id="vo-phone" type="tel" autocomplete="tel" maxlength="40"></div>
             <div class="field"><label for="vo-email">E-Mail <span class="muted small">(für Quittung oder Rechnung)</span></label><input id="vo-email" type="email" autocomplete="email" inputmode="email" maxlength="120" required></div>
-            <div class="field wide"><label for="vo-pkg">Gebucht</label>
-              <select id="vo-pkg"><option value="kurs">Erste-Hilfe-Kurs</option><option value="komplett">Erste-Hilfe-Kurs mit Sehtest</option></select></div>
+            <div class="field wide"><label for="vo-pkg">Möchtest du zusätzlich einen Sehtest machen?</label>
+              <select id="vo-pkg" required><option value="" selected disabled>Bitte wählen …</option><option value="komplett">Ja, mit Sehtest</option><option value="kurs">Nein, ohne Sehtest</option></select></div>
           </div>
 
           <div class="vo-sign-head"><strong>Unterschrift</strong><button class="btn btn-sm btn-ghost hidden" type="button" id="vo-clear">Neu unterschreiben</button></div>
@@ -145,6 +145,7 @@
       if (!v("vo-street") || !v("vo-zip") || !v("vo-city")) { err.textContent = "Bitte die vollständige Adresse eintragen."; return; }
       if (!v("vo-email")) { err.textContent = "Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung)."; return; }
       if (!$("vo-email").checkValidity() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v("vo-email"))) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
+      if (!$("vo-pkg").value) { err.textContent = "Bitte angeben, ob du zusätzlich einen Sehtest machen möchtest."; $("vo-pkg").focus(); return; }
       if (!drawn) { err.textContent = "Bitte im Feld unterschreiben."; return; }
       if (!$("vo-ok").checked) { err.textContent = "Bitte bestätigen, dass deine Angaben richtig sind."; return; }
       // Gewählter Kurs oder Tag

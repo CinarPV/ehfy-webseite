@@ -322,10 +322,8 @@
     const due = new Date(inv.issued_on); due.setDate(due.getDate() + (paymentDays || 14));
     const pay = inv.payment === "bar"
       ? [`Den Rechnungsbetrag haben wir am ${fmtDate(inv.issued_on)} in bar erhalten.`]
-      : [`Bitte überweisen Sie den Betrag bis zum ${fmtDate(due)} (14 Tage ab Rechnungsdatum).`, `Verwendungszweck: Rechnung ${inv.number}`,
-         issuer.iban ? `${issuer.bank ? issuer.bank + " · " : ""}Kontoinhaber: ${issuer.accountHolder || issuer.owner}` : "",
-         issuer.iban ? `IBAN ${issuer.iban}${issuer.bic ? " · BIC " + issuer.bic : ""}` : "",
-         issuer.paypal ? `Oder per PayPal an ${issuer.paypal}` : ""];
+      : [`Bitte überweisen Sie den Rechnungsbetrag innerhalb von ${paymentDays || 14} Tagen (bis zum ${fmtDate(due)}).`];
+    // Bankverbindung und PayPal stehen in der Fußzeile
     pay.filter(Boolean).forEach(t => { page.drawText(t, { x: M, y: yy, size: 10.5, font: f.regular, color: rgb(C.ink) }); yy -= 16; });
     page.drawText(KLEIN, { x: M, y: yy - 4, size: 8.5, font: f.regular, color: rgb(C.muted) });
     page.drawText("Herzlichen Dank für Ihr Vertrauen!", { x: M, y: yy - 34, size: 11, font: f.bold, color: rgb(C.aid) });
@@ -525,6 +523,7 @@
   // ---------- Teilnehmerliste (z. B. fürs Finanzamt): wer da war, Sehtest, Zahlart, Betrag, Unterschrift ----------
   const PAY = { bar: "bar", paypal: "PayPal", ueberweisung: "Überweisung" };
   async function participantList(course, people, issuer, loadFont, packages) {
+    people = people.filter(r => r.payment_method !== "paypal_privat"); // PayPal privat gehört nicht auf die Liste
     const { PDFDocument } = root.PDFLib;
     const pdf = await PDFDocument.create();
     const f = await fonts(pdf, loadFont);

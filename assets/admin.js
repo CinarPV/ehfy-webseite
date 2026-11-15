@@ -513,6 +513,7 @@
         <td class="no-print"><button class="btn btn-sm btn-outline" data-del="${r.id}" title="Eintrag löschen">✕</button></td>
       </tr>`).join("") : '<tr><td colspan="10" class="muted">Noch keine Anmeldungen.</td></tr>';
     $("p-sum").innerHTML = current.status === "abgesagt" ? "" : courseSummary(regs, current);
+    $("p-add").classList.toggle("hidden", current.status === "abgesagt");
   }
   const byName = (a, b) => a.last_name.localeCompare(b.last_name, "de") || a.first_name.localeCompare(b.first_name, "de");
 
@@ -1647,7 +1648,9 @@
     return stStarted(r) ? "zwischengespeichert" : "";
   }
   // Bezahlt (bar / PayPal / Überweisung) und Häkchen „auf die Teilnehmerliste“
-  const PAY_KINDS = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"]];
+  const PAY_KINDS = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"], ["paypal_privat", "PayPal privat"]];
+  // PayPal privat: zählt nicht zum Gesamteinkommen und kommt nicht auf die Teilnehmerliste
+  const OWN = "paypal_privat";
   // Nicht online angemeldet (QR-Datenblatt oder von Hand): ob mit Sehtest, ist nicht sicher
   const unsurePkg = r => !r.sehtest_only && r.package !== "komplett" && r.message === "manuell eingetragen";
   // Sehtest gewünscht? (bei Online-Anmeldung schon gewählt, bei QR/von Hand hier umschalten) – nicht bei „nur Sehtest“
@@ -1663,13 +1666,14 @@
     const people = list.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen");
     if (!people.length) return "";
     const withST = people.filter(r => r.package === "komplett").length;
-    const sums = { bar: 0, paypal: 0, ueberweisung: 0 }; let open = 0, openN = 0;
+    const sums = { bar: 0, paypal: 0, ueberweisung: 0, paypal_privat: 0 }; let open = 0, openN = 0;
     people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else { open += priceOf(r); openN++; } });
     const paid = sums.bar + sums.paypal + sums.ueberweisung;
     const cell = (k, v, strong) => `<div class="sum-cell${strong ? " strong" : ""}"><span>${k}</span><b>${v}</b></div>`;
     return `<div class="course-sum">
       <div class="sum-grid">${cell("Teilnehmer", people.length)}${cell("Mit Sehtest", withST)}${cell("Ohne Sehtest", people.length - withST)}</div>
-      <div class="sum-grid">${PAY_KINDS.map(([k, l]) => cell(l, eur(sums[k]))).join("")}${cell("Gesamt eingenommen", eur(paid), true)}</div>
+      <div class="sum-grid">${PAY_KINDS.filter(([k]) => k !== OWN).map(([k, l]) => cell(l, eur(sums[k]))).join("")}${cell("Gesamt eingenommen", eur(paid), true)}</div>
+      ${sums[OWN] ? `<p class="small muted" style="margin:0">PayPal privat: ${eur(sums[OWN])} (nicht im Gesamt)</p>` : ""}
       <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-sum-print="${c ? c.id : ""}">🖨 Abrechnung drucken</button></div>
       ${openN ? `<p class="small" style="margin:6px 0 0;color:var(--danger)"><strong>Noch offen: ${eur(open)}</strong> (${openN} ${openN === 1 ? "Person" : "Personen"} nicht bezahlt)</p>` : '<p class="small" style="margin:6px 0 0;color:var(--ok)"><strong>✓ Alle haben bezahlt</strong></p>'}
     </div>`;
@@ -1680,7 +1684,7 @@
     if (!c) return;
     const all = await db.listRegistrations(c.id);
     const people = all.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen").sort(byName);
-    const sums = { bar: 0, paypal: 0, ueberweisung: 0 }; let open = 0;
+    const sums = { bar: 0, paypal: 0, ueberweisung: 0, paypal_privat: 0 }; let open = 0;
     people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else open += priceOf(r); });
     const paid = sums.bar + sums.paypal + sums.ueberweisung, withST = people.filter(r => r.package === "komplett").length;
     const pay = Object.fromEntries(PAY_KINDS);
@@ -1698,8 +1702,9 @@
         <tr><td>Teilnehmer</td><td class="r">${people.length}</td></tr>
         <tr><td>davon mit Sehtest</td><td class="r">${withST}</td></tr>
         <tr><td>davon ohne Sehtest</td><td class="r">${people.length - withST}</td></tr>
-        ${PAY_KINDS.map(([k, l]) => `<tr><td>${l}</td><td class="r">${eur(sums[k])}</td></tr>`).join("")}
+        ${PAY_KINDS.filter(([k]) => k !== OWN).map(([k, l]) => `<tr><td>${l}</td><td class="r">${eur(sums[k])}</td></tr>`).join("")}
         <tr class="tot"><td>Gesamt eingenommen</td><td class="r">${eur(paid)}</td></tr>
+        ${sums[OWN] ? `<tr><td>PayPal privat (nicht im Gesamt)</td><td class="r">${eur(sums[OWN])}</td></tr>` : ""}
         ${open ? `<tr class="open"><td>Noch offen</td><td class="r">${eur(open)}</td></tr>` : ""}
       </tbody></table></body></html>`;
     // Unsichtbarer Rahmen: Druckfenster öffnen, ohne die Verwaltung zu verlassen
@@ -1717,7 +1722,14 @@
     const pkg = ev.target.closest("[data-pkg]");
     if (pkg) { if (r.package !== pkg.dataset.pkg) await db.updateRegistration(r.id, { package: pkg.dataset.pkg }); return true; }
     const pay = ev.target.closest("[data-pay]");
-    if (pay) { await db.updateRegistration(r.id, { payment_method: r.payment_method === pay.dataset.pay ? null : pay.dataset.pay }); return true; }
+    if (pay) {
+      const method = r.payment_method === pay.dataset.pay ? null : pay.dataset.pay;
+      const patch = { payment_method: method };
+      if (method === "paypal" || method === "ueberweisung") patch.on_list = true;   // nachweisbar → automatisch auf die Teilnehmerliste
+      if (method === OWN) patch.on_list = false;                                     // PayPal privat → nicht auf die Liste
+      await db.updateRegistration(r.id, patch);
+      return true;
+    }
     const box = ev.target.closest("[data-onlist]");
     if (box) { await db.updateRegistration(r.id, { on_list: box.checked }); return true; }
     return false;

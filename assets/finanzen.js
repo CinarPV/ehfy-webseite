@@ -37,7 +37,7 @@
   // Einnahmen eines Kurses = wer „Auf Teilnehmerliste“ angekreuzt ist (genau wie auf der ausgedruckten Liste).
   // Betrag: alter Preis aus der Notiz, sonst das gebuchte Paket, minus Gutschein.
   function attendance(course) {
-    const here = regs.filter(r => r.course_id === course.id && r.on_list && r.status !== "storniert");
+    const here = regs.filter(r => r.course_id === course.id && r.on_list && r.status !== "storniert" && r.payment_method !== "paypal_privat");
     const price = r => {
       const old = /Preis:\s*([\d.,]+)\s*€/.exec(r.message || "");
       if (old) return num(old[1]);
