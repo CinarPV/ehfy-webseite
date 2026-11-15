@@ -3393,7 +3393,14 @@
     const D = window.EHFYDocs;
     // Deine Unterschrift kommt nur auf Bescheinigungen, die per E-Mail rausgehen
     if (kind === "bescheinigung") return D.certificates(await template("bescheinigung"), course, people, loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded, signature: forMail ? await signatureBytes() : null });
-    if (kind === "datenblatt") return D.datasheets(await template("datenblatt"), course, people, loadFont);
+    if (kind === "datenblatt") {
+      const sheets = await D.datasheets(await template("datenblatt"), course, people, loadFont);
+      if (people.length < 2) return sheets;
+      // Alle Datenblätter eines Kurses: vorne die ausgefüllte Dokumentation (§ 68 FeV)
+      const doc = await D.documentation(course, people.length, await issuer(), loadFont, {
+        helper: people.length > 15 ? DOC_HELPER : "", approval: DOC_APPROVAL, printed: new Date() });
+      return joinPdfs([doc, sheets]);
+    }
     if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course, preview));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course, preview), await issuer(), loadFont, cfg.documents.paymentDays);
     if (kind === "protokolle") {
@@ -3406,6 +3413,15 @@
       if (!list.length) throw new Error("Noch niemand für die Teilnehmerliste markiert. Bitte bei den Teilnehmern „Auf Teilnehmerliste“ ankreuzen.");
       return D.participantList(course, list, await issuer(), loadFont, cfg.packages);
     }
+  }
+  // Dokumentation: Ausbildungshelfer ab 16 Teilnehmenden, Anerkennung der Ausbildungsstelle
+  const DOC_HELPER = "Canan Sina";
+  const DOC_APPROVAL = "Anerkannt nach § 68 FeV durch Bezirksregierung Arnsberg · AZ: 25.01.30-001";
+  async function joinPdfs(parts) {
+    const { PDFDocument } = window.PDFLib;
+    const out = await PDFDocument.create();
+    for (const b of parts) { const d = await PDFDocument.load(b); (await out.copyPages(d, d.getPageIndices())).forEach(p => out.addPage(p)); }
+    return out.save();
   }
   const DOC_NAMES = { protokolle: "Sehtest-Protokolle", teilnehmerliste: "Teilnehmerliste", bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
   // „alles“: pro Teilnehmer Datenblatt, Bescheinigung und Quittung hintereinander

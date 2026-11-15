@@ -520,6 +520,61 @@
     return pdf.save();
   }
 
+  // ---------- Dokumentation einer Schulung in Erster Hilfe (§ 68 FeV) – ausgefüllt, als Deckblatt der Datenblätter ----------
+  async function documentation(course, count, issuer, loadFont, opts = {}) {
+    const { PDFDocument } = root.PDFLib;
+    const pdf = await PDFDocument.create();
+    const f = await fonts(pdf, loadFont);
+    const [W, H] = A4, L = 70;
+    const page = pdf.addPage(A4);
+    const ink = rgb(C.ink), muted = rgb(C.muted);
+    const t = (s, x, y, size = 11, font = f.regular, color = ink) => page.drawText(String(s), { x, y, size, font, color });
+    const center = (s, y, size, font = f.bold) => t(s, (W - font.widthOfTextAtSize(s, size)) / 2, y, size, font);
+    // Feld: Beschriftung, darunter ausgefüllt auf einer Linie
+    const field = (label, value, x, y, w) => {
+      t(label, x, y, 11, f.regular);
+      const lx = x + f.regular.widthOfTextAtSize(label, 11) + 6;
+      page.drawLine({ start: { x: lx, y: y - 3 }, end: { x: x + w, y: y - 3 }, thickness: 0.6, color: muted });
+      if (value) t(value, lx + 4, y, 11.5, f.bold);
+    };
+    const day = fmtDate(course.starts_at);
+    const time = d => new Date(d).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ }).replace(/:00$/, "");
+    const place = String(course.address || "").split(",").map(x => x.trim()).filter(Boolean);
+    const placeText = (place.length > 2 ? place.slice(-2) : place).join(", ") || `${issuer.street}, ${issuer.zip} ${issuer.city}`;
+    let y = H - 70;
+    center("Dokumentation", y, 15, f.black); y -= 24;
+    center("einer Schulung in Erster Hilfe", y, 14, f.bold); y -= 20;
+    center("im Sinne des § 68 der Fahrerlaubnis-Verordnung (FeV)", y, 10.5, f.regular); y -= 50;
+    field("Datum der Schulung:", day, L, y, 330); y -= 50;
+    t("Ausbildungsstelle:", L, y, 11); y -= 22;
+    t(issuer.name || "Erste Hilfe for you", L, y, 12, f.bold); y -= 16;
+    t(issuer.street || "Hagener Straße 20", L, y, 12, f.bold); y -= 16;
+    t(`${issuer.zip || "57072"} ${issuer.city || "Siegen"}`, L, y, 12, f.bold); y -= 20;
+    if (opts.approval) t(opts.approval, L, y, 9, f.regular, muted);
+    y -= 44;
+    t("Angaben zur Erste-Hilfe-Schulung:", L, y, 13, f.bold); y -= 40;
+    field("Datum:", day, L, y, 260);
+    t(`Uhrzeit:  von ${time(course.starts_at)} Uhr bis ${course.ends_at ? time(course.ends_at) : "17:30"} Uhr`, L + 280, y, 11); y -= 40;
+    field("Name der Lehrkraft:", issuer.owner || "", L, y, 455); y -= 30;
+    field("Ggf. Name des Ausbildungshelfers:", opts.helper || "", L, y, 455); y -= 44;
+    field("Schulungsort:", placeText, L, y, 455); y -= 34;
+    field("Anzahl Teilnehmenden:", String(count), L, y, 220);
+    t("(entspricht der Anzahl der Teilnehmerdatenblätter als Anlage)", L + 228, y, 9.5, f.regular, muted); y -= 30;
+    const small = (s) => { t(s, L, y, 9, f.regular, muted); y -= 12; };
+    small("Alle Teilnehmenden sind mit Namen, Vornamen, Geburtsdatum, Anschrift und Unterschrift auf einzelnen");
+    small("Teilnehmerdatenblättern zu erfassen."); y -= 8;
+    small("Diese Dokumentation mit den Teilnehmerdatenblättern ist fünf Jahre aufzubewahren und auf Anforderung");
+    small("der Anerkennungsbehörde vorzulegen.");
+    // Unterschrift / Stempel
+    y = 210;
+    t("Für die Richtigkeit der Angaben:", L, y, 11.5);
+    page.drawRectangle({ x: W - L - 210, y: 120, width: 210, height: 110, borderColor: rgb(C.line), borderWidth: 1, borderDashArray: [4, 3] });
+    t("Unterschrift der Lehrkraft und", W - L - 200, 140, 8, f.regular, muted);
+    t("Stempel der Ausbildungsstelle", W - L - 200, 129, 8, f.regular, muted);
+    field("Datum:", fmtDate(opts.printed || new Date()), L, 130, 220);
+    return pdf.save();
+  }
+
   // ---------- Teilnehmerliste (z. B. fürs Finanzamt): wer da war, Sehtest, Zahlart, Betrag, Unterschrift ----------
   const PAY = { bar: "bar", paypal: "PayPal", ueberweisung: "Überweisung" };
   async function participantList(course, people, issuer, loadFont, packages) {
@@ -631,5 +686,5 @@
   }
 
 
-  root.EHFYDocs = { participantList, certificates, datasheets, receipts, invoice, invoices, bundle, receiptItems, fmtDate, sehtestProtocols };
+  root.EHFYDocs = { documentation, participantList, certificates, datasheets, receipts, invoice, invoices, bundle, receiptItems, fmtDate, sehtestProtocols };
 })(typeof window !== "undefined" ? window : globalThis);
