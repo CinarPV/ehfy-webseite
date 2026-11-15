@@ -578,9 +578,31 @@
   // Teilnehmer manuell eintragen
   const rdlg = $("reg-dialog");
   EHFY.birthField($("rd-birth"));
-  let addCourse = null, addId = null;
+  let addCourse = null, addId = null, editReg = null;
+  function regDialogMode(edit) {
+    rdlg.querySelector("h2").textContent = edit ? "Schüler-Daten ändern" : "Schüler nachträglich eintragen";
+    rdlg.querySelector(".muted.small").classList.toggle("hidden", edit);
+    rdlg.querySelector('button[value="save"]').textContent = edit ? "Speichern" : "Eintragen";
+    rdlg.querySelector('button[value="sehtest"]').classList.toggle("hidden", edit);
+  }
+  // Daten eines Schülers ändern (Name, Geburtsdatum, Adresse, Kontakt, Buchung)
+  function openEdit(r) {
+    editReg = r; addCourse = null; addId = null;
+    $("reg-form").reset(); $("rd-error").textContent = ""; $("rd-idinfo").innerHTML = "";
+    regDialogMode(true);
+    const c = attById[r.course_id] || courses.find(x => x.id === r.course_id);
+    $("rd-course").textContent = c ? `Kurs: ${dayText(c.starts_at)} · ${c.location}` : "Nur Sehtest";
+    $("rd-first").value = r.first_name || ""; $("rd-last").value = r.last_name || "";
+    $("rd-birth").value = r.birth_date ? birthText(r.birth_date) : "";
+    $("rd-pkg").value = r.package === "komplett" ? "komplett" : "kurs";
+    $("rd-email").value = r.email || ""; $("rd-phone").value = r.phone || "";
+    $("rd-street").value = r.street || ""; $("rd-zip").value = r.zip || ""; $("rd-city").value = r.city || "";
+    $("rd-here-box").classList.add("hidden");
+    rdlg.showModal();
+  }
   function openAdd(c) {
-    addCourse = c; addId = null;
+    addCourse = c; addId = null; editReg = null;
+    regDialogMode(false);
     $("reg-form").reset(); $("rd-error").textContent = ""; $("rd-idinfo").innerHTML = "";
     $("rd-course").textContent = `Kurs: ${dayText(c.starts_at)} · ${c.location}`;
     // Am Kurstag oder danach: gleich als „da“ eintragen
@@ -602,6 +624,21 @@
     ev.preventDefault();
     const birth = EHFY.parseBirth($("rd-birth").value);
     if ($("rd-birth").value.trim() && !birth) { $("rd-error").textContent = "Bitte das Geburtsdatum so eingeben: TT.MM.JJJJ."; return; }
+    if (editReg) {
+      try {
+        await db.updateRegistration(editReg.id, {
+          first_name: $("rd-first").value.trim(), last_name: $("rd-last").value.trim(), birth_date: birth,
+          ...(editReg.sehtest_only ? {} : { package: $("rd-pkg").value }),
+          email: $("rd-email").value.trim() || null, phone: $("rd-phone").value.trim() || null,
+          street: $("rd-street").value.trim() || null, zip: $("rd-zip").value.trim() || null, city: $("rd-city").value.trim() || null
+        });
+        editReg = null; rdlg.close();
+        if (current && !$("participants-view").classList.contains("hidden")) await loadRegs();
+        if (!$("students-view").classList.contains("hidden")) await loadStudents();
+        await loadCourses();
+      } catch (e) { $("rd-error").textContent = e.message; }
+      return;
+    }
     try {
       const c = addCourse || current;
       const row = await db.addRegistration({
@@ -1649,7 +1686,8 @@
     if (withResult) patch.sehtest_passed = all.state === "bestanden";
     // Sehtest gemacht → automatisch „Mit Sehtest“, aber nur bei QR/von Hand Eingetragenen (online weiß man es schon).
     // Nur beim ersten Ergebnis, damit eine spätere Änderung von Hand bleibt.
-    if (withResult && unsurePkg(r) && r.sehtest_passed == null) patch.package = "komplett";
+    // Sehtest gemacht = 55 € (Kurs + Sehtest), für alle. Danach von Hand änderbar.
+    if (withResult && !r.sehtest_only && r.package !== "komplett" && r.sehtest_passed == null) patch.package = "komplett";
     if (withResult && !r.payment_method) { $("sd-error").textContent = "Bitte zuerst bei ② eintragen, wie bezahlt wurde (Bar, PayPal oder Überweisung)."; $("sd-step2").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     if (withResult && !patch.sehtest_id_no && !confirm("Es ist keine Ausweis-Nr. eingetragen. Trotzdem abschließen?")) { $("sd-idno").focus(); return; }
     if (withResult && !r.sehtest_nr) {
@@ -1959,8 +1997,8 @@
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button></div>`}
       ${away ? `<div class="att-fee">${feeControls(r)}</div>` : pkgRow(r)}
-      ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Löschen …</summary>
-        <div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-att-del style="color:var(--danger)">✕ Schüler komplett löschen (z. B. doppelt eingetragen)</button></div></details>`}
+      ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Daten ändern, löschen …</summary>
+        <div class="att-btns"><button class="btn btn-sm" type="button" data-reg-edit>✎ Daten ändern (Name, Adresse, Geburtsdatum …)</button><button class="btn btn-sm btn-ghost" type="button" data-att-del style="color:var(--danger)">✕ Schüler komplett löschen (z. B. doppelt eingetragen)</button></div></details>`}
     </div>`;
   }
   // Sehtest: antippen öffnet den Sehtest (Ausweis, bezahlt, Test, Protokoll)
@@ -1983,6 +2021,7 @@
   function rowPay(r) {
     return `<div class="att-row" data-att="${r.id}">${nameBlock(r, ` · <strong>${eur(priceOf(r))}</strong>${r.package === "komplett" ? " (mit Sehtest)" : ""}`)}
       ${payOnly(r)}
+      ${r.street && r.city ? "" : '<button class="btn btn-sm btn-ghost" type="button" data-reg-edit style="color:var(--danger)">Adresse fehlt – eintragen</button>'}
       <details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Gutschein …</summary>${discountControls(r)}</details>
     </div>`;
   }
@@ -2036,9 +2075,10 @@
     let [regsAll] = await Promise.all([db.listAllRegistrations()]);
     // Einmalig: Wer schon einen bestätigten Sehtest hat, aber (QR/von Hand) noch „Ohne Sehtest“ steht → „Mit Sehtest“
     try {
-      if (!localStorage.getItem("ehfy-pkgfix-1")) {
-        localStorage.setItem("ehfy-pkgfix-1", "1");
-        const fix = regsAll.filter(r => unsurePkg(r) && r.sehtest_passed != null && !r.sehtest_void_at && r.status !== "storniert");
+      if (!localStorage.getItem("ehfy-pkgfix-2")) {
+        localStorage.setItem("ehfy-pkgfix-2", "1");
+        const fix = regsAll.filter(r => !r.sehtest_only && r.package !== "komplett" && r.sehtest_passed != null && !r.sehtest_void_at && r.status !== "storniert"
+          && r.course_id && (attById[r.course_id] || courses.find(c => c.id === r.course_id)) && localDate(new Date((courses.find(c => c.id === r.course_id) || {}).starts_at || 0)) >= "2026-11-14");
         for (const r of fix) await db.updateRegistration(r.id, { package: "komplett" });
         if (fix.length) regsAll = await db.listAllRegistrations();
       }
@@ -2300,6 +2340,7 @@
     if (r) {
       try { if (await payClick(ev, r)) { await loadCourses(); return; } } catch (e) { errBox.textContent = e.message; return; }
     }
+    if (r && ev.target.closest("[data-reg-edit]")) return openEdit(r);
     if (r && ev.target.closest("[data-att-del]")) {
       const keep = protoDone(r);
       if (!confirm(`${r.first_name} ${r.last_name} wirklich komplett löschen?` + (keep
@@ -2419,7 +2460,7 @@
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="quittung">Quittung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="rechnung">Rechnung</button>
       </div>`}
-      <div><button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
+      <div><button class="btn btn-sm" type="button" data-reg-edit>✎ Daten ändern</button> <button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
     </div>`;
   }
   // Anmeldung löschen. Hat die Person den Sehtest abgeschlossen (oder ein hochgeladenes Protokoll),
@@ -2519,6 +2560,7 @@
     }
     const printKind = ev.target.closest("[data-sc-print]");
     if (printKind) return runDoc(printKind.dataset.scPrint, [r], courseFor(r), show);
+    if (ev.target.closest("[data-reg-edit]")) return openEdit(r);
     if (ev.target.closest("[data-sc-del]")) {
       if (!confirm(`${r.first_name} ${r.last_name} endgültig aus der Liste löschen?${protoDone(r) ? "\n\nDas Sehtest-Protokoll bleibt erhalten (unter Sehtests)." : ""}`)) return;
       try { await removeRegistration(r); await loadStudents(); } catch (e) { show(e.message); }
