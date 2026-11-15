@@ -1946,15 +1946,78 @@
           <button class="btn btn-sm btn-teal" type="button" data-course-act="add">+ Schüler nachträglich eintragen</button>
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
   }
-  function attFolder(c) {
+  // ---------- Kurstag: drei Seiten – Anwesenheit, Sehtest, Bezahlung ----------
+  let attTab = (() => { try { return localStorage.getItem("ehfy-att-tab") || "anwesenheit"; } catch (e) { return "anwesenheit"; } })();
+  const isST = r => r.package === "komplett" || r.sehtest_only || !!r.sehtest_nr || r.sehtest_passed != null;
+  const nameBlock = (r, extra = "") => `<div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${lateCancel(r) ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}${dupTag(r)}
+      <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${extra}</span>${absent(r) ? "" : debtTag(r)}</div>`;
+  // Anwesenheit: da / nicht da, Sehtest ja / nein
+  function rowAtt(r) {
+    const late = lateCancel(r), away = absent(r);
+    return `<div class="att-row" data-att="${r.id}">${nameBlock(r)}
+      ${late ? "" : `<div class="att-btns">
+        <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
+        <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button></div>`}
+      ${away ? `<div class="att-fee">${feeControls(r)}</div>` : pkgRow(r)}
+      ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Löschen …</summary>
+        <div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-att-del style="color:var(--danger)">✕ Schüler komplett löschen (z. B. doppelt eingetragen)</button></div></details>`}
+    </div>`;
+  }
+  // Sehtest: antippen öffnet den Sehtest (Ausweis, bezahlt, Test, Protokoll)
+  function rowST(r) {
+    let state;
+    if (r.sehtest_void_at) state = '<span class="chip">Ausschuss</span>';
+    else if (r.sehtest_passed === true) state = `<span class="chip ok">bestanden · Nr. ${esc(r.sehtest_nr || "–")}</span>`;
+    else if (r.sehtest_passed === false) state = `<span class="chip no">nicht bestanden${r.sehtest_nr ? " · Nr. " + esc(r.sehtest_nr) : ""}</span>`;
+    else state = `<span class="chip">${stStarted(r) ? "angefangen" : "offen"}</span>`;
+    const cert = r.sehtest_passed === true && r.sehtest_nr && !r.sehtest_void_at
+      ? `<button class="chip-btn ${r.sehtest_issued_at ? "on" : ""}" type="button" data-st-issued aria-pressed="${!!r.sehtest_issued_at}">📄 Bescheinigung ${r.sehtest_issued_at ? "geschrieben ✓" : "schreiben – antippen, wenn erledigt"}</button>` : "";
+    return `<div class="att-row" data-att="${r.id}">
+      <button class="st-pick" type="button" data-st-run>${nameBlock(r, `${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ' · <span style="color:var(--danger)">Ausweis-Nr. fehlt</span>'}`)}<span class="st-pick-go">${r.sehtest_passed != null ? "Öffnen ›" : "Sehtest ›"}</span></button>
+      <div class="att-chips">${state}${r.payment_method ? `<span class="chip ok">✓ ${esc(payLabel(r.payment_method))}</span>` : '<span class="chip no">nicht bezahlt</span>'}${cert}
+        <button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>
+        ${r.sehtest_nr && !r.sehtest_void_at ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest</button><button class="btn btn-sm btn-ghost" type="button" data-st-void style="color:var(--danger)">Ausschuss</button>' : ""}</div>
+    </div>`;
+  }
+  // Bezahlung: Betrag, Zahlart, Teilnehmerliste, Gutschein
+  function rowPay(r) {
+    return `<div class="att-row" data-att="${r.id}">${nameBlock(r, ` · <strong>${eur(priceOf(r))}</strong>${r.package === "komplett" ? " (mit Sehtest)" : ""}`)}
+      ${payOnly(r)}
+      <details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Gutschein …</summary>${discountControls(r)}</details>
+    </div>`;
+  }
+  // Ist am Kurs alles eingetragen? Dann wandert er nach unten zu „Vergangene Kurse“
+  function courseOpenItems(c) {
+    const people = attRegs.filter(r => r.course_id === c.id && r.status !== "storniert");
+    const here = people.filter(r => r.status === "teilgenommen");
+    const n = { unchecked: people.filter(r => r.status === "angemeldet").length,
+      unpaid: here.filter(r => !r.payment_method).length,
+      sehtest: here.filter(r => isST(r) && !r.sehtest_void_at && (r.sehtest_passed == null || (r.sehtest_passed === true && !r.sehtest_issued_at))).length };
+    return n;
+  }
+  const openText = n => [n.unchecked && `${n.unchecked} nicht abgehakt`, n.unpaid && `${n.unpaid} nicht bezahlt`, n.sehtest && `${n.sehtest} Sehtest offen`].filter(Boolean).join(" · ");
+  function attFolder(c, active) {
     const list = attPeople(c);
     const yes = list.filter(r => r.status === "teilgenommen").length, no = list.filter(absent).length;
-    const open = true; // Am Kurstag ist die Liste immer offen
+    const open = active || attOpen.has(c.id);
     const off = c.status === "abgesagt";
-    const tools = courseTools(c);
+    const todo = off ? "" : openText(courseOpenItems(c));
+    const sub = off ? "ABGESAGT" : `${list.length} angemeldet · ${yes} da · ${no} nicht da${todo ? ` · <span style="color:var(--danger)">${todo}</span>` : " · ✓ alles erledigt"}`;
+    let body = "";
+    if (open) {
+      if (off) body = courseTools(c) + list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("");
+      else if (attTab === "sehtest") {
+        const st = list.filter(r => !absent(r) && isST(r)), rest = list.filter(r => !absent(r) && !isST(r));
+        body = (st.length ? st.map(rowST).join("") : '<p class="small muted">Niemand mit Sehtest. Auf der Seite „Anwesenheit“ bei „Mit Sehtest“ antippen.</p>')
+          + (rest.length ? `<p class="small muted" style="margin-top:10px">Ohne Sehtest: ${rest.map(r => esc(`${r.first_name} ${r.last_name}`)).join(", ")}</p>` : "");
+      } else if (attTab === "bezahlung") {
+        const here = list.filter(r => !absent(r));
+        body = (here.length ? here.map(rowPay).join("") : '<p class="small muted">Noch niemand da.</p>') + (attWords().length ? "" : courseSummary(list, c));
+      } else body = courseTools(c) + (list.length ? list.map(rowAtt).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
+    }
     return `<details class="att-folder" data-folder="${c.id}" ${open ? "open" : ""}>
-      <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${off ? "ABGESAGT" : `${list.length} angemeldet · ${yes} da · ${no} nicht da`}</small></summary>
-      <div class="att-body">${open ? tools + (off ? list.map(r => `<div class="att-row"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}</div></div>`).join("") : attBody(list) + (attWords().length ? "" : courseSummary(list, c))) : ""}</div></details>`;
+      <summary>${dayText(c.starts_at)} · ${esc(c.location)} <small>${sub}</small></summary>
+      <div class="att-body">${body}</div></details>`;
   }
   const attBody = list => (list.length ? list.map(attRow).join("") : '<p class="small muted">Noch keine Anmeldungen.</p>');
   function chanceRow(r) {
@@ -1984,10 +2047,19 @@
     attById = Object.fromEntries(courses.map(c => [c.id, c]));
     const today = localDate(new Date());
     // Die Anwesenheit zeigt nur den Kurstag. Abgehakt wird danach unter „Termine“.
-    const folders = courses.filter(c => localDate(new Date(c.starts_at)) === today);
+    // Oben: heute und vergangene Kurse (ab Neustart 14.11.2026), bei denen noch etwas fehlt.
+    // Ist alles eingetragen, rutscht der Kurs nach unten zu „Vergangene Kurse“.
+    const SINCE = "2026-11-14";
+    const past = courses.filter(c => { const k = localDate(new Date(c.starts_at)); return k < today && k >= SINCE && c.status !== "abgesagt"; })
+      .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
+    const pending = c => openText(courseOpenItems(c)) !== "";
+    const folders = [...courses.filter(c => localDate(new Date(c.starts_at)) === today), ...past.filter(pending)];
+    const done = past.filter(c => !pending(c));
     const next = courses.filter(c => localDate(new Date(c.starts_at)) > today && c.status !== "abgesagt").sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
-    $("att-cards").innerHTML = folders.length ? folders.map(attFolder).join("")
-      : `<p class="muted">Heute ist kein Kurs.${next ? ` Nächster Kurs: <strong>${dayText(next.starts_at)} in ${esc(next.location)}</strong>.` : ""} Teilnehmer abhaken und Sehtests machen geht jederzeit unter „Termine“ → Kurs antippen.</p>`;
+    document.querySelectorAll("#att-tabs [data-att-tab]").forEach(b => b.classList.toggle("active", b.dataset.attTab === attTab));
+    $("att-cards").innerHTML = (folders.length ? folders.map(c => attFolder(c, true)).join("")
+      : `<p class="muted">Heute ist kein Kurs.${next ? ` Nächster Kurs: <strong>${dayText(next.starts_at)} in ${esc(next.location)}</strong>.` : ""}</p>`)
+      + (done.length ? `<h3 class="start-h" style="margin:22px 0 8px">Vergangene Kurse (alles erledigt)</h3>${done.map(c => attFolder(c, false)).join("")}` : "");
     // Ältere Kurse ohne Häkchen: stehen unter „Termine“, bis ✓ Da oder ✗ Nicht da gesetzt ist
     const unchecked = attRegs.filter(r => r.status === "angemeldet" && courseOf(r)
       && courseOf(r).status !== "abgesagt" && localDate(new Date(courseOf(r).starts_at)) < today)
@@ -2033,6 +2105,7 @@
   $("att-section").addEventListener("toggle", ev => {
     const box = ev.target;
     if (!box.matches || !box.matches("details[data-folder]") || attWords().length) return;
+    if (box.querySelector(".att-body") && box.open && box.querySelector(".att-body").children.length) return; // schon gefüllt
     const key = box.dataset.folder;
     if (box.open) {
       if (attOpen.has(key)) return; // beim Neuaufbau bleibt alles, wie es ist
@@ -2045,6 +2118,13 @@
     } else attOpen.delete(key);
   }, true);
   $("att-filter").addEventListener("input", renderAttendance);
+  $("att-tabs").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-att-tab]");
+    if (!b) return;
+    attTab = b.dataset.attTab;
+    try { localStorage.setItem("ehfy-att-tab", attTab); } catch (e) { /* egal */ }
+    renderAttendance();
+  });
   $("att-section").addEventListener("change", async ev => {
     const input = discountField(ev.target);
     if (!input) return;
