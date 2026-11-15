@@ -814,3 +814,18 @@ dialog.sign-big::backdrop { background: #fff; }
 .sum-cell b { font-size: 1.15rem; }
 .sum-cell.strong { background: var(--aid); }
 .sum-cell.strong span { color: var(--ink); }
+
+/* Kurstag kompakt: Stand auf einen Blick */
+.att-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 2px; }
+.chip { display: inline-block; padding: 5px 11px; border-radius: 999px; font-size: .84rem; font-weight: 700; background: var(--soft); color: var(--ink); }
+.chip.ok { background: var(--aid); color: var(--ink); }
+.chip.no { background: var(--danger); color: #fff; }
+.chip-btn { border: 2px dashed var(--danger); background: #fff; color: var(--danger); border-radius: 999px; padding: 6px 13px; font: inherit; font-size: .88rem; font-weight: 800; cursor: pointer; min-height: 38px; }
+.chip-btn.on { border: 2px solid var(--ok); background: var(--ok); color: #fff; }
+.att-more > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+
+/* Zahlungen */
+.pay-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.pay-table th, .pay-table td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.pay-table th { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.pay-table td.num, .pay-table th.num { text-align: right; white-space: nowrap; }

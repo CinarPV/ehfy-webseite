@@ -1122,6 +1122,7 @@
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "sehtests") { $("sehtest-view").classList.remove("hidden"); loadSehtests(); }
     if (b.dataset.view === "gebuehren") { $("fee-view").classList.remove("hidden"); loadCourses(); }
+    if (b.dataset.view === "zahlungen") { $("pay-view").classList.remove("hidden"); loadPayments().catch(e => { $("pay-error").textContent = e.message; }); }
     if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
     if (b.dataset.view === "vorlagen") { $("templates-view").classList.remove("hidden"); renderTemplates(); renderBank(); renderPush(); }
@@ -1657,7 +1658,8 @@
   const pkgRow = r => r.sehtest_only ? "" : `<div class="att-btns pkg-row"><span class="small">Sehtest:</span>
       <button class="btn btn-sm btn-ghost att-btn ${r.package !== "komplett" ? "on-yes" : ""}" type="button" data-pkg="kurs" aria-pressed="${r.package !== "komplett"}">Ohne Sehtest</button>
       <button class="btn btn-sm btn-ghost att-btn ${r.package === "komplett" ? "on-yes" : ""}" type="button" data-pkg="komplett" aria-pressed="${r.package === "komplett"}">👁 Mit Sehtest</button></div>`;
-  const payRow = r => pkgRow(r) + `<div class="att-btns pay-row">${r.payment_method ? '<span class="pay-tag paid">✓ Bezahlt</span>' : '<span class="pay-tag unpaid">Nicht bezahlt</span>'}${PAY_KINDS.map(([k, l]) =>
+  const payRow = r => pkgRow(r) + payOnly(r);
+  const payOnly = r => `<div class="att-btns pay-row">${r.payment_method ? '<span class="pay-tag paid">✓ Bezahlt</span>' : '<span class="pay-tag unpaid">Nicht bezahlt</span>'}${PAY_KINDS.map(([k, l]) =>
       `<button class="btn btn-sm btn-ghost att-btn ${r.payment_method === k ? "on-paid" : ""}" type="button" data-pay="${k}" aria-pressed="${r.payment_method === k}">${l}</button>`).join("")}
     <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
   // ---------- Kurs-Abrechnung (ganz unten bei jedem Kurs): mit/ohne Sehtest, Geld je Zahlart, gesamt ----------
@@ -1794,21 +1796,87 @@
   // Hat dieselbe Person von früher noch eine offene oder nicht bezahlte Ausfallgebühr?
   const oldDebt = r => attRegs.find(x => x.id !== r.id && (x.fee_state === "rechnung" || x.fee_state === "unbezahlt") && samePerson(x, r) && courseOf(x));
   const debtTag = r => { const d = oldDebt(r); return d ? `<span class="pay-tag unpaid" style="margin-top:4px">⚠ Offene Ausfallgebühr ${FEE} € (Kurs ${shortDay(courseOf(d).starts_at)})</span>` : ""; };
+  // ---------- Rubrik „Zahlungen“: je Kurs Name, Betrag, bezahlt?, Zahlart, Rechnung/Quittung, Ausfallgebühren ----------
+  let payCourseId = null;
+  async function loadPayments() {
+    const all = await db.listAllRegistrations();
+    const today = localDate(new Date());
+    const list = courses.filter(c => c.status !== "abgesagt" && localDate(new Date(c.starts_at)) <= today)
+      .sort((a, b) => b.starts_at.localeCompare(a.starts_at)).slice(0, 60);
+    if (!list.length) { $("pay-list").innerHTML = '<p class="muted">Noch keine vergangenen Kurse.</p>'; return; }
+    if (!payCourseId || !list.some(c => c.id === payCourseId)) payCourseId = list[0].id;
+    $("pay-course").innerHTML = list.map(c => {
+      const n = all.filter(r => r.course_id === c.id && r.status !== "storniert" && r.status !== "nicht_erschienen");
+      const open = n.filter(r => !r.payment_method).length;
+      return `<option value="${c.id}"${c.id === payCourseId ? " selected" : ""}>${dayText(c.starts_at)} · ${esc(c.location)}${open ? ` · ${open} offen` : ""}</option>`;
+    }).join("");
+    const regsC = all.filter(r => r.course_id === payCourseId && (r.status !== "storniert" || r.fee_state)).sort(byName);
+    const invs = regsC.length ? await db.invoicesForRegistrations(regsC.map(r => r.id)).catch(() => []) : [];
+    const docOf = r => invs.filter(i => i.registration_id === r.id);
+    const feeText = { rechnung: "Rechnung gesendet, offen", bezahlt: "bezahlt", unbezahlt: "nicht bezahlt", chance: "zweite Chance läuft", erlassen: "gutgeschrieben", erledigt: "erledigt" };
+    const onlyOpen = $("pay-open").checked;
+    let rows = "", sum = 0, sumOpen = 0, own = 0;
+    for (const r of regsC) {
+      const away = r.status === "nicht_erschienen" || r.status === "storniert";
+      const docs = docOf(r).map(i => `${i.type === "rechnung" ? "Rechnung" : "Quittung"} ${esc(i.number || "Entwurf")}${i.status === "bezahlt" ? " ✓" : i.status === "offen" && i.type === "rechnung" ? " (offen)" : ""}`).join("<br>") || "–";
+      if (away) {
+        if (!r.fee_state && r.status === "storniert") continue;
+        const paid = r.fee_state === "bezahlt";
+        if (onlyOpen && (paid || r.fee_state === "erlassen" || r.fee_state === "erledigt")) continue;
+        rows += `<tr><td>${esc(r.last_name)}</td><td>${esc(r.first_name)}</td><td class="num">${eur(FEE)}</td>
+          <td><span class="chip ${paid ? "ok" : "no"}">${paid ? "✓ bezahlt" : "nicht bezahlt"}</span></td>
+          <td class="small">Ausfallgebühr · ${feeText[r.fee_state] || "noch nicht angeschrieben"}</td><td class="small">${docs}</td></tr>`;
+        continue;
+      }
+      const price = priceOf(r), paid = !!r.payment_method;
+      if (onlyOpen && paid) continue;
+      if (r.payment_method === OWN) own += price; else if (paid) sum += price; else sumOpen += price;
+      rows += `<tr><td>${esc(r.last_name)}</td><td>${esc(r.first_name)}</td><td class="num">${eur(price)}</td>
+        <td><span class="chip ${paid ? "ok" : "no"}">${paid ? "✓ bezahlt" : "nicht bezahlt"}</span></td>
+        <td class="small">${paid ? esc(payLabel(r.payment_method)) : "–"}${r.package === "komplett" ? " · mit Sehtest" : ""}${r.on_list ? " · auf Liste" : ""}</td><td class="small">${docs}</td></tr>`;
+    }
+    $("pay-list").innerHTML = `<table class="pay-table"><thead><tr><th>Nachname</th><th>Vorname</th><th class="num">Betrag</th><th>Status</th><th>Zahlart</th><th>Rechnung / Quittung</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="muted">Niemand.</td></tr>'}</tbody></table>
+      <p style="margin:12px 0 0"><strong>Bezahlt: ${eur(sum)}</strong>${sumOpen ? ` · <strong style="color:var(--danger)">Offen: ${eur(sumOpen)}</strong>` : ""}${own ? ` · <span class="muted">PayPal privat: ${eur(own)} (nicht im Gesamt)</span>` : ""}</p>`;
+  }
+  $("pay-course").addEventListener("change", () => { payCourseId = $("pay-course").value; loadPayments().catch(e => { $("pay-error").textContent = e.message; }); });
+  $("pay-open").addEventListener("change", () => loadPayments().catch(e => { $("pay-error").textContent = e.message; }));
+
+  // Kurstag: oben das Wichtigste (Name, Geb., Ausweis, Da/Nicht da, mit/ohne Sehtest, Stand auf einen Blick),
+  // alles andere (Zahlart, Sehtest-Knöpfe, Gutschein) aufklappbar. Aufgeklappte Zeilen bleiben offen.
+  const attMoreOpen = new Set();
+  function attChips(r) {
+    const chips = [];
+    chips.push(r.payment_method ? `<span class="chip ok">✓ ${esc(payLabel(r.payment_method))}</span>` : '<span class="chip no">Nicht bezahlt</span>');
+    if (r.sehtest_void_at) chips.push('<span class="chip">Sehtest: Ausschuss</span>');
+    else if (r.sehtest_passed === true) chips.push(`<span class="chip ok">👁 bestanden${r.sehtest_nr ? " · " + esc(r.sehtest_nr) : ""}</span>`);
+    else if (r.sehtest_passed === false) chips.push(`<span class="chip no">👁 nicht bestanden</span>`);
+    else if (r.package === "komplett" || r.sehtest_only) chips.push(`<button class="btn btn-sm" type="button" data-st-run>👁 ${stStarted(r) ? "Sehtest weitermachen" : "Sehtest durchführen"}</button>`);
+    // Bescheinigung: ein Tipp genügt
+    if (r.sehtest_passed === true && r.sehtest_nr && !r.sehtest_void_at)
+      chips.push(`<button class="chip-btn ${r.sehtest_issued_at ? "on" : ""}" type="button" data-st-issued aria-pressed="${!!r.sehtest_issued_at}">📄 Bescheinigung ${r.sehtest_issued_at ? "geschrieben ✓" : "schreiben – antippen, wenn erledigt"}</button>`);
+    return `<div class="att-chips">${chips.join("")}</div>`;
+  }
   function attRow(r) {
-    const late = lateCancel(r);
+    const late = lateCancel(r), away = absent(r);
     return `<div class="att-row" data-att="${r.id}">
       <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}
-        <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span>${absent(r) ? "" : debtTag(r)}</div>
+        <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · <strong>Sehtest gebucht</strong>" : ""}</span>${away ? "" : debtTag(r)}</div>
       ${late ? "" : `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>`}
-      ${absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
-      ${!absent(r) ? sehtestQuick(r) : ""}
-      ${!absent(r) ? `<details class="att-more"><summary>Mehr: Gutschein</summary>
-        ${discountControls(r)}</details>` : ""}
+      ${away ? `<div class="att-fee">${feeControls(r)}</div>` : pkgRow(r) + attChips(r)}
+      ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary>Bezahlung, Sehtest, Gutschein …</summary>
+        ${payOnly(r)}
+        <div class="att-btns st-quick">${r.package === "komplett" || r.sehtest_only || r.sehtest_nr ? `<button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>` : ""}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}${r.sehtest_nr && !r.sehtest_void_at ? '<button class="btn btn-sm btn-ghost" type="button" data-st-void style="color:var(--danger)">Ausschuss</button>' : ""}</div>
+        ${discountControls(r)}</details>`}
     </div>`;
   }
+  ["att-section", "att-unchecked"].forEach(id => $(id).addEventListener("toggle", ev => {
+    const d = ev.target.closest && ev.target.closest("details[data-more]");
+    if (d) d.open ? attMoreOpen.add(d.dataset.more) : attMoreOpen.delete(d.dataset.more);
+  }, true));
   const attWords = () => $("att-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
   const attPeople = c => {
     const words = attWords();
