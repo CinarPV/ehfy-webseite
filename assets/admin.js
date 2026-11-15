@@ -1712,7 +1712,7 @@
       <div class="sum-grid">${cell("Teilnehmer", people.length)}${cell("Mit Sehtest", withST)}${cell("Ohne Sehtest", people.length - withST)}</div>
       <div class="sum-grid">${PAY_KINDS.filter(([k]) => k !== OWN).map(([k, l]) => cell(l, eur(sums[k]))).join("")}${cell("Gesamt eingenommen", eur(paid), true)}</div>
       ${sums[OWN] ? `<p class="small muted" style="margin:0">PayPal privat: ${eur(sums[OWN])} (nicht im Gesamt)</p>` : ""}
-      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-sum-print="${c ? c.id : ""}">🖨 Abrechnung drucken</button></div>
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-list-print="${c ? c.id : ""}">🖨 Teilnehmerliste (Preise &amp; Unterschriften)</button> <button class="btn btn-sm btn-ghost" type="button" data-sum-print="${c ? c.id : ""}">Abrechnung drucken</button></div>
       ${openN ? `<p class="small" style="margin:6px 0 0;color:var(--danger)"><strong>Noch offen: ${eur(open)}</strong> (${openN} ${openN === 1 ? "Person" : "Personen"} nicht bezahlt)</p>` : '<p class="small" style="margin:6px 0 0;color:var(--ok)"><strong>✓ Alle haben bezahlt</strong></p>'}
     </div>`;
   }
@@ -1752,6 +1752,17 @@
     f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
     setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } finally { setTimeout(() => f.remove(), 60000); } }, 300);
   }
+  // Teilnehmerliste (mit Preisen und Unterschriften) direkt drucken – von überall mit einem Tipp
+  async function printCourseList(courseId, showError) {
+    const c = courses.find(x => x.id === courseId) || attById[courseId];
+    if (!c) return;
+    const people = (await db.listRegistrations(c.id)).filter(r => r.status !== "storniert").sort(byName);
+    await runDoc("teilnehmerliste", people, c, showError);
+  }
+  document.addEventListener("click", ev => {
+    const l = ev.target.closest("[data-list-print]");
+    if (l) printCourseList(l.dataset.listPrint, msg => showError(msg)).catch(e => showError(e.message));
+  });
   document.addEventListener("click", ev => {
     const b = ev.target.closest("[data-sum-print]");
     if (b) printSummary(b.dataset.sumPrint).catch(e => showError(e.message));
@@ -1931,7 +1942,8 @@
       ? `<div class="att-row" data-course="${c.id}"><span class="small"><strong>Abgesagt${c.cancel_reason ? ": " + esc(c.cancel_reason) : ""}</strong>${c.cancel_notified_at ? ` · informiert am ${shortDay(c.cancel_notified_at)}` : ""}</span>
           <div class="att-btns">${withMail && !c.cancel_notified_at ? `<button class="btn btn-sm" type="button" data-course-act="notify">Teilnehmer informieren (${withMail})</button>` : ""}
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
-      : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm btn-teal" type="button" data-course-act="add">+ Schüler nachträglich eintragen</button>
+      : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm" type="button" data-course-act="list">🖨 Teilnehmerliste mit Preisen &amp; Unterschriften</button>
+          <button class="btn btn-sm btn-teal" type="button" data-course-act="add">+ Schüler nachträglich eintragen</button>
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
   }
   function attFolder(c) {
@@ -2198,6 +2210,7 @@
         }
         if (act.dataset.courseAct === "notify") await notifyCancelled(c);
         if (act.dataset.courseAct === "add") openAdd(c);
+        if (act.dataset.courseAct === "list") await printCourseList(c.id, msg => { errBox.textContent = msg; });
       } catch (e) { errBox.textContent = e.message; }
       return;
     }

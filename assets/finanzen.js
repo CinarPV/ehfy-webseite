@@ -24,6 +24,9 @@
   const pickedTrips = new Set();
 
   const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], fees: [], other: [], expenses: [], trips: [], routes: [], tripsDone: {} });
+  // Neuanfang: Kurstage vor dem 14.11.2026 zählen nicht und werden nicht angezeigt
+  const START = "2026-11-14";
+  const HOME_KM = 6.5; // einfache Strecke von zu Hause zum Kursort
   const inYear = key => String(key || "").slice(0, 4) === String(year);
   const sum = (list, f) => round2(list.reduce((s, x) => s + num(f(x)), 0));
 
@@ -48,7 +51,7 @@
     return { count: here.length, discount: round2(here.reduce((s, r) => s + off(r), 0)), amount: round2(here.reduce((s, r) => s + price(r) - off(r), 0)) };
   }
   const coursesOfYear = () => courses
-    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k <= today() && c.status !== "abgesagt"; })
+    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k >= START && k <= today() && c.status !== "abgesagt"; })
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
 
   function locationNames() {
@@ -128,7 +131,7 @@
 
       <div class="card fin-card">
         <h3>Kurstage übernehmen</h3>
-        <p class="small muted">Tage anhaken und übernehmen. Gezählt werden Teilnehmer mit ✓ Da. Erneutes Übernehmen überschreibt den Tag, auch deine Änderungen daran.</p>
+        <p class="small muted">Kurstage ab 14.11.2026. Tage anhaken und übernehmen: Gezählt werden die Teilnehmer auf der Teilnehmerliste (PayPal privat nicht). Beim Übernehmen kommen Vortag, Kurstag und Folgetag (je ${HOME_KM.toLocaleString("de-DE")} km hin und zurück) automatisch ins Fahrtenbuch. Erneutes Übernehmen überschreibt den Tag.</p>
         <div class="btn-row" style="margin-bottom:10px">
           <button class="btn btn-sm btn-ghost" type="button" id="fin-pick-all">Alle auswählen</button>
           <button class="btn btn-sm btn-ghost" type="button" id="fin-pick-none">Auswahl leeren</button>
@@ -182,13 +185,14 @@
         <div class="btn-row" style="margin:12px 0">
           <button class="btn btn-sm" type="button" id="fin-trips-transfer">Fahrtkosten in die Rechnung übernehmen</button>
         </div>
-        <h4 style="margin:14px 0 8px">Gefahrene Strecke eintragen</h4>
+        <h4 style="margin:14px 0 8px">Einzelne Fahrt eintragen (z. B. Einkauf Kaufland, Gespräch bei einer Fahrschule)</h4>
         ${fin.routes.length ? `<div class="fin-routes" role="group" aria-label="Gespeicherte Strecken">${fin.routes.map(r => `<span class="fin-route"><button class="chip-btn" type="button" data-route="${r.id}">${esc(r.from)} → ${esc(r.to)} · ${String(r.km).replace(".", ",")} km</button><button class="fin-route-del" type="button" data-route-del="${r.id}" aria-label="Strecke ${esc(r.from)} nach ${esc(r.to)} löschen">✕</button></span>`).join("")}</div>` : ""}
         <form class="fin-form" id="fin-trip-form">
           <label>Datum<input type="date" name="date" value="${today()}" required></label>
           <label class="grow">Von<input name="from" required maxlength="160" placeholder="z. B. Siegen" value="${esc(fin.home)}"></label>
           <label class="grow">Nach<input name="to" required maxlength="160" placeholder="z. B. Burbach"></label>
-          <label>Zweck<input name="purpose" maxlength="80" placeholder="optional"></label>
+          <label>Zweck<input name="purpose" maxlength="80" placeholder="z. B. Einkauf Kursmaterial" list="fin-purposes"></label>
+          <datalist id="fin-purposes"><option value="Einkauf Kursmaterial (Kaufland)"><option value="Gespräch Fahrschule"><option value="Kursvorbereitung"><option value="Bank / Post"></datalist>
           <label>Kilometer<input name="km" inputmode="decimal" required placeholder="0"></label>
           <label class="check" style="flex-direction:row;align-items:center"><input type="checkbox" name="remember" checked><span>Strecke speichern</span></label>
           <button class="btn btn-sm" type="submit">Fahrt eintragen</button>
@@ -242,7 +246,11 @@
     for (const c of list) {
       const a = attendance(c);
       fin.incomes[c.id] = { date: dayKey(new Date(c.starts_at)), location: c.location, count: a.count, discount: a.discount, amount: a.amount };
+      // Kurstag übernommen → Vortag, Kurstag und Folgetag (je hin und zurück) ins Fahrtenbuch
+      if (!num(fin.km[c.location])) fin.km[c.location] = HOME_KM;
+      if (!fin.trips.some(t => t.courseId === c.id)) courseTrips(c);
     }
+    [...new Set(list.map(c => dayKey(new Date(c.starts_at)).slice(0, 4)))].forEach(recalcTrips);
     await save();
   }
   async function takeTrips() {
@@ -294,7 +302,7 @@
     }
     for (const c of courses) {
       const key = dayKey(new Date(c.starts_at));
-      if (c.status === "abgesagt" || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !regs.some(r => r.course_id === c.id && r.status === "teilgenommen")) continue;
+      if (c.status === "abgesagt" || key < START || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !regs.some(r => r.course_id === c.id && r.status === "teilgenommen")) continue;
       if (!num(fin.km[c.location])) { if (!missingKm.includes(c.location)) missingKm.push(c.location); continue; }
       courseTrips(c);
       years.add(key.slice(0, 4));
@@ -306,6 +314,17 @@
     settings = await db.getSettings().catch(() => ({}));
     fin = { ...blank(), ...(settings.finance || {}) };
     [courses, regs] = await Promise.all([db.listCourses(), db.listAllRegistrations()]);
+    if (fin.since !== START) {
+      const startKey = shiftDay(START, -1); // Vorbereitung am Vortag des ersten Kurses gehört dazu
+      for (const [id, x] of Object.entries(fin.incomes)) if (String(x.date) < START) delete fin.incomes[id];
+      const years = new Set(fin.trips.filter(t => t.courseId && t.date < startKey).map(t => t.date.slice(0, 4)));
+      fin.trips = fin.trips.filter(t => !(t.courseId && t.date < startKey));
+      years.forEach(recalcTrips);
+      fin.since = START;
+      settings = { ...(await db.getSettings().catch(() => ({}))), finance: fin };
+      await db.saveSettings(settings).catch(() => {});
+    }
+    for (const c of courses) if (dayKey(new Date(c.starts_at)) >= START && !num(fin.km[c.location])) fin.km[c.location] = HOME_KM;
   }
 
   // ---------- PDF ----------
