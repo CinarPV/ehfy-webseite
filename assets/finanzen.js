@@ -51,7 +51,7 @@
     return { count: here.length, discount: round2(here.reduce((s, r) => s + off(r), 0)), amount: round2(here.reduce((s, r) => s + price(r) - off(r), 0)) };
   }
   const coursesOfYear = () => courses
-    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k >= START && k <= today() && c.status !== "abgesagt" && attendance(c).count > 0; })
+    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k >= START && k <= today() && c.status !== "abgesagt" && (attendance(c).count > 0 || fin.incomes[c.id]); })
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
 
   function locationNames() {
@@ -119,6 +119,7 @@
         <select id="fin-year" class="chip-btn" aria-label="Jahr">${years.map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}</option>`).join("")}</select>
       </div>
       <p class="form-error" id="fin-error" role="alert"></p>
+      ${notice ? `<p class="notice notice-ok" role="status" style="margin-bottom:12px">${notice}</p>` : ""}
 
       <div class="card fin-card">
         <h3>Ergebnis ${year}</h3>
@@ -138,11 +139,12 @@
           <button class="btn btn-sm" type="button" id="fin-take">In die Rechnung übernehmen (${[...picked].filter(id => list.some(c => c.id === id)).length})</button>
           <button class="btn btn-sm btn-ghost" type="button" id="fin-trips">Fahrten ins Fahrtenbuch (${[...picked].filter(id => list.some(c => c.id === id)).length})</button>
         </div>
-        ${list.length ? `<div class="fin-scroll">${table(["", "Kurstag", "Ort", "Schüler", "Betrag", "Stand"], list.map(c => {
+        ${list.length ? `<div class="fin-scroll">${table(["", "Kurstag", "Ort", "Schüler", "Betrag", "Stand", ""], list.map(c => {
           const key = dayKey(new Date(c.starts_at)), a = attendance(c), done = fin.incomes[c.id];
           return `<tr><td><input type="checkbox" data-pick="${c.id}" aria-label="${dateText(key)} auswählen" ${picked.has(c.id) ? "checked" : ""}></td>
             <td>${dateText(key)}</td><td>${esc(c.location)}</td><td class="fin-num">${a.count}</td><td class="fin-num">${eur(a.amount)}</td>
-            <td class="small">${done ? (num(done.amount) !== a.amount || num(done.count) !== a.count ? "weicht ab, neu übernehmen?" : "übernommen") : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten" : ""}</td></tr>`;
+            <td class="small">${done ? (num(done.amount) !== a.amount || num(done.count) !== a.count ? "weicht ab, neu übernehmen?" : "✓ übernommen") : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten ✓" : ""}</td>
+            <td><button class="btn btn-sm ${done ? "btn-ghost" : ""}" type="button" data-take-one="${c.id}">${done ? "Neu übernehmen" : "Übernehmen"}</button></td></tr>`;
         }).join(""))}</div>` : '<p class="muted small">In diesem Jahr gibt es noch keine vergangenen Kurstage.</p>'}
       </div>
 
@@ -240,8 +242,9 @@
   const selected = () => coursesOfYear().filter(c => picked.has(c.id));
   function fail(msg) { const e = document.getElementById("fin-error"); if (e) e.textContent = msg; }
 
-  async function takeIncomes() {
-    const list = selected();
+  let notice = "";
+  async function takeIncomes(only) {
+    const list = only ? coursesOfYear().filter(c => c.id === only) : selected();
     if (!list.length) return fail("Bitte zuerst Kurstage anhaken.");
     for (const c of list) {
       const a = attendance(c);
@@ -251,6 +254,8 @@
       if (!fin.trips.some(t => t.courseId === c.id)) courseTrips(c);
     }
     [...new Set(list.map(c => dayKey(new Date(c.starts_at)).slice(0, 4)))].forEach(recalcTrips);
+    notice = `✓ ${list.length === 1 ? "Kurstag" : list.length + " Kurstage"} übernommen – steht jetzt oben im Ergebnis und bei „Einnahmen aus Kursen“, Fahrten sind im Fahrtenbuch.`;
+    picked.clear();
     await save();
   }
   async function takeTrips() {
@@ -327,11 +332,10 @@
     for (const c of courses) if (dayKey(new Date(c.starts_at)) >= START && !num(fin.km[c.location])) fin.km[c.location] = HOME_KM;
     // Kurse ohne einen einzigen Haken „Auf Teilnehmerliste“ zählen nicht: Einnahmen und Fahrten davon entfernen.
     // Wird später jemand angekreuzt, kann der Kurs wieder übernommen werden.
-    const uncounted = courses.filter(c => dayKey(new Date(c.starts_at)) >= START && !attendance(c).count);
+    const uncounted = courses.filter(c => dayKey(new Date(c.starts_at)) >= START && !attendance(c).count && !fin.incomes[c.id]);
     let changed = false;
     const years = new Set();
     for (const c of uncounted) {
-      if (fin.incomes[c.id]) { delete fin.incomes[c.id]; changed = true; }
       const had = fin.trips.filter(t => t.courseId === c.id);
       if (had.length) { fin.trips = fin.trips.filter(t => t.courseId !== c.id); had.forEach(t => years.add(t.date.slice(0, 4))); changed = true; }
       if (fin.tripsDone[c.id]) { delete fin.tripsDone[c.id]; changed = true; }
@@ -472,6 +476,8 @@
       }
       if (t.id === "fin-pick-all") { coursesOfYear().forEach(c => picked.add(c.id)); draw(); }
       if (t.id === "fin-pick-none") { picked.clear(); draw(); }
+      const one = t.closest("[data-take-one]");
+      if (one) await takeIncomes(one.dataset.takeOne);
       if (t.id === "fin-take") await takeIncomes();
       if (t.id === "fin-trips") await takeTrips();
       if (t.id === "fin-trips-transfer") await transferTrips();
@@ -512,6 +518,7 @@
 
   window.EHFYFinance = {
     async render() {
+      notice = "";
       await load();
       if (applyAutoTrips()) await save(); else draw();
     },
