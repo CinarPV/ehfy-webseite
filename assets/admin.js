@@ -1405,14 +1405,24 @@
   // Sehtest-Protokoll als PDF-Bytes, mit allem, was schon eingetragen ist
   async function protocolBytes(r, c) {
     await ensurePdf();
+    return EHFYDocs.sehtestProtocols([await protocolItem(r, c)], await issuer(), loadFont);
+  }
+  // Alle Sehtest-Protokolle eines Kurses in einer PDF
+  async function protocolsBytes(list, c) {
+    await ensurePdf();
+    const items = [];
+    for (const r of list) items.push(await protocolItem(r, c));
+    return EHFYDocs.sehtestProtocols(items, await issuer(), loadFont);
+  }
+  async function protocolItem(r, c) {
     const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : "");
-    return EHFYDocs.sehtestProtocols([{
+    return {
       first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
       nrDraft: r.sehtest_nr ? "" : await safeDraftNr(r.id), marks: r.sehtest_marks,
       date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
       examiner: r.sehtest_examiner || (r.sehtest_passed != null ? (await issuer(), examiners()[0]) : ""),
       signature: r.sehtest_passed != null || r.sehtest_signed_at ? await signatureBytes() : null
-    }], await issuer(), loadFont);
+    };
   }
   async function sehtestPdf(r, c, showError) {
     showError("");
@@ -1997,7 +2007,16 @@
       ? `<div class="att-row" data-course="${c.id}"><span class="small"><strong>Abgesagt${c.cancel_reason ? ": " + esc(c.cancel_reason) : ""}</strong>${c.cancel_notified_at ? ` · informiert am ${shortDay(c.cancel_notified_at)}` : ""}</span>
           <div class="att-btns">${withMail && !c.cancel_notified_at ? `<button class="btn btn-sm" type="button" data-course-act="notify">Teilnehmer informieren (${withMail})</button>` : ""}
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
-      : `<div class="att-row" data-course="${c.id}"><button class="btn btn-sm" type="button" data-course-act="list">🖨 Teilnehmerliste mit Preisen &amp; Unterschriften</button>
+      : `<details class="att-print" data-course="${c.id}"><summary>🖨 Für den ganzen Kurs drucken …</summary>
+          <div class="att-btns" style="padding:8px 0">
+            <button class="btn btn-sm" type="button" data-course-print="datenblatt">Teilnehmerdatenblätter (alle)</button>
+            <button class="btn btn-sm" type="button" data-course-print="protokolle">Sehtest-Protokolle (alle)</button>
+            <button class="btn btn-sm" type="button" data-course-print="bescheinigung">Bescheinigungen (alle)</button>
+            <button class="btn btn-sm" type="button" data-course-print="quittung">Quittungen (Bar)</button>
+            <button class="btn btn-sm" type="button" data-course-print="rechnung">Rechnungen (PayPal/Überweisung)</button>
+            <button class="btn btn-sm" type="button" data-course-print="teilnehmerliste">Teilnehmerliste</button>
+          </div></details>
+        <div class="att-row" data-course="${c.id}"><button class="btn btn-sm" type="button" data-course-act="list">🖨 Teilnehmerliste mit Preisen &amp; Unterschriften</button>
           <button class="btn btn-sm btn-teal" type="button" data-course-act="add">+ Schüler nachträglich eintragen</button>
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="cancel">Kurs absagen</button></div>`;
   }
@@ -2331,6 +2350,17 @@
 
   async function attClick(ev) {
     const errBox = $(ev.currentTarget.dataset.err || "att-error");
+    const cp = ev.target.closest("[data-course-print]");
+    if (cp) {
+      // Eine Sorte Dokument für alle Schüler des Kurses (anwesend, nicht abgesagt)
+      const c = attById[cp.closest("[data-course]").dataset.course], kind = cp.dataset.coursePrint;
+      let people = attRegs.filter(r => r.course_id === c.id && r.status !== "storniert" && r.status !== "nicht_erschienen").sort(byName);
+      if (kind === "quittung") people = people.filter(r => r.payment_method === "bar");
+      if (kind === "rechnung") people = people.filter(r => r.payment_method === "paypal" || r.payment_method === "ueberweisung");
+      if (!people.length) { errBox.textContent = kind === "quittung" ? "Niemand hat bar bezahlt." : kind === "rechnung" ? "Niemand hat per PayPal oder Überweisung bezahlt." : "Keine Schüler da."; return; }
+      errBox.textContent = "";
+      return runDoc(kind, people, c, msg => { errBox.textContent = msg; });
+    }
     const act = ev.target.closest("[data-course-act]");
     if (act) {
       const c = attById[act.closest("[data-course]").dataset.course];
@@ -3328,13 +3358,18 @@
     if (kind === "datenblatt") return D.datasheets(await template("datenblatt"), course, people, loadFont);
     if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course, preview));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course, preview), await issuer(), loadFont, cfg.documents.paymentDays);
+    if (kind === "protokolle") {
+      const list = people.filter(r => !r.sehtest_void_at && (r.sehtest_passed != null || stStarted(r)));
+      if (!list.length) throw new Error("In diesem Kurs gibt es noch keine Sehtest-Protokolle.");
+      return protocolsBytes(list, course);
+    }
     if (kind === "teilnehmerliste") {
       const list = people.filter(r => r.on_list && r.status !== "storniert" && r.payment_method !== OWN);
       if (!list.length) throw new Error("Noch niemand für die Teilnehmerliste markiert. Bitte bei den Teilnehmern „Auf Teilnehmerliste“ ankreuzen.");
       return D.participantList(course, list, await issuer(), loadFont, cfg.packages);
     }
   }
-  const DOC_NAMES = { teilnehmerliste: "Teilnehmerliste", bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
+  const DOC_NAMES = { protokolle: "Sehtest-Protokolle", teilnehmerliste: "Teilnehmerliste", bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
   // „alles“: pro Teilnehmer Datenblatt, Bescheinigung und Quittung hintereinander
   const BUNDLE = ["datenblatt", "bescheinigung", "quittung"];
 
