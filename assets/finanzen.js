@@ -51,7 +51,7 @@
     return { count: here.length, discount: round2(here.reduce((s, r) => s + off(r), 0)), amount: round2(here.reduce((s, r) => s + price(r) - off(r), 0)) };
   }
   const coursesOfYear = () => courses
-    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k >= START && k <= today() && c.status !== "abgesagt"; })
+    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k >= START && k <= today() && c.status !== "abgesagt" && attendance(c).count > 0; })
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
 
   function locationNames() {
@@ -302,7 +302,7 @@
     }
     for (const c of courses) {
       const key = dayKey(new Date(c.starts_at));
-      if (c.status === "abgesagt" || key < START || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !regs.some(r => r.course_id === c.id && r.status === "teilgenommen")) continue;
+      if (c.status === "abgesagt" || key < START || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !attendance(c).count) continue; // nur Kurse mit Teilnehmern auf der Teilnehmerliste
       if (!num(fin.km[c.location])) { if (!missingKm.includes(c.location)) missingKm.push(c.location); continue; }
       courseTrips(c);
       years.add(key.slice(0, 4));
@@ -325,6 +325,22 @@
       await db.saveSettings(settings).catch(() => {});
     }
     for (const c of courses) if (dayKey(new Date(c.starts_at)) >= START && !num(fin.km[c.location])) fin.km[c.location] = HOME_KM;
+    // Kurse ohne einen einzigen Haken „Auf Teilnehmerliste“ zählen nicht: Einnahmen und Fahrten davon entfernen.
+    // Wird später jemand angekreuzt, kann der Kurs wieder übernommen werden.
+    const uncounted = courses.filter(c => dayKey(new Date(c.starts_at)) >= START && !attendance(c).count);
+    let changed = false;
+    const years = new Set();
+    for (const c of uncounted) {
+      if (fin.incomes[c.id]) { delete fin.incomes[c.id]; changed = true; }
+      const had = fin.trips.filter(t => t.courseId === c.id);
+      if (had.length) { fin.trips = fin.trips.filter(t => t.courseId !== c.id); had.forEach(t => years.add(t.date.slice(0, 4))); changed = true; }
+      if (fin.tripsDone[c.id]) { delete fin.tripsDone[c.id]; changed = true; }
+    }
+    if (changed) {
+      years.forEach(recalcTrips);
+      settings = { ...(await db.getSettings().catch(() => ({}))), finance: fin };
+      await db.saveSettings(settings).catch(() => {});
+    }
   }
 
   // ---------- PDF ----------
