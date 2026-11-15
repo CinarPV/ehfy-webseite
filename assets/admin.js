@@ -1765,7 +1765,8 @@
     const c = courses.find(x => x.id === courseId);
     if (!c) return;
     const all = await db.listRegistrations(c.id);
-    const people = all.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen").sort(byName);
+    // PayPal privat ist privat: kommt auf keinen Ausdruck
+    const people = all.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen" && r.payment_method !== OWN).sort(byName);
     const sums = { bar: 0, paypal: 0, ueberweisung: 0, paypal_privat: 0 }; let open = 0;
     people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else open += priceOf(r); });
     const paid = sums.bar + sums.paypal + sums.ueberweisung, withST = people.filter(r => r.package === "komplett").length;
@@ -1786,7 +1787,7 @@
         <tr><td>davon ohne Sehtest</td><td class="r">${people.length - withST}</td></tr>
         ${PAY_KINDS.filter(([k]) => k !== OWN).map(([k, l]) => `<tr><td>${l}</td><td class="r">${eur(sums[k])}</td></tr>`).join("")}
         <tr class="tot"><td>Gesamt eingenommen</td><td class="r">${eur(paid)}</td></tr>
-        ${sums[OWN] ? `<tr><td>PayPal privat (nicht im Gesamt)</td><td class="r">${eur(sums[OWN])}</td></tr>` : ""}
+
         ${open ? `<tr class="open"><td>Noch offen</td><td class="r">${eur(open)}</td></tr>` : ""}
       </tbody></table></body></html>`;
     // Unsichtbarer Rahmen: Druckfenster öffnen, ohne die Verwaltung zu verlassen
@@ -2848,7 +2849,7 @@
     }
     // Teilnehmerlisten je Kurs (nur markierte Teilnehmer)
     for (const c of courses.values()) {
-      const list = regs.filter(r => r.course_id === c.id && r.on_list).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, "de"));
+      const list = regs.filter(r => r.course_id === c.id && r.on_list && r.payment_method !== "paypal_privat").sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`, "de"));
       if (list.length) jobs.push(async () => files.push({ name: `Teilnehmerlisten/${dayOf(c.starts_at)} ${fileSafe(c.location || "")}.pdf`, data: await EHFYDocs.participantList(c, list, await issuer(), loadFont, cfg.packages) }));
     }
     if (!tpl.datenblatt) notes.push("Teilnehmerdatenblätter fehlen: Die Vorlage „Teilnehmerdatenblatt“ ist noch nicht hochgeladen.");
@@ -3264,7 +3265,7 @@
     // Quittung = bar am Kurstag bezahlt; Rechnung = normal mit Zahlungsziel ab heute
     const cash = type === "quittung";
     const out = [];
-    for (const r of people) {
+    for (const r of people.filter(x => x.payment_method !== OWN)) { // PayPal privat: kein Beleg
       let inv = existing.find(i => i.registration_id === r.id && i.type === type);
       if (!inv) {
         const data = {
@@ -3293,7 +3294,7 @@
     if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course, preview));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course, preview), await issuer(), loadFont, cfg.documents.paymentDays);
     if (kind === "teilnehmerliste") {
-      const list = people.filter(r => r.on_list && r.status !== "storniert");
+      const list = people.filter(r => r.on_list && r.status !== "storniert" && r.payment_method !== OWN);
       if (!list.length) throw new Error("Noch niemand für die Teilnehmerliste markiert. Bitte bei den Teilnehmern „Auf Teilnehmerliste“ ankreuzen.");
       return D.participantList(course, list, await issuer(), loadFont, cfg.packages);
     }
@@ -3306,6 +3307,9 @@
     await ensurePdf();
     const who = people.length === 1 ? `_${people[0].last_name}_${people[0].first_name}` : "";
     const name = `${DOC_NAMES[kind]}_${localDate(new Date(course.starts_at))}_${course.location}${who}.pdf`;
+    // Kursmappe: PayPal-privat-Schüler ans Ende, sie bekommen keine Quittung – so bleiben die Seiten richtig zugeordnet
+    if (kind === "alles") people = [...people.filter(r => r.payment_method !== OWN), ...people.filter(r => r.payment_method === OWN)];
+    if ((kind === "quittung" || kind === "rechnung") && people.every(r => r.payment_method === OWN)) throw new Error("PayPal privat: Dafür wird kein Beleg erstellt.");
     const build = preview => kind === "alles"
       ? Promise.all(BUNDLE.map(k => docBytes(k, people, course, false, preview))).then(parts => EHFYDocs.bundle(parts))
       : docBytes(kind, people, course, false, preview);
