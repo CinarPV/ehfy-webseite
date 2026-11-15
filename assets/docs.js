@@ -596,14 +596,15 @@
         page.drawRectangle({ x: bx, y: by, width: bw + 20, height: bh, color: rgb(C.ink) });
         t(`Gesamt erhalten (${cnt("bar") + cnt("paypal") + cnt("ueberweisung")})`, bx + 7, by + bh - 12, 7.5, f.bold, [1, 1, 1]);
         t(eur(paid), bx + 7, by + 7, 12, f.black, [1, 1, 1]);
-        y = by - 22;
-        t("Die oben aufgeführten Beträge habe ich in der jeweils angegebenen Zahlungsart erhalten.", M, y, 9);
+        // Bestätigung des Betriebs: weiter unten, mit Platz zum Unterschreiben
+        y = Math.min(by - 40, 66);
+        t("Die oben aufgeführten Beträge wurden in der jeweils angegebenen Zahlungsart erhalten.", M, y, 9);
         const lx = M + 400;
         t("Datum", lx, y, 8, f.regular, C.muted);
         page.drawLine({ start: { x: lx + 28, y: y - 2 }, end: { x: lx + 110, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
-        t("Unterschrift", lx + 124, y, 8, f.regular, C.muted);
-        page.drawLine({ start: { x: lx + 172, y: y - 2 }, end: { x: W - M, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
-        if (issuer.owner) t(issuer.owner, lx + 172, y - 11, 7.5, f.regular, C.muted);
+        t("Unterschrift / Stempel", lx + 124, y, 8, f.regular, C.muted);
+        page.drawLine({ start: { x: lx + 212, y: y - 2 }, end: { x: W - M, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
+        t(issuer.name || "Erste Hilfe for you", lx + 212, y - 11, 7.5, f.regular, C.muted);
       }
       t("Unterschrift: vom Teilnehmerdatenblatt übernommen (digital per QR-Code) oder hier von Hand. EH-Kurs = Erste-Hilfe-Kurs teilgenommen.", M, 22, 7.5, f.regular, C.muted);
     }
