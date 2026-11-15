@@ -831,7 +831,7 @@ dialog.sign-big::backdrop { background: #fff; }
 .pay-table td.num, .pay-table th.num { text-align: right; white-space: nowrap; }
 
 /* Kurstag: drei Seiten */
-.att-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 14px; background: var(--soft); padding: 5px; border-radius: 16px; position: sticky; top: 0; z-index: 5; }
+.att-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 14px; background: var(--soft); padding: 5px; border-radius: 16px; position: sticky; top: 0; z-index: 5; }
 .att-tabs button { border: 0; background: transparent; padding: 12px 6px; border-radius: 12px; font: inherit; font-weight: 800; color: var(--ink); cursor: pointer; }
 .att-tabs button.active { background: var(--aid); }
 .st-pick { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; }
@@ -874,3 +874,5 @@ dialog.sign-big::backdrop { background: #fff; }
 .mail-card > summary { cursor: pointer; line-height: 1.5; }
 .mail-when { display: inline-block; min-width: 128px; color: var(--muted); font-size: .85rem; }
 .mail-body { white-space: pre-wrap; font: inherit; font-size: .92rem; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 6px 0; }
+
+.print-course { background: var(--soft); border-radius: 12px; padding: 10px 12px; }

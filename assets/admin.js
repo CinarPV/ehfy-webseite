@@ -2036,7 +2036,7 @@
       ? `<div class="att-row" data-course="${c.id}"><span class="small"><strong>Abgesagt${c.cancel_reason ? ": " + esc(c.cancel_reason) : ""}</strong>${c.cancel_notified_at ? ` · informiert am ${shortDay(c.cancel_notified_at)}` : ""}</span>
           <div class="att-btns">${withMail && !c.cancel_notified_at ? `<button class="btn btn-sm" type="button" data-course-act="notify">Teilnehmer informieren (${withMail})</button>` : ""}
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
-      : `<details class="att-print" data-course="${c.id}"><summary>🖨 Für den ganzen Kurs drucken …</summary>
+      : `<details class="att-print" data-course="${c.id}"><summary>🖨 Für den ganzen Kurs drucken … (oder oben auf „🖨 Drucken“)</summary>
           <div class="att-btns" style="padding:8px 0">
             <button class="btn btn-sm" type="button" data-course-print="dokumentation">Dokumentation (§ 68 FeV)</button>
             <button class="btn btn-sm" type="button" data-course-print="datenblatt">Teilnehmerdatenblätter (alle, mit Dokumentation)</button>
@@ -2115,6 +2115,16 @@
         const st = list.filter(r => !absent(r) && isST(r)), rest = list.filter(r => !absent(r) && !isST(r));
         body = (st.length ? st.map(rowST).join("") : '<p class="small muted">Niemand mit Sehtest. Auf der Seite „Anwesenheit“ bei „Mit Sehtest“ antippen.</p>')
           + (rest.length ? `<p class="small muted" style="margin-top:10px">Ohne Sehtest: ${rest.map(r => esc(`${r.first_name} ${r.last_name}`)).join(", ")}</p>` : "");
+      } else if (attTab === "drucken") {
+        const here = list.filter(r => !absent(r));
+        const b = (k, l) => `<button class="btn btn-sm" type="button" data-course-print="${k}">${l}</button>`;
+        body = `<div class="print-course" data-course="${c.id}"><h4 style="margin:4px 0 8px">Für den ganzen Kurs</h4><div class="att-btns">
+            ${b("dokumentation", "📄 Dokumentation (§ 68 FeV)")}${b("datenblatt", "Teilnehmerdatenblätter (alle, mit Dokumentation)")}${b("protokolle", "Sehtest-Protokolle (alle)")}
+            ${b("bescheinigung", "Bescheinigungen (alle)")}${b("quittung", "Quittungen (Bar)")}${b("rechnung", "Rechnungen (PayPal/Überweisung)")}${b("teilnehmerliste", "Teilnehmerliste")}</div></div>
+          <h4 style="margin:16px 0 4px">Einzeln je Schüler</h4>`
+          + (here.length ? here.map(r => `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}<span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}</span></div>
+            <div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-one-print="datenblatt">Datenblatt</button><button class="btn btn-sm btn-ghost" type="button" data-one-print="bescheinigung">Bescheinigung</button>${isST(r) ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Sehtest-Protokoll</button>' : ""}${r.payment_method === "bar" ? '<button class="btn btn-sm btn-ghost" type="button" data-one-print="quittung">Quittung</button>' : ""}${r.payment_method === "paypal" || r.payment_method === "ueberweisung" ? '<button class="btn btn-sm btn-ghost" type="button" data-one-print="rechnung">Rechnung</button>' : ""}</div></div>`).join("")
+            : '<p class="small muted">Noch niemand da.</p>');
       } else if (attTab === "bezahlung") {
         const here = list.filter(r => !absent(r));
         body = (here.length ? here.map(rowPay).join("") : '<p class="small muted">Noch niemand da.</p>') + (attWords().length ? "" : courseSummary(list, c));
@@ -2421,6 +2431,8 @@
       try { if (await payClick(ev, r)) { await loadCourses(); return; } } catch (e) { errBox.textContent = e.message; return; }
     }
     if (r && ev.target.closest("[data-reg-edit]")) return openEdit(r);
+    const one = ev.target.closest("[data-one-print]");
+    if (r && one) return runDoc(one.dataset.onePrint, [r], courseOf(r), msg => { errBox.textContent = msg; });
     if (r && ev.target.closest("[data-mails]")) return showMails(r.id, `${r.first_name} ${r.last_name}`).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-att-free]")) {
       if (!confirm(`${r.first_name} ${r.last_name} hat rechtzeitig abgesagt?\n\nDie Anmeldung wird gelöscht – keine Ausfallgebühr, keine Rechnung, keine E-Mail.`)) return;
