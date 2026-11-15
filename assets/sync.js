@@ -396,10 +396,21 @@
     },
     async sendInvoiceMail(m) {
       if (!isOnline()) throw new Error("Zum Versenden braucht es Internet.");
-      const res = await remote.sendInvoiceMail(m);
+      const { registration_id, kind, person, ...send } = m;
+      const res = await remote.sendInvoiceMail(send);
       const inv = state.invoices.find(i => i.id === m.invoice_id);
       if (inv) { inv.sent_at = new Date().toISOString(); inv.sent_to = m.to; await persist(); }
+      // Im System festhalten, was rausging (Text, Rechnungsnummer, Empfänger)
+      try {
+        await remote.logMail({ registration_id: registration_id || (inv && inv.registration_id) || null, invoice_id: m.invoice_id || null,
+          invoice_number: inv ? inv.number : null, kind: kind || (inv ? (inv.type === "quittung" ? "Quittung" : "Rechnung") : "E-Mail"),
+          to_addr: m.to, subject: m.subject, body: m.text || "", attachment: m.filename || null, person: person || (inv && inv.recipient && inv.recipient.name) || null });
+      } catch (e) { console.warn("Schreiben nicht protokolliert:", e.message); }
       return res;
+    },
+    async listMailLog(registrationId) {
+      if (!isOnline()) throw new Error("Zum Anzeigen braucht es Internet.");
+      return remote.listMailLog(registrationId);
     }
   };
 

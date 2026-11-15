@@ -868,3 +868,9 @@ dialog.sign-big::backdrop { background: #fff; }
 
 .att-print { margin: 4px 0 6px; padding: 8px 12px; background: var(--soft); border-radius: 12px; }
 .att-print > summary { cursor: pointer; font-weight: 800; }
+
+/* Gesendete Schreiben */
+.mail-card { background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 10px 14px; margin-bottom: 8px; }
+.mail-card > summary { cursor: pointer; line-height: 1.5; }
+.mail-when { display: inline-block; min-width: 128px; color: var(--muted); font-size: .85rem; }
+.mail-body { white-space: pre-wrap; font: inherit; font-size: .92rem; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 6px 0; }

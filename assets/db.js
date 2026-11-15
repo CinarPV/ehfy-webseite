@@ -210,6 +210,13 @@
         check(await sb.from("invoices").update({ registration_id: registrationId }).eq("id", id));
       },
       // Beleg direkt über dein Postfach info@ehfy.de senden (Funktion "beleg-mail")
+      // Gesendete Schreiben festhalten (Tabelle mail_log)
+      async logMail(e) { check(await sb.from("mail_log").insert(e)); },
+      async listMailLog(registrationId) {
+        let q = sb.from("mail_log").select("*").order("created_at", { ascending: false }).limit(300);
+        if (registrationId) q = q.eq("registration_id", registrationId);
+        return check(await q);
+      },
       async sendInvoiceMail(m) {
         const { data, error } = await sb.functions.invoke("beleg-mail", { body: m });
         if (error) {
@@ -552,6 +559,8 @@
         const inv = (load().invoices || []).find(i => i.id === id);
         inv.registration_id = registrationId; save();
       },
+      async logMail(e) { const d = load(); d.mailLog = [{ id: uid(), created_at: new Date().toISOString(), ...e }, ...(d.mailLog || [])]; save(); },
+      async listMailLog(registrationId) { return (load().mailLog || []).filter(x => !registrationId || x.registration_id === registrationId); },
       async sendInvoiceMail(m) {
         // Im Demo-Modus wird nichts verschickt – nur vermerkt
         await new Promise(r => setTimeout(r, 600));

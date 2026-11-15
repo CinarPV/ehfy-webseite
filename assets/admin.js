@@ -1165,6 +1165,7 @@
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "sehtests") { $("sehtest-view").classList.remove("hidden"); loadSehtests(); }
     if (b.dataset.view === "gebuehren") { $("fee-view").classList.remove("hidden"); loadCourses(); }
+    if (b.dataset.view === "schreiben") { $("mail-view").classList.remove("hidden"); loadMailView(); }
     if (b.dataset.view === "zahlungen") { $("pay-view").classList.remove("hidden"); loadPayments().catch(e => { $("pay-error").textContent = e.message; }); }
     if (b.dataset.view === "finanzen") { $("finance-view").classList.remove("hidden"); window.EHFYFinance.render(); }
     if (b.dataset.view === "rechnungen") { $("invoices-view").classList.remove("hidden"); loadInvoices(); }
@@ -1185,6 +1186,34 @@
     goView("termine");
     openParticipants(c);
   }
+  // ---------- Gesendete Schreiben: alles, was per E-Mail rausging, im System nachlesen ----------
+  const mailCard = m => `<details class="mail-card"><summary><span class="mail-when">${new Date(m.created_at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+      <strong>${esc(m.kind || "E-Mail")}</strong>${m.invoice_number ? ` · Nr. ${esc(m.invoice_number)}` : ""} · ${esc(m.person || "")} <span class="small muted">an ${esc(m.to_addr || "")}</span></summary>
+      <p class="small" style="margin:8px 0 4px"><strong>Betreff:</strong> ${esc(m.subject || "")}</p>
+      <pre class="mail-body">${esc(m.body || "")}</pre>${m.attachment ? `<p class="small muted">Anhang: ${esc(m.attachment)}</p>` : ""}</details>`;
+  async function showMails(registrationId, who) {
+    const list = await db.listMailLog(registrationId);
+    let d = $("mail-dialog");
+    if (!d) {
+      d = document.createElement("dialog"); d.id = "mail-dialog"; d.className = "qr-dlg";
+      d.innerHTML = '<h3 style="margin:0 0 8px" id="ml-title"></h3><div id="ml-list"></div><div class="btn-row" style="margin-top:10px"><button class="btn btn-ghost" type="button" id="ml-close">Schließen</button></div>';
+      document.body.appendChild(d); $("ml-close").onclick = () => d.close();
+    }
+    $("ml-title").textContent = `Gesendete Schreiben · ${who}`;
+    $("ml-list").innerHTML = list.length ? list.map(mailCard).join("") : '<p class="muted small">Noch nichts protokolliert. (Schreiben werden ab jetzt festgehalten.)</p>';
+    d.showModal();
+  }
+  async function loadMailView() {
+    $("mail-error").textContent = "";
+    try {
+      const list = await db.listMailLog(null);
+      const words = $("mail-filter").value.toLowerCase().split(/\s+/).filter(Boolean);
+      const shown = list.filter(m => words.every(w => [m.kind, m.person, m.to_addr, m.subject, m.invoice_number].join(" ").toLowerCase().includes(w)));
+      $("mail-list").innerHTML = shown.length ? shown.map(mailCard).join("") : '<p class="muted">Noch keine Schreiben.</p>';
+    } catch (e) { $("mail-error").textContent = e.message.includes("mail_log") ? "Bitte einmal das SQL „update-schreiben.sql“ in Supabase ausführen." : e.message; }
+  }
+  $("mail-filter").addEventListener("input", () => loadMailView());
+
   // ---------- Notizen (Start): freier Text, automatisch gespeichert in den Einstellungen ----------
   let notesTimer = null, notesLoaded = false;
   async function loadNotes() {
@@ -2162,7 +2191,7 @@
     if (tab) tab.innerHTML = `Ausfallgebühren${total ? ` <span class="nav-badge">${total}</span>` : ""}`;
     const byDay = (a, b) => courseOf(b).starts_at.localeCompare(courseOf(a).starts_at);
     const done = '<button class="btn btn-sm btn-ghost" type="button" data-fee="done">Erledigt, aus der Liste</button>';
-    const row = (r, inner) => `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)} <span class="small muted">(Kurs ${shortDay(courseOf(r).starts_at)})</span></div><div class="att-fee">${inner}</div></div>`;
+    const row = (r, inner) => `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)} <span class="small muted">(Kurs ${shortDay(courseOf(r).starts_at)})</span></div><div class="att-fee">${inner}${r.fee_state ? ' <button class="btn btn-sm btn-ghost" type="button" data-mails>✉ Gesendete Schreiben</button>' : ""}</div></div>`;
     const section = (title, hint, list, html) => `<article class="card att-card" style="margin-bottom:14px"><h3 style="margin-top:0">${title} (${list.length})</h3><p class="small muted" style="margin:0 0 6px">${hint}</p>${list.length ? list.sort(byDay).map(html).join("") : '<p class="small muted">Niemand.</p>'}</article>`;
     $("fee-list").innerHTML =
       section("Rechnung gesendet – Zahlung offen", "Wenn bezahlt ist: „Bezahlt“ drücken. Dann verschwindet die Person aus der Liste, und die Rechnung steht auf bezahlt.", bills,
@@ -2234,7 +2263,8 @@
     const bytes = await EHFYDocs.invoices([inv], await issuer(true), loadFont, days);
     const filename = `Rechnung_${inv.number}.pdf`;
     await db.sendInvoiceMail({
-      invoice_id: inv.id, to: r.email, subject: `Rechnung ${inv.number} – Ausfallgebühr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body,
+      invoice_id: inv.id, registration_id: r.id, kind: "Rechnung Ausfallgebühr", person: `${r.first_name} ${r.last_name}`,
+      to: r.email, subject: `Rechnung ${inv.number} – Ausfallgebühr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body,
       filename, pdfBase64: await toBase64(new File([bytes], filename, { type: "application/pdf" }))
     });
     await db.updateRegistration(r.id, { fee_state: "rechnung", fee_state_at: new Date().toISOString() });
@@ -2252,7 +2282,8 @@
       `Melden Sie sich nicht rechtzeitig an, wird die Ausfallgebühr von ${FEE},00 € fällig. Melden Sie sich an und erscheinen wieder nicht, müssen Sie für beide Termine bezahlen.`, "",
       "Mit freundlichen Grüßen", cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`
     ].join("\n");
-    await db.sendInvoiceMail({ to: r.email, subject: `Noch eine Chance: Ihr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body, textOnly: true });
+    await db.sendInvoiceMail({ to: r.email, subject: `Noch eine Chance: Ihr Erste-Hilfe-Kurs am ${feeDate(r)}`, text: body, textOnly: true,
+      registration_id: r.id, kind: "Zweite Chance", person: `${r.first_name} ${r.last_name}` });
     await db.updateRegistration(r.id, { fee_state: "chance", fee_state_at: new Date().toISOString(), chance_until: untilDay });
   }
   // Knöpfe für Anwesenheit und Ausfallgebühr, in beiden Bereichen dieselben
@@ -2334,6 +2365,7 @@
     try {
       for (const r of list) {
         await db.sendInvoiceMail({
+          registration_id: r.id, kind: "Kursabsage", person: `${r.first_name} ${r.last_name}`,
           to: r.email, textOnly: true, subject: `Absage: Ihr Erste-Hilfe-Kurs am ${day}`,
           text: [`Guten Tag ${r.first_name} ${r.last_name},`, "",
             `leider müssen wir den Erste-Hilfe-Kurs am ${day} in ${c.location} ${reasonText[c.cancel_reason] || "absagen"}${reasonText[c.cancel_reason] ? " absagen" : ""}. Wir bitten um Entschuldigung.`, "",
@@ -2388,6 +2420,7 @@
       try { if (await payClick(ev, r)) { await loadCourses(); return; } } catch (e) { errBox.textContent = e.message; return; }
     }
     if (r && ev.target.closest("[data-reg-edit]")) return openEdit(r);
+    if (r && ev.target.closest("[data-mails]")) return showMails(r.id, `${r.first_name} ${r.last_name}`).catch(e => { errBox.textContent = e.message; });
     if (r && ev.target.closest("[data-att-free]")) {
       if (!confirm(`${r.first_name} ${r.last_name} hat rechtzeitig abgesagt?\n\nDie Anmeldung wird gelöscht – keine Ausfallgebühr, keine Rechnung, keine E-Mail.`)) return;
       try { await removeRegistration(r); await loadCourses(); } catch (e) { errBox.textContent = e.message; }

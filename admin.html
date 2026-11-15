@@ -62,6 +62,7 @@
             <div class="nav-more hidden" id="nav-more">
               <button data-view="zahlungen">Zahlungen</button>
               <button data-view="gebuehren">Ausfallgebühren</button>
+              <button data-view="schreiben">Gesendete Schreiben</button>
               <button data-view="rechnungen">Rechnungen</button>
               <button data-view="finanzen">Einnahmen &amp; Ausgaben</button>
               <button data-view="vorlagen">Einstellungen</button>
@@ -117,6 +118,14 @@
             </div>
             <p class="form-error" id="pay-error" role="alert"></p>
             <div id="pay-list"></div>
+          </div>
+
+          <div id="mail-view" class="hidden no-print" data-section="schreiben">
+            <h2 style="margin:0 0 4px;font-size:1.4rem">Gesendete Schreiben</h2>
+            <p class="muted small" style="margin-bottom:12px">Alles, was aus der Verwaltung per E-Mail rausging – mit Text, Rechnungsnummer und Empfänger. Antippen zum Lesen.</p>
+            <div class="field" style="margin:0 0 12px"><input id="mail-filter" type="search" placeholder="Suchen: Name, Rechnungsnummer, Art …" autocomplete="off"></div>
+            <p class="form-error" id="mail-error" role="alert"></p>
+            <div id="mail-list"></div>
           </div>
 
           <div id="fee-view" class="hidden no-print" data-section="gebuehren">
