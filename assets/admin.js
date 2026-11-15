@@ -1744,19 +1744,22 @@
     <label class="small onlist"><input type="checkbox" data-onlist ${r.on_list ? "checked" : ""}> Auf Teilnehmerliste</label></div>`;
   // ---------- Kurs-Abrechnung (ganz unten bei jedem Kurs): mit/ohne Sehtest, Geld je Zahlart, gesamt ----------
   const priceOf = r => { const p = cfg.packages.find(x => x.key === r.package) || cfg.packages[0]; return Math.max(0, Number(p.price) - (Number(r.discount) || 0)); };
+  // Berechnungen zählen nur Schüler mit Haken „Auf Teilnehmerliste“ (PayPal privat nie)
+  const listed = r => r.on_list && r.status !== "storniert" && r.status !== "nicht_erschienen" && r.payment_method !== OWN;
   function courseSummary(list, c) {
-    const people = list.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen");
-    if (!people.length) return "";
+    const people = list.filter(listed);
+    const btns = `<div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-list-print="${c ? c.id : ""}">🖨 Teilnehmerliste (Preise &amp; Unterschriften)</button></div>`;
+    if (!people.length) return `<div class="course-sum"><p class="small muted" style="margin:0">Noch niemand auf der Teilnehmerliste – Berechnung erscheint, sobald du „Auf Teilnehmerliste“ ankreuzt.</p></div>`;
     const withST = people.filter(r => r.package === "komplett").length;
     const sums = { bar: 0, paypal: 0, ueberweisung: 0, paypal_privat: 0 }; let open = 0, openN = 0;
     people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else { open += priceOf(r); openN++; } });
     const paid = sums.bar + sums.paypal + sums.ueberweisung;
     const cell = (k, v, strong) => `<div class="sum-cell${strong ? " strong" : ""}"><span>${k}</span><b>${v}</b></div>`;
     return `<div class="course-sum">
-      <div class="sum-grid">${cell("Teilnehmer", people.length)}${cell("Mit Sehtest", withST)}${cell("Ohne Sehtest", people.length - withST)}</div>
+      <p class="small muted" style="margin:0 0 6px">Nur Schüler auf der Teilnehmerliste</p>
+      <div class="sum-grid">${cell("Auf der Liste", people.length)}${cell("Mit Sehtest", withST)}${cell("Ohne Sehtest", people.length - withST)}</div>
       <div class="sum-grid">${PAY_KINDS.filter(([k]) => k !== OWN).map(([k, l]) => cell(l, eur(sums[k]))).join("")}${cell("Gesamt eingenommen", eur(paid), true)}</div>
-      ${sums[OWN] ? `<p class="small muted" style="margin:0">PayPal privat: ${eur(sums[OWN])} (nicht im Gesamt)</p>` : ""}
-      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" data-list-print="${c ? c.id : ""}">🖨 Teilnehmerliste (Preise &amp; Unterschriften)</button> <button class="btn btn-sm btn-ghost" type="button" data-sum-print="${c ? c.id : ""}">Abrechnung drucken</button></div>
+      ${btns}
       ${openN ? `<p class="small" style="margin:6px 0 0;color:var(--danger)"><strong>Noch offen: ${eur(open)}</strong> (${openN} ${openN === 1 ? "Person" : "Personen"} nicht bezahlt)</p>` : '<p class="small" style="margin:6px 0 0;color:var(--ok)"><strong>✓ Alle haben bezahlt</strong></p>'}
     </div>`;
   }
@@ -1766,7 +1769,7 @@
     if (!c) return;
     const all = await db.listRegistrations(c.id);
     // PayPal privat ist privat: kommt auf keinen Ausdruck
-    const people = all.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen" && r.payment_method !== OWN).sort(byName);
+    const people = all.filter(listed).sort(byName);
     const sums = { bar: 0, paypal: 0, ueberweisung: 0, paypal_privat: 0 }; let open = 0;
     people.forEach(r => { if (sums[r.payment_method] != null) sums[r.payment_method] += priceOf(r); else open += priceOf(r); });
     const paid = sums.bar + sums.paypal + sums.ueberweisung, withST = people.filter(r => r.package === "komplett").length;
@@ -1898,7 +1901,7 @@
     if (!list.length) { $("pay-list").innerHTML = '<p class="muted">Noch keine vergangenen Kurse.</p>'; return; }
     if (!payCourseId || !list.some(c => c.id === payCourseId)) payCourseId = list[0].id;
     $("pay-course").innerHTML = list.map(c => {
-      const n = all.filter(r => r.course_id === c.id && r.status !== "storniert" && r.status !== "nicht_erschienen");
+      const n = all.filter(r => r.course_id === c.id && listed(r));
       const open = n.filter(r => !r.payment_method).length;
       return `<option value="${c.id}"${c.id === payCourseId ? " selected" : ""}>${dayText(c.starts_at)} · ${esc(c.location)}${open ? ` · ${open} offen` : ""}</option>`;
     }).join("");
@@ -1925,6 +1928,7 @@
         fees += card(r, FEE, paid, paid ? "✓ bezahlt" : "offen", `Ausfallgebühr · ${feeText[r.fee_state] || "noch nicht angeschrieben"}`, docText(r));
         continue;
       }
+      if (!listed(r)) continue; // nur Schüler auf der Teilnehmerliste
       const price = priceOf(r), paid = !!r.payment_method;
       if (onlyOpen && paid) continue;
       if (r.payment_method === OWN) own += price; else if (paid) { sum += price; nPaid++; } else { sumOpen += price; nOpen++; }
@@ -1932,7 +1936,7 @@
       rows += card(r, price, paid, paid ? "✓ bezahlt" : "nicht bezahlt", info, docText(r));
     }
     const tile = (label, value, cls = "") => `<div class="pay-tile ${cls}"><span>${label}</span><b>${value}</b></div>`;
-    $("pay-list").innerHTML = `<div class="pay-tiles">${tile(`Bezahlt (${nPaid})`, eur(sum), "ok")}${tile(`Offen (${nOpen})`, eur(sumOpen), sumOpen ? "no" : "")}${own ? tile("PayPal privat", eur(own), "muted") : ""}</div>
+    $("pay-list").innerHTML = `<div class="pay-tiles">${tile(`Bezahlt (${nPaid})`, eur(sum), "ok")}${tile(`Offen (${nOpen})`, eur(sumOpen), sumOpen ? "no" : "")}</div><p class="small muted" style="margin:-6px 0 10px">Nur Schüler mit Haken „Auf Teilnehmerliste“.</p>
       ${rows ? `<h3 class="pay-h">Kursgebühren</h3>${rows}` : '<p class="muted">Niemand.</p>'}
       ${fees ? `<h3 class="pay-h">Ausfallgebühren</h3>${fees}` : ""}`;
   }
