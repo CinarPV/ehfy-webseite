@@ -652,7 +652,7 @@ body.has-reminder { padding-bottom: 90px; }
 
 /* ---------- Hauptnavigation: große Hauptbereiche, kleine Nebenbereiche ---------- */
 .main-nav { margin-bottom: 26px; }
-.nav-main { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.nav-main { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .nav-main button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 68px; padding: 8px 4px; font: inherit; font-weight: 800; font-size: .95rem; border: 2px solid var(--line); border-radius: 16px; background: #fff; color: var(--ink); cursor: pointer; }
 .nav-main button .sym { width: 24px; height: 24px; color: var(--teal, #29b4b6); }
 .nav-main .dots { font-size: 1.1rem; line-height: 24px; letter-spacing: 2px; color: var(--teal, #29b4b6); }
@@ -666,7 +666,7 @@ body.has-reminder { padding-bottom: 90px; }
 .row-link:hover td { background: #f4f9f9; }
 .p-att { display: grid; gap: 6px; min-width: 210px; }
 @media (max-width: 640px) {
-  .nav-main { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .nav-main { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
   .nav-main button { min-height: 54px; padding: 6px 1px; font-size: .7rem; border-radius: 12px; gap: 2px; }
   .nav-main button .sym { width: 20px; height: 20px; }
   .nav-main .dots { line-height: 20px; font-size: .9rem; }

@@ -1156,7 +1156,12 @@
     $("nav-more-btn").classList.toggle("active", Boolean(b.closest("#nav-more")));
     if (b.dataset.view === "start") { $("start-view").classList.remove("hidden"); loadCourses(); }
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
-    if (b.dataset.view === "anwesenheit") { $("attendance-view").classList.remove("hidden"); loadCourses(); }
+    // Kurstag öffnet die Anwesenheit, „Bezahlung“ dieselbe Seite direkt bei Bezahlung
+    if (b.dataset.view === "anwesenheit" || b.dataset.view === "bezahlung") {
+      attTab = b.dataset.view === "bezahlung" ? "bezahlung" : "anwesenheit";
+      try { localStorage.setItem("ehfy-att-tab", attTab); } catch (e) { /* egal */ }
+      $("attendance-view").classList.remove("hidden"); loadCourses();
+    }
     if (b.dataset.view === "schueler") { $("students-view").classList.remove("hidden"); loadStudents(); }
     if (b.dataset.view === "sehtests") { $("sehtest-view").classList.remove("hidden"); loadSehtests(); }
     if (b.dataset.view === "gebuehren") { $("fee-view").classList.remove("hidden"); loadCourses(); }
