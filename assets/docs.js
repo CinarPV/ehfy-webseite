@@ -538,15 +538,17 @@
     people.forEach(r => { sums[r.payment_method && sums[r.payment_method] != null ? r.payment_method : "offen"] += price(r); });
     const total = people.reduce((n, r) => n + price(r), 0);
     const pages = Math.max(1, Math.ceil(people.length / perPage));
+    // Passt der Zahlungseingang nicht mehr unter die letzte Tabelle, kommt eine Seite dazu
+    const extraPage = (H - 106 - (people.length - (pages - 1) * perPage) * rowH) - 190 < 34 ? 1 : 0;
     const fit = (t, font, size, w) => { t = String(t || ""); while (t && font.widthOfTextAtSize(t, size) > w) t = t.slice(0, -1); return t; };
     const sigs = new Map();
     for (const r of people) if (r.signature_png && /^data:image\/png;base64,/.test(r.signature_png)) { try { sigs.set(r.id, await pdf.embedPng(r.signature_png)); } catch (e) { /* ohne */ } }
     for (let pg = 0; pg < pages; pg++) {
-      const page = pdf.addPage([W, H]);
+      let page = pdf.addPage([W, H]);
       const t = (txt, x, y, size, font = f.regular, color = C.ink) => page.drawText(String(txt || ""), { x, y, size, font, color: rgb(color) });
       // Kopf
       t("Teilnehmerliste · Erste-Hilfe-Ausbildung nach § 68 FeV", M, H - 40, 15, f.black);
-      t(`Seite ${pg + 1} von ${pages}`, W - M - 60, H - 40, 9, f.regular, C.muted);
+      t(`Seite ${pg + 1} von ${pages + extraPage}`, W - M - 60, H - 40, 9, f.regular, C.muted);
       const head = [["Ausbildungsstelle", issuer.name || "Erste Hilfe for you"], ["Datum", fmtLongDate(course.starts_at)],
         ["Zeit", `${new Date(course.starts_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ })} – ${course.ends_at ? new Date(course.ends_at).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: TZ }) : ""} Uhr`],
         ["Ausbildungsort", course.address || course.location || ""], ["Lehrkraft", issuer.owner || ""]];
@@ -578,7 +580,15 @@
         y -= rowH;
       });
       if (pg === pages - 1) {
-        // Zahlungseingang: Summen je Zahlart + Bestätigung mit Datum und Unterschrift
+        // Zahlungseingang: Summen je Zahlart + Bestätigung mit Datum und Unterschrift/Stempel.
+        // Passt das nicht mehr unter die Tabelle (volle Seite), kommt es auf eine eigene Seite.
+        if (y - 190 < 34) {
+          t("Unterschrift: vom Teilnehmerdatenblatt übernommen (digital per QR-Code) oder hier von Hand. EH-Kurs = Erste-Hilfe-Kurs teilgenommen.", M, 22, 7.5, f.regular, C.muted);
+          page = pdf.addPage([W, H]);
+          t(`Teilnehmerliste · ${fmtLongDate(course.starts_at)} · ${course.location || ""}`, M, H - 40, 13, f.black);
+          t(`Seite ${pages + 1} von ${pages + 1}`, W - M - 60, H - 40, 9, f.regular, C.muted);
+          y = H - 56;
+        }
         y -= 14;
         const cnt = k => people.filter(r => (r.payment_method && sums[r.payment_method] != null ? r.payment_method : "offen") === k).length;
         const paid = sums.bar + sums.paypal + sums.ueberweisung;
@@ -596,15 +606,14 @@
         page.drawRectangle({ x: bx, y: by, width: bw + 20, height: bh, color: rgb(C.ink) });
         t(`Gesamt erhalten (${cnt("bar") + cnt("paypal") + cnt("ueberweisung")})`, bx + 7, by + bh - 12, 7.5, f.bold, [1, 1, 1]);
         t(eur(paid), bx + 7, by + 7, 12, f.black, [1, 1, 1]);
-        // Bestätigung des Betriebs: weiter unten, mit Platz zum Unterschreiben
-        y = Math.min(by - 40, 66);
-        t("Die oben aufgeführten Beträge wurden in der jeweils angegebenen Zahlungsart erhalten.", M, y, 9);
-        const lx = M + 400;
-        t("Datum", lx, y, 8, f.regular, C.muted);
-        page.drawLine({ start: { x: lx + 28, y: y - 2 }, end: { x: lx + 110, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
-        t("Unterschrift / Stempel", lx + 124, y, 8, f.regular, C.muted);
-        page.drawLine({ start: { x: lx + 212, y: y - 2 }, end: { x: W - M, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
-        t(issuer.name || "Erste Hilfe for you", lx + 212, y - 11, 7.5, f.regular, C.muted);
+        // Bestätigung des Betriebs: etwa 1 cm unter den Summen, darunter Platz für einen 70-mm-Stempel (ca. 3 cm hoch)
+        y = by - 28;
+        t("Die oben aufgeführten Beträge wurden in der jeweils angegebenen Zahlungsart erhalten.", M, y, 9.5);
+        const ly = y - 95, sx = W - M - 260;
+        t("Datum", M, ly + 4, 8, f.regular, C.muted);
+        page.drawLine({ start: { x: M + 30, y: ly + 2 }, end: { x: M + 170, y: ly + 2 }, thickness: 0.7, color: rgb(C.ink) });
+        page.drawLine({ start: { x: sx, y: ly + 2 }, end: { x: W - M, y: ly + 2 }, thickness: 0.7, color: rgb(C.ink) });
+        t(`Unterschrift / Stempel · ${issuer.name || "Erste Hilfe for you"}`, sx, ly - 9, 7.5, f.regular, C.muted);
       }
       t("Unterschrift: vom Teilnehmerdatenblatt übernommen (digital per QR-Code) oder hier von Hand. EH-Kurs = Erste-Hilfe-Kurs teilgenommen.", M, 22, 7.5, f.regular, C.muted);
     }
