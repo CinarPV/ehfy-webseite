@@ -564,7 +564,7 @@
         if (i % 2) page.drawRectangle({ x: M, y: top - rowH, width: W - 2 * M, height: rowH, color: rgb(C.soft) });
         const cells = [String(pg * perPage + i + 1), `${r.last_name}, ${r.first_name}`, fmtBirth(r.birth_date),
           [r.street, [r.zip, r.city].filter(Boolean).join(" ")].filter(Boolean).join(", "), "✓", (r.package === "komplett" || r.sehtest_passed != null) ? "ja" : "nein",
-          PAY[r.payment_method] || "–", eur(price(r))];
+          PAY[r.payment_method] || "offen", eur(price(r))];
         let cx = M;
         cells.forEach((v, k) => {
           const w = cols[k][1], font = k === 1 ? f.bold : f.regular;
@@ -578,16 +578,32 @@
         y -= rowH;
       });
       if (pg === pages - 1) {
-        // Summen je Zahlart
-        y -= 18;
-        const parts = [["bar", "Bar"], ["paypal", "PayPal"], ["ueberweisung", "Überweisung"], ["offen", "ohne Angabe"]].filter(([k]) => sums[k] || k !== "offen");
-        let sx = M;
-        parts.forEach(([k, l]) => { t(`${l}: ${eur(sums[k])}`, sx, y, 10, f.bold); sx += 150; });
-        t(`Gesamt: ${eur(total)}`, W - M - 140, y, 11, f.black);
-        y -= 30;
-        t("Alle oben als „bar“ aufgeführten Beträge am Lehrgangstag erhalten:", M, y, 9.5);
-        page.drawLine({ start: { x: M + 330, y: y - 2 }, end: { x: M + 560, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
-        t("(Unterschrift Lehrkraft)", M + 565, y, 8, f.regular, C.muted);
+        // Zahlungseingang: Summen je Zahlart + Bestätigung mit Datum und Unterschrift
+        y -= 14;
+        const cnt = k => people.filter(r => (r.payment_method && sums[r.payment_method] != null ? r.payment_method : "offen") === k).length;
+        const paid = sums.bar + sums.paypal + sums.ueberweisung;
+        t("Zahlungseingang", M, y - 10, 11, f.black);
+        const boxes = [["Bar", sums.bar, cnt("bar")], ["PayPal", sums.paypal, cnt("paypal")], ["Überweisung", sums.ueberweisung, cnt("ueberweisung")]];
+        if (sums.offen) boxes.push(["Noch nicht bezahlt", sums.offen, cnt("offen")]);
+        const bw = 118, bh = 34, by = y - 50;
+        let bx = M + 110;
+        boxes.forEach(([l, v, n]) => {
+          page.drawRectangle({ x: bx, y: by, width: bw, height: bh, borderColor: rgb(C.line), borderWidth: 1, color: rgb(C.soft) });
+          t(`${l} (${n})`, bx + 7, by + bh - 12, 7.5, f.bold, l === "Noch nicht bezahlt" ? [0.7, 0.15, 0.12] : C.muted);
+          t(eur(v), bx + 7, by + 7, 11, f.bold);
+          bx += bw + 6;
+        });
+        page.drawRectangle({ x: bx, y: by, width: bw + 20, height: bh, color: rgb(C.ink) });
+        t(`Gesamt erhalten (${cnt("bar") + cnt("paypal") + cnt("ueberweisung")})`, bx + 7, by + bh - 12, 7.5, f.bold, [1, 1, 1]);
+        t(eur(paid), bx + 7, by + 7, 12, f.black, [1, 1, 1]);
+        y = by - 22;
+        t("Die oben aufgeführten Beträge habe ich in der jeweils angegebenen Zahlungsart erhalten.", M, y, 9);
+        const lx = M + 400;
+        t("Datum", lx, y, 8, f.regular, C.muted);
+        page.drawLine({ start: { x: lx + 28, y: y - 2 }, end: { x: lx + 110, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
+        t("Unterschrift", lx + 124, y, 8, f.regular, C.muted);
+        page.drawLine({ start: { x: lx + 172, y: y - 2 }, end: { x: W - M, y: y - 2 }, thickness: 0.7, color: rgb(C.ink) });
+        if (issuer.owner) t(issuer.owner, lx + 172, y - 11, 7.5, f.regular, C.muted);
       }
       t("Unterschrift: vom Teilnehmerdatenblatt übernommen (digital per QR-Code) oder hier von Hand. EH-Kurs = Erste-Hilfe-Kurs teilgenommen.", M, 22, 7.5, f.regular, C.muted);
     }

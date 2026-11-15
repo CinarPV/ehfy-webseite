@@ -34,9 +34,10 @@
     draw();
   }
 
-  // Teilnehmer mit ✓ Da und ihr Betrag: alter Preis aus der Notiz, sonst das gebuchte Paket
+  // Einnahmen eines Kurses = wer „Auf Teilnehmerliste“ angekreuzt ist (genau wie auf der ausgedruckten Liste).
+  // Betrag: alter Preis aus der Notiz, sonst das gebuchte Paket, minus Gutschein.
   function attendance(course) {
-    const here = regs.filter(r => r.course_id === course.id && r.status === "teilgenommen");
+    const here = regs.filter(r => r.course_id === course.id && r.on_list && r.status !== "storniert");
     const price = r => {
       const old = /Preis:\s*([\d.,]+)\s*€/.exec(r.message || "");
       if (old) return num(old[1]);
@@ -293,7 +294,7 @@
     }
     for (const c of courses) {
       const key = dayKey(new Date(c.starts_at));
-      if (c.status === "abgesagt" || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !attendance(c).count) continue;
+      if (c.status === "abgesagt" || key > today() || fin.tripsDone[c.id] || c.note === "Aus der alten App übernommen" || !regs.some(r => r.course_id === c.id && r.status === "teilgenommen")) continue;
       if (!num(fin.km[c.location])) { if (!missingKm.includes(c.location)) missingKm.push(c.location); continue; }
       courseTrips(c);
       years.add(key.slice(0, 4));
