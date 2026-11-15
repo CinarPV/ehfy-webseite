@@ -1860,7 +1860,7 @@
   function attRow(r) {
     const late = lateCancel(r), away = absent(r);
     return `<div class="att-row" data-att="${r.id}">
-      <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}
+      <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}${dupTag(r)}
         <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · <strong>Sehtest gebucht</strong>" : ""}</span>${away ? "" : debtTag(r)}</div>
       ${late ? "" : `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
@@ -1870,9 +1870,13 @@
       ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary>Bezahlung, Sehtest, Gutschein …</summary>
         ${payOnly(r)}
         <div class="att-btns st-quick">${r.package === "komplett" || r.sehtest_only || r.sehtest_nr ? `<button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>` : ""}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}${r.sehtest_nr && !r.sehtest_void_at ? '<button class="btn btn-sm btn-ghost" type="button" data-st-void style="color:var(--danger)">Ausschuss</button>' : ""}</div>
-        ${discountControls(r)}</details>`}
+        ${discountControls(r)}
+        <div class="att-btns" style="margin-top:10px"><button class="btn btn-sm btn-ghost" type="button" data-att-del style="color:var(--danger)">✕ Schüler komplett löschen (z. B. doppelt eingetragen)</button></div></details>`}
     </div>`;
   }
+  // Doppelt im selben Kurs? (gleiche E-Mail oder gleicher Name + Geburtsdatum)
+  const dupTag = r => attRegs.some(x => x.id !== r.id && x.course_id === r.course_id && x.status !== "storniert" && samePerson(x, r))
+    ? ' <span class="chip no" style="font-size:.75rem;padding:2px 8px">⚠ doppelt?</span>' : "";
   ["att-section", "att-unchecked"].forEach(id => $(id).addEventListener("toggle", ev => {
     const d = ev.target.closest && ev.target.closest("details[data-more]");
     if (d) d.open ? attMoreOpen.add(d.dataset.more) : attMoreOpen.delete(d.dataset.more);
@@ -2166,6 +2170,14 @@
     const r = attRegs.find(x => x.id === row.dataset.att) || regs.find(x => x.id === row.dataset.att);
     if (r) {
       try { if (await payClick(ev, r)) { await loadCourses(); return; } } catch (e) { errBox.textContent = e.message; return; }
+    }
+    if (r && ev.target.closest("[data-att-del]")) {
+      const keep = protoDone(r);
+      if (!confirm(`${r.first_name} ${r.last_name} wirklich komplett löschen?` + (keep
+        ? "\n\nDer Sehtest ist schon abgeschlossen: Das Protokoll bleibt unter „Sehtests“ erhalten, aus dem Kurs wird die Person entfernt."
+        : "\n\nDas kann nicht rückgängig gemacht werden."))) return;
+      try { await removeRegistration(r); attMoreOpen.delete(r.id); await loadCourses(); } catch (e) { errBox.textContent = e.message; }
+      return;
     }
     if (r && ev.target.closest("[data-st-print]")) return sehtestPdf(r, courseOf(r), msg => { errBox.textContent = msg; });
     if (r && ev.target.closest("[data-st-run]")) return openSehtest(r, courseOf(r), loadCourses).catch(e => { errBox.textContent = e.message; });
