@@ -3415,8 +3415,8 @@
     }
   }
   // Dokumentation: Ausbildungshelfer ab 16 Teilnehmenden, Anerkennung der Ausbildungsstelle
-  const DOC_HELPER = "Canan Sina";
-  const DOC_APPROVAL = "Anerkannt nach § 68 FeV durch Bezirksregierung Arnsberg · AZ: 25.01.30-001";
+  const DOC_HELPER = "Canan Cina";
+  const DOC_APPROVAL = "Anerkannt nach § 68 FeV durch Bezirksregierung Arnsberg · AZ: 25.01.30-001/2019-001";
   async function joinPdfs(parts) {
     const { PDFDocument } = window.PDFLib;
     const out = await PDFDocument.create();
