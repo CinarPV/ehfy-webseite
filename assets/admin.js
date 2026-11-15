@@ -2032,7 +2032,7 @@
       ${late ? "" : `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button></div>`}
-      ${away ? `<div class="att-fee">${feeControls(r)}</div>` : pkgRow(r)}
+      ${away ? `<div class="att-fee">${feeControls(r)}</div><div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-att-free style="color:var(--danger)">Rechtzeitig abgesagt – ohne Gebühr löschen</button></div>` : pkgRow(r)}
       ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Daten ändern, löschen …</summary>
         <div class="att-btns"><button class="btn btn-sm" type="button" data-reg-edit>✎ Daten ändern (Name, Adresse, Geburtsdatum …)</button><button class="btn btn-sm btn-ghost" type="button" data-att-del style="color:var(--danger)">✕ Schüler komplett löschen (z. B. doppelt eingetragen)</button></div></details>`}
     </div>`;
@@ -2169,7 +2169,7 @@
         r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Bezahlt</button> <button class="btn btn-sm btn-ghost" type="button" data-fee="tochance">Auf zweite Chance umstellen</button> <button class="btn btn-sm btn-ghost" type="button" data-fee="unpaid" style="color:var(--danger)">✗ Nicht bezahlt</button>`))
       + section("Zweite Chance läuft", "Die Person darf sich innerhalb der Frist für einen neuen Kurs anmelden.", chances, r => chanceRow(r).replace('<div class="att-fee">', `<div class="att-fee">`))
       + section("Nicht erschienen – noch nicht angeschrieben", "Rechnung oder zweite Chance per E-Mail senden. Ohne E-Mail-Adresse: anrufen und danach „Erledigt“.", notYet,
-        r => row(r, `${feeControls(r)} ${done}`))
+        r => row(r, `${feeControls(r)} ${done} <button class="btn btn-sm btn-ghost" type="button" data-att-free style="color:var(--danger)">Rechtzeitig abgesagt – ohne Gebühr löschen</button>`))
       + `<details class="card att-card" style="margin-bottom:14px"><summary><strong>Nicht bezahlt (${unpaid.length})</strong> <span class="small muted">– aus der Liste genommen, bleibt aber vermerkt</span></summary>
           <p class="small muted" style="margin:6px 0">Meldet sich die Person wieder an, siehst du am Kurstag bei ihr „⚠ Offene Ausfallgebühr“. Dann kannst du das Geld vor Ort kassieren und hier „Doch bezahlt“ drücken.</p>
           ${unpaid.length ? unpaid.sort(byDay).map(r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Doch bezahlt</button>`)).join("") : '<p class="small muted">Niemand.</p>'}</details>`;
@@ -2388,6 +2388,11 @@
       try { if (await payClick(ev, r)) { await loadCourses(); return; } } catch (e) { errBox.textContent = e.message; return; }
     }
     if (r && ev.target.closest("[data-reg-edit]")) return openEdit(r);
+    if (r && ev.target.closest("[data-att-free]")) {
+      if (!confirm(`${r.first_name} ${r.last_name} hat rechtzeitig abgesagt?\n\nDie Anmeldung wird gelöscht – keine Ausfallgebühr, keine Rechnung, keine E-Mail.`)) return;
+      try { await removeRegistration(r); await loadCourses(); } catch (e) { errBox.textContent = e.message; }
+      return;
+    }
     if (r && ev.target.closest("[data-att-del]")) {
       const keep = protoDone(r);
       if (!confirm(`${r.first_name} ${r.last_name} wirklich komplett löschen?` + (keep
