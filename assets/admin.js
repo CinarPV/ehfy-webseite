@@ -1906,30 +1906,36 @@
     const docOf = r => invs.filter(i => i.registration_id === r.id);
     const feeText = { rechnung: "Rechnung gesendet, offen", bezahlt: "bezahlt", unbezahlt: "nicht bezahlt", chance: "zweite Chance läuft", erlassen: "gutgeschrieben", erledigt: "erledigt" };
     const onlyOpen = $("pay-open").checked;
-    let rows = "", sum = 0, sumOpen = 0, own = 0;
+    let rows = "", fees = "", sum = 0, sumOpen = 0, own = 0, nPaid = 0, nOpen = 0;
+    // Eine Karte je Person: links Name und Angaben, rechts Betrag und Status – sauber getrennt
+    const card = (r, amount, paid, label, info, docs) => `<div class="pay-card ${paid ? "is-paid" : "is-open"}">
+        <div class="pay-who"><strong>${esc(r.last_name)}, ${esc(r.first_name)}</strong>
+          <span class="pay-info">${info}</span>
+          ${docs ? `<span class="pay-docs">${docs}</span>` : ""}</div>
+        <div class="pay-amount"><b>${eur(amount)}</b><span class="chip ${paid ? "ok" : "no"}">${label}</span></div>
+      </div>`;
+    const docText = r => docOf(r).map(i => `${i.type === "rechnung" ? "Rechnung" : "Quittung"} ${esc(i.number || "Entwurf")}${i.status === "bezahlt" ? " ✓" : i.status === "offen" && i.type === "rechnung" ? " (offen)" : ""}`).join(" · ");
     for (const r of regsC) {
       const away = r.status === "nicht_erschienen" || r.status === "storniert";
-      const docs = docOf(r).map(i => `${i.type === "rechnung" ? "Rechnung" : "Quittung"} ${esc(i.number || "Entwurf")}${i.status === "bezahlt" ? " ✓" : i.status === "offen" && i.type === "rechnung" ? " (offen)" : ""}`).join("<br>") || "–";
       if (away) {
         if (!r.fee_state && r.status === "storniert") continue;
         const paid = r.fee_state === "bezahlt";
         if (onlyOpen && (paid || r.fee_state === "erlassen" || r.fee_state === "erledigt")) continue;
-        rows += `<tr><td>${esc(r.last_name)}</td><td>${esc(r.first_name)}</td><td class="num">${eur(FEE)}</td>
-          <td><span class="chip ${paid ? "ok" : "no"}">${paid ? "✓ bezahlt" : "nicht bezahlt"}</span></td>
-          <td class="small">Ausfallgebühr · ${feeText[r.fee_state] || "noch nicht angeschrieben"}</td><td class="small">${docs}</td></tr>`;
+        fees += card(r, FEE, paid, paid ? "✓ bezahlt" : "offen", `Ausfallgebühr · ${feeText[r.fee_state] || "noch nicht angeschrieben"}`, docText(r));
         continue;
       }
       const price = priceOf(r), paid = !!r.payment_method;
       if (onlyOpen && paid) continue;
-      if (r.payment_method === OWN) own += price; else if (paid) sum += price; else sumOpen += price;
-      rows += `<tr><td>${esc(r.last_name)}</td><td>${esc(r.first_name)}</td><td class="num">${eur(price)}</td>
-        <td><span class="chip ${paid ? "ok" : "no"}">${paid ? "✓ bezahlt" : "nicht bezahlt"}</span></td>
-        <td class="small">${paid ? esc(payLabel(r.payment_method)) : "–"}${r.package === "komplett" ? " · mit Sehtest" : ""}${r.on_list ? " · auf Liste" : ""}</td><td class="small">${docs}</td></tr>`;
+      if (r.payment_method === OWN) own += price; else if (paid) { sum += price; nPaid++; } else { sumOpen += price; nOpen++; }
+      const info = [paid ? payLabel(r.payment_method) : "noch keine Zahlart", withSehtestText(r), r.on_list ? "auf Teilnehmerliste" : ""].filter(Boolean).map(esc).join(" · ");
+      rows += card(r, price, paid, paid ? "✓ bezahlt" : "nicht bezahlt", info, docText(r));
     }
-    $("pay-list").innerHTML = `<table class="pay-table"><thead><tr><th>Nachname</th><th>Vorname</th><th class="num">Betrag</th><th>Status</th><th>Zahlart</th><th>Rechnung / Quittung</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" class="muted">Niemand.</td></tr>'}</tbody></table>
-      <p style="margin:12px 0 0"><strong>Bezahlt: ${eur(sum)}</strong>${sumOpen ? ` · <strong style="color:var(--danger)">Offen: ${eur(sumOpen)}</strong>` : ""}${own ? ` · <span class="muted">PayPal privat: ${eur(own)} (nicht im Gesamt)</span>` : ""}</p>`;
+    const tile = (label, value, cls = "") => `<div class="pay-tile ${cls}"><span>${label}</span><b>${value}</b></div>`;
+    $("pay-list").innerHTML = `<div class="pay-tiles">${tile(`Bezahlt (${nPaid})`, eur(sum), "ok")}${tile(`Offen (${nOpen})`, eur(sumOpen), sumOpen ? "no" : "")}${own ? tile("PayPal privat", eur(own), "muted") : ""}</div>
+      ${rows ? `<h3 class="pay-h">Kursgebühren</h3>${rows}` : '<p class="muted">Niemand.</p>'}
+      ${fees ? `<h3 class="pay-h">Ausfallgebühren</h3>${fees}` : ""}`;
   }
+  const withSehtestText = r => (r.package === "komplett" ? "mit Sehtest" : "ohne Sehtest");
   $("pay-course").addEventListener("change", () => { payCourseId = $("pay-course").value; loadPayments().catch(e => { $("pay-error").textContent = e.message; }); });
   $("pay-open").addEventListener("change", () => loadPayments().catch(e => { $("pay-error").textContent = e.message; }));
 
