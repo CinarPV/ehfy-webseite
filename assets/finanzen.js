@@ -316,6 +316,8 @@
     return years.size > 0;
   }
   async function load() {
+    // Erst den neuesten Stand holen: Sonst könnte ein Gerät mit altem Stand übernommene Kurstage überschreiben
+    if (db.isOnline && db.isOnline() && db.pull) await db.pull().catch(() => {});
     settings = await db.getSettings().catch(() => ({}));
     fin = { ...blank(), ...(settings.finance || {}) };
     [courses, regs] = await Promise.all([db.listCourses(), db.listAllRegistrations()]);
