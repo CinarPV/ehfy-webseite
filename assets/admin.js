@@ -2844,7 +2844,7 @@
     if (!tpl.bescheinigung) notes.push("Bescheinigungen fehlen: Die Vorlage „Bescheinigung“ ist noch nicht hochgeladen.");
     // Vorhandene Rechnungen und Quittungen (ohne Unterschrift, wie gedruckt)
     for (const inv of (data.invoices || []).filter(i => !i.draft && i.number)) {
-      const folder = inv.type === "quittung" ? "Quittungen" : "Rechnungen";
+      const folder = inv.status === "storniert" ? "Storniert" : inv.type === "quittung" ? "Quittungen" : "Rechnungen";
       const year = String(inv.issued_on || "").slice(0, 4) || "ohne Jahr";
       jobs.push(async () => files.push({
         name: `${folder}/${year}/${fileSafe(inv.number)} - ${fileSafe((inv.recipient && inv.recipient.name) || "")}${inv.status === "storniert" ? " (storniert)" : ""}.pdf`,
@@ -3371,7 +3371,7 @@
   // Alle Belege des gewählten Monats als eine PDF, in Nummernfolge
   async function printMonth(type, label) {
     $("inv-print-error").textContent = "";
-    const list = invoices.filter(i => i.type === type && inMonth(i) && !i.draft).sort((a, b) => a.seq - b.seq);
+    const list = invoices.filter(i => i.type === type && inMonth(i) && !i.draft && i.status !== "storniert").sort((a, b) => a.seq - b.seq);
     if (!list.length) { $("inv-print-error").textContent = `Für diese Auswahl gibt es keine ${label}.`; return; }
     const win = openTab();
     try {
@@ -3396,7 +3396,8 @@
     }
     return out.save();
   }
-  const belegeOf = all => (all ? invoices : invoices.filter(inMonth)).filter(i => !i.draft).sort((a, b) => a.seq - b.seq);
+  // Stornierte Belege zählen nirgends mit: nicht drucken, nicht herunterladen, nicht in den Summen
+  const belegeOf = all => (all ? invoices : invoices.filter(inMonth)).filter(i => !i.draft && i.status !== "storniert").sort((a, b) => a.seq - b.seq);
   function saveFile(bytes, name) {
     // In der iPhone-App geht das Speichern über den PDF-Dialog
     if (appMode) return pdfDialog(bytes, name);
@@ -3444,18 +3445,24 @@
   }
   function renderInvoiceRows() {
     const counts = {};
-    for (const i of invoices) counts[i.issued_on.slice(5, 7)] = (counts[i.issued_on.slice(5, 7)] || 0) + 1;
-    $("inv-month").innerHTML = `<option value="">Ganzes Jahr (${invoices.length})</option>` + INV_MONTHS.map((m, n) => {
+    const live = invoices.filter(i => i.status !== "storniert"), cancelled = invoices.filter(i => i.status === "storniert");
+    for (const i of live) counts[i.issued_on.slice(5, 7)] = (counts[i.issued_on.slice(5, 7)] || 0) + 1;
+    $("inv-month").innerHTML = `<option value="">Ganzes Jahr (${live.length})</option>` + INV_MONTHS.map((m, n) => {
       const key = String(n + 1).padStart(2, "0");
       return `<option value="${key}" ${key === invMonth ? "selected" : ""}>${m} (${counts[key] || 0})</option>`;
     }).join("");
-    const shown = invoices.filter(inMonth);
+    const shown = live.filter(inMonth);
     const of = t => shown.filter(i => i.type === t && !i.draft).length;
     $("inv-print-bills").textContent = `Nur Rechnungen (${of("rechnung")})`;
     $("inv-print-receipts").textContent = `Nur Quittungen (${of("quittung")})`;
     $("inv-print-all").textContent = `Alles drucken (${of("rechnung") + of("quittung")})`;
     $("inv-dl-all").textContent = `Herunterladen (${of("rechnung") + of("quittung")})`;
-    $("inv-dl-year").textContent = `Ganzes Jahr herunterladen (${invoices.filter(i => !i.draft).length})`;
+    $("inv-dl-year").textContent = `Ganzes Jahr herunterladen (${live.filter(i => !i.draft).length})`;
+    $("inv-cancelled").innerHTML = cancelled.length ? `<details class="card" style="margin-top:16px"><summary><strong>Stornierte Belege (${cancelled.length})</strong> <span class="small muted">– zählen nirgends mit, nur zur Aufbewahrung</span></summary>
+      <div class="table-wrap"><table><thead><tr><th>Nr.</th><th>Datum</th><th>Art</th><th>Empfänger</th><th>Betrag</th><th></th></tr></thead><tbody>
+      ${cancelled.sort((a, b) => b.seq - a.seq).map(i => `<tr class="is-past"><td><strong>${esc(i.number)}</strong></td><td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
+        <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td><td>${esc(i.recipient.name)}</td><td>${eur(i.total)}</td>
+        <td><button class="btn btn-sm btn-outline" data-inv="pdf" data-id="${i.id}">PDF</button></td></tr>`).join("")}</tbody></table></div></details>` : "";
     $("inv-rows").innerHTML = shown.length ? shown.map(i => `
       <tr class="${i.status === "storniert" ? "is-past" : ""}">
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
@@ -3517,6 +3524,13 @@
     showPdf(bytes, `${inv.type === "quittung" ? "Quittung" : "Rechnung"}_${inv.number}.pdf`, win);
   }
 
+  // Stornierte Belege: nur ansehen
+  $("inv-cancelled").addEventListener("click", async ev => {
+    const b = ev.target.closest("button[data-inv='pdf']");
+    if (!b) return;
+    const inv = invoices.find(i => i.id === b.dataset.id), win = openTab();
+    try { await invoicePdf(inv, win); } catch (e) { if (win) win.close(); alert(e.message); }
+  });
   $("inv-rows").addEventListener("click", async ev => {
     const b = ev.target.closest("button[data-inv]");
     if (!b) return;
