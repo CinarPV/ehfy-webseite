@@ -2038,7 +2038,8 @@
           <button class="btn btn-sm btn-ghost" type="button" data-course-act="reopen">Absage aufheben</button></div></div>`
       : `<details class="att-print" data-course="${c.id}"><summary>🖨 Für den ganzen Kurs drucken …</summary>
           <div class="att-btns" style="padding:8px 0">
-            <button class="btn btn-sm" type="button" data-course-print="datenblatt">Teilnehmerdatenblätter (alle)</button>
+            <button class="btn btn-sm" type="button" data-course-print="dokumentation">Dokumentation (§ 68 FeV)</button>
+            <button class="btn btn-sm" type="button" data-course-print="datenblatt">Teilnehmerdatenblätter (alle, mit Dokumentation)</button>
             <button class="btn btn-sm" type="button" data-course-print="protokolle">Sehtest-Protokolle (alle)</button>
             <button class="btn btn-sm" type="button" data-course-print="bescheinigung">Bescheinigungen (alle)</button>
             <button class="btn btn-sm" type="button" data-course-print="quittung">Quittungen (Bar)</button>
@@ -3403,6 +3404,11 @@
     }
     if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course, preview));
     if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course, preview), await issuer(), loadFont, cfg.documents.paymentDays);
+    if (kind === "dokumentation") {
+      // Dokumentation einzeln: Anzahl = anwesende Teilnehmende des Kurses
+      const n = people.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen").length;
+      return D.documentation(course, n, await issuer(), loadFont, { helper: n > 15 ? DOC_HELPER : "", approval: DOC_APPROVAL, printed: new Date() });
+    }
     if (kind === "protokolle") {
       const list = people.filter(r => !r.sehtest_void_at && (r.sehtest_passed != null || stStarted(r)));
       if (!list.length) throw new Error("In diesem Kurs gibt es noch keine Sehtest-Protokolle.");
@@ -3423,7 +3429,7 @@
     for (const b of parts) { const d = await PDFDocument.load(b); (await out.copyPages(d, d.getPageIndices())).forEach(p => out.addPage(p)); }
     return out.save();
   }
-  const DOC_NAMES = { protokolle: "Sehtest-Protokolle", teilnehmerliste: "Teilnehmerliste", bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
+  const DOC_NAMES = { dokumentation: "Dokumentation", protokolle: "Sehtest-Protokolle", teilnehmerliste: "Teilnehmerliste", bescheinigung: "Bescheinigungen", datenblatt: "Datenblaetter", quittung: "Quittungen", rechnung: "Rechnungen", alles: "Kursmappe" };
   // „alles“: pro Teilnehmer Datenblatt, Bescheinigung und Quittung hintereinander
   const BUNDLE = ["datenblatt", "bescheinigung", "quittung"];
 
