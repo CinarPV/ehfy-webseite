@@ -532,14 +532,14 @@
     const cols = [["Nr.", 18], ["Name, Vorname", 120], ["Adresse", 118], ["EH-Kurs", 40], ["Sehtest", 38], ["Bezahlt", 64], ["Betrag", 46]];
     const signW = W - 2 * M - cols.reduce((n, c) => n + c[1], 0);
     cols.push(["Unterschrift", signW]);
-    const rowH = 40, perPage = 16, top0 = H - 132;
+    const rowH = 38, perPage = 12, top0 = H - 132; // 12 Schüler pro Seite, Zahlungseingang auf der letzten Seite
     // Sehtest gemacht oder gebucht = Preis mit Sehtest (Spalte und Betrag passen so immer zusammen)
     const withST = r => r.package === "komplett" || (r.sehtest_passed != null && !r.sehtest_void_at);
     const price = r => { const p = packages.find(x => x.key === (withST(r) ? "komplett" : "kurs")) || packages[0]; return Math.max(0, p.price - (Number(r.discount) || 0)); };
     const sums = { bar: 0, paypal: 0, ueberweisung: 0, offen: 0 };
     people.forEach(r => { sums[r.payment_method && sums[r.payment_method] != null ? r.payment_method : "offen"] += price(r); });
     const pages = Math.max(1, Math.ceil(people.length / perPage));
-    const NEED = 200; // Platz für Zahlungseingang, Bestätigung und Stempel
+    const NEED = 190; // Platz für Zahlungseingang, Bestätigung und Stempel
     const extraPage = (top0 - 6 - (people.length - (pages - 1) * perPage) * rowH) - NEED < 34 ? 1 : 0;
     const fit = (t, font, size, w) => { t = String(t || ""); while (t && font.widthOfTextAtSize(t, size) > w) t = t.slice(0, -1); return t; };
     const sigs = new Map();
@@ -566,7 +566,7 @@
       y -= 6;
       const list = people.slice(pg * perPage, pg * perPage + perPage);
       list.forEach((r, i) => {
-        const top = y, l1 = top - 16, l2 = top - 29;
+        const top = y, l1 = top - 15, l2 = top - 28;
         if (i % 2) page.drawRectangle({ x: M, y: top - rowH, width: W - 2 * M, height: rowH, color: rgb(C.soft) });
         let cx = M;
         const col = k => { const x0 = cx; cx += cols[k][1]; return x0 + 4; };
@@ -619,7 +619,7 @@
         // Bestätigung des Betriebs: etwa 1 cm darunter, darüber Platz für einen 70-mm-Stempel (ca. 3 cm hoch)
         y = by - 28;
         t("Die oben aufgeführten Beträge wurden in der jeweils angegebenen Zahlungsart erhalten.", M, y, 10);
-        const ly = y - 95, sx = W - M - 250;
+        const ly = y - 88, sx = W - M - 250;
         t("Datum", M, ly + 4, 8, f.regular, C.muted);
         page.drawLine({ start: { x: M + 30, y: ly + 2 }, end: { x: M + 180, y: ly + 2 }, thickness: 0.7, color: rgb(C.ink) });
         page.drawLine({ start: { x: sx, y: ly + 2 }, end: { x: W - M, y: ly + 2 }, thickness: 0.7, color: rgb(C.ink) });
