@@ -1142,7 +1142,28 @@
     goView("termine");
     openParticipants(c);
   }
+  // ---------- Notizen (Start): freier Text, automatisch gespeichert in den Einstellungen ----------
+  let notesTimer = null, notesLoaded = false;
+  async function loadNotes() {
+    if (notesLoaded && document.activeElement === $("notes-text")) return;
+    const n = (await db.getSettings().catch(() => ({}))).notes || "";
+    if (document.activeElement !== $("notes-text")) $("notes-text").value = n;
+    $("notes-info").textContent = n.trim() ? `– ${n.trim().split("\n")[0].slice(0, 50)}${n.trim().length > 50 ? " …" : ""}` : "";
+    if (!notesLoaded && n.trim()) $("notes-box").open = true;
+    notesLoaded = true;
+  }
+  $("notes-text").addEventListener("input", () => {
+    clearTimeout(notesTimer);
+    $("notes-info").textContent = "– wird gespeichert …";
+    notesTimer = setTimeout(async () => {
+      try {
+        await db.saveSettings({ ...(await db.getSettings().catch(() => ({}))), notes: $("notes-text").value });
+        $("notes-info").textContent = "– gespeichert ✓";
+      } catch (e) { $("notes-info").textContent = "– nicht gespeichert: " + e.message; }
+    }, 800);
+  });
   function renderStart() {
+    loadNotes().catch(() => {});
     if (!$("start-today")) return;
     const today = localDate(new Date()), day = c => localDate(new Date(c.starts_at));
     $("start-date").textContent = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -1237,6 +1258,14 @@
     const used = (await db.listAllRegistrations()).map(x => (String(x.sehtest_nr || "").match(new RegExp(`^S${yy}-(\\d+)$`)) || [])[1]).filter(Boolean).map(Number);
     return `S${yy}-${String((used.length ? Math.max(...used) : 0) + 1).padStart(3, "0")}`;
   }
+  // Angefangene, aber noch nicht bestätigte Sehtests (außer diesem). Solange es solche gibt, zeigt kein Protokoll
+  // eine vorläufige Nummer – sonst stünde dieselbe Nummer auf zwei Protokollen.
+  async function openDrafts(exceptId) {
+    return (await db.listAllRegistrations()).filter(x => x.id !== exceptId && !x.sehtest_nr && x.sehtest_passed == null
+      && !x.sehtest_void_at && x.status !== "storniert" && stStarted(x)).sort(byName);
+  }
+  const draftList = list => list.map(x => `• ${x.first_name} ${x.last_name}`).join("\n");
+  async function safeDraftNr(exceptId) { return (await openDrafts(exceptId)).length ? "" : draftNr(); }
   const nrTaken = async (nr, id) => (await db.listAllRegistrations()).some(x => x.id !== id && x.sehtest_nr === nr);
   const nrError = (e, nr) => (/duplicate|unique/i.test(e.message || "") ? new Error(`Die Protokoll-Nummer ${nr} ist schon vergeben.`) : e);
   // Sehtest wiederholen: neuer Eintrag „nur Sehtest“ mit denselben Personendaten.
@@ -1336,7 +1365,7 @@
     const day = sehtestDay(r, c) || (c ? dayOf(c.starts_at) : "");
     return EHFYDocs.sehtestProtocols([{
       first_name: r.first_name, last_name: r.last_name, birth_date: r.birth_date, nr: r.sehtest_nr,
-      nrDraft: r.sehtest_nr ? "" : await draftNr(), marks: r.sehtest_marks,
+      nrDraft: r.sehtest_nr ? "" : await safeDraftNr(r.id), marks: r.sehtest_marks,
       date: day ? `${day}T12:00:00` : null, passed: r.sehtest_passed, flow: r.sehtest_flow, aid: aidKind(r), idDoc: r.sehtest_id_doc, idNo: r.sehtest_id_no,
       examiner: r.sehtest_examiner || (r.sehtest_passed != null ? (await issuer(), examiners()[0]) : ""),
       signature: r.sehtest_passed != null || r.sehtest_signed_at ? await signatureBytes() : null
@@ -1498,8 +1527,11 @@
     $("sd-more-info").textContent = [stRun.examiner, $("sd-date").value && birthText($("sd-date").value)].filter(Boolean).join(" · ");
   }
   async function openSehtest(r, c, done) {
+    // Hinweis: Läuft noch ein anderer Sehtest ohne bestätigte Nummer?
+    const others = r.sehtest_nr || r.sehtest_passed != null ? [] : await openDrafts(r.id);
+    if (others.length && !confirm(`Achtung: Diese Sehtests sind angefangen, aber noch nicht bestätigt:\n${draftList(others)}\n\nDie Nummer wird erst bei „Ergebnis übernehmen“ vergeben. Am besten zuerst diese abschließen (oder als Ausschuss markieren).\n\nTrotzdem diesen Sehtest öffnen? Er zeigt dann noch keine Nummer an.`)) return;
     const d = stDialog();
-    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr ? "" : await draftNr() };
+    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr || others.length ? "" : await draftNr() };
     const noSig = !(await signatureBytes());
     $("sd-signinfo").textContent = noSig ? "Noch keine Unterschrift hinterlegt – bitte unter Mehr → Einstellungen → Unterschrift erfassen." : "✍ Deine hinterlegte Unterschrift und das Datum kommen automatisch aufs Protokoll.";
     $("sd-signinfo").style.color = noSig ? "var(--danger)" : "var(--muted)";
@@ -1541,7 +1573,7 @@
     $("sd-idinfo").innerHTML = "";
     $("sd-birth").innerHTML = r.birth_date ? `geb. <strong>${birthText(r.birth_date)}</strong>` : '<span style="color:var(--danger)">Geburtsdatum fehlt – Ausweis fotografieren oder in der Teilnehmerliste eintragen</span>';
     $("sd-nr").value = r.sehtest_nr || stRun.draft;
-    $("sd-nr-hint").textContent = r.sehtest_reissue ? "(geändert – Bescheinigung neu ausstellen)" : r.sehtest_issued_at ? "(fest – Bescheinigung ausgestellt)" : r.sehtest_nr ? "(änderbar, spätere rücken nach)" : "(vorläufig – fest erst bei „Ergebnis übernehmen“)";
+    $("sd-nr-hint").textContent = r.sehtest_reissue ? "(geändert – Bescheinigung neu ausstellen)" : r.sehtest_issued_at ? "(fest – Bescheinigung ausgestellt)" : r.sehtest_nr ? "(änderbar, spätere rücken nach)" : stRun.draft ? "(vorläufig – fest erst bei „Ergebnis übernehmen“)" : "(kommt erst bei „Ergebnis übernehmen“ – andere Sehtests sind noch offen)";
     $("sd-error").textContent = "";
     stRender();
     d.showModal();
@@ -1620,6 +1652,10 @@
     if (withResult && unsurePkg(r) && r.sehtest_passed == null) patch.package = "komplett";
     if (withResult && !r.payment_method) { $("sd-error").textContent = "Bitte zuerst bei ② eintragen, wie bezahlt wurde (Bar, PayPal oder Überweisung)."; $("sd-step2").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     if (withResult && !patch.sehtest_id_no && !confirm("Es ist keine Ausweis-Nr. eingetragen. Trotzdem abschließen?")) { $("sd-idno").focus(); return; }
+    if (withResult && !r.sehtest_nr) {
+      const others = await openDrafts(r.id);
+      if (others.length && !confirm(`Hinweis: Diese Sehtests sind noch offen und müssen noch abgeschlossen werden:\n${draftList(others)}\n\nDieser Sehtest bekommt jetzt die nächste Nummer. Die offenen bekommen ihre Nummer erst, wenn du sie bestätigst – steht auf deren Papier-Protokoll schon eine Nummer, bitte durchstreichen.\n\nJetzt bestätigen?`)) return;
+    }
     btn.disabled = true;
     try {
       if (own && r.sehtest_nr) {
