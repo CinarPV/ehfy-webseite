@@ -1764,10 +1764,14 @@
   const chanceBefore = r => attRegs.find(x => x.id !== r.id && x.fee_state === "chance" && samePerson(x, r) && courseOf(x) && followUp(x) && followUp(x).id === r.id);
 
   function feeControls(r) {
-    if (r.fee_state === "rechnung") return `<span class="small">Rechnung gesendet am ${shortDay(r.fee_state_at)}</span>`;
+    if (r.fee_state === "rechnung") {
+      const days = Math.floor((Date.now() - new Date(r.fee_state_at)) / 864e5), late = days - cfg.documents.paymentDays;
+      return `<span class="small">Rechnung gesendet am ${shortDay(r.fee_state_at)}${late > 0 ? ` · <strong style="color:var(--danger)">seit ${late} ${late === 1 ? "Tag" : "Tagen"} überfällig</strong>` : ""}</span>`;
+    }
     if (r.fee_state === "erlassen") return '<span class="small">Ausfallgebühr gutgeschrieben</span>';
     if (r.fee_state === "bezahlt") return `<span class="small">Ausfallgebühr bezahlt${r.fee_state_at ? " am " + shortDay(r.fee_state_at) : ""}</span>`;
     if (r.fee_state === "erledigt") return '<span class="small">Als erledigt abgehakt</span>';
+    if (r.fee_state === "unbezahlt") return `<span class="small" style="color:var(--danger)">Ausfallgebühr nicht bezahlt (vermerkt am ${shortDay(r.fee_state_at)})</span>`;
     if (!r.email) return '<span class="small muted">Keine E-Mail hinterlegt</span>';
     const before = chanceBefore(r);
     if (before) return `<span class="small">Zweite Chance nicht genutzt.</span> <button class="btn btn-sm" type="button" data-fee="both">Rechnungen senden: 2 × ${FEE} €</button>`;
@@ -1775,11 +1779,14 @@
     return `<button class="btn btn-sm" type="button" data-fee="bill">Rechnung ${FEE} € senden</button>
       <button class="btn btn-sm btn-ghost" type="button" data-fee="chance">Zweite Chance senden</button>`;
   }
+  // Hat dieselbe Person von früher noch eine offene oder nicht bezahlte Ausfallgebühr?
+  const oldDebt = r => attRegs.find(x => x.id !== r.id && (x.fee_state === "rechnung" || x.fee_state === "unbezahlt") && samePerson(x, r) && courseOf(x));
+  const debtTag = r => { const d = oldDebt(r); return d ? `<span class="pay-tag unpaid" style="margin-top:4px">⚠ Offene Ausfallgebühr ${FEE} € (Kurs ${shortDay(courseOf(d).starts_at)})</span>` : ""; };
   function attRow(r) {
     const late = lateCancel(r);
     return `<div class="att-row" data-att="${r.id}">
       <div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${late ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}
-        <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span></div>
+        <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ""}${r.package === "komplett" ? " · Sehtest gebucht" : ""}</span>${absent(r) ? "" : debtTag(r)}</div>
       ${late ? "" : `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
@@ -1867,6 +1874,7 @@
     const notYet = attRegs.filter(r => absent(r) && past(r) && !r.fee_state && !followUpOf(r));
     const chances = attRegs.filter(r => r.fee_state === "chance" && courseOf(r));
     const bills = attRegs.filter(r => r.fee_state === "rechnung" && courseOf(r));
+    const unpaid = attRegs.filter(r => r.fee_state === "unbezahlt" && courseOf(r));
     const total = notYet.length + chances.length + bills.length;
     feeTotal = total;
     $("nav-more-btn").innerHTML = `<span class="dots" aria-hidden="true">•••</span>Mehr${total ? ` <span class="nav-badge">${total}</span>` : ""}`;
@@ -1878,10 +1886,13 @@
     const section = (title, hint, list, html) => `<article class="card att-card" style="margin-bottom:14px"><h3 style="margin-top:0">${title} (${list.length})</h3><p class="small muted" style="margin:0 0 6px">${hint}</p>${list.length ? list.sort(byDay).map(html).join("") : '<p class="small muted">Niemand.</p>'}</article>`;
     $("fee-list").innerHTML =
       section("Rechnung gesendet – Zahlung offen", "Wenn bezahlt ist: „Bezahlt“ drücken. Dann verschwindet die Person aus der Liste, und die Rechnung steht auf bezahlt.", bills,
-        r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Bezahlt</button> <button class="btn btn-sm btn-ghost" type="button" data-fee="tochance">Auf zweite Chance umstellen</button>`))
+        r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Bezahlt</button> <button class="btn btn-sm btn-ghost" type="button" data-fee="tochance">Auf zweite Chance umstellen</button> <button class="btn btn-sm btn-ghost" type="button" data-fee="unpaid" style="color:var(--danger)">✗ Nicht bezahlt</button>`))
       + section("Zweite Chance läuft", "Die Person darf sich innerhalb der Frist für einen neuen Kurs anmelden.", chances, r => chanceRow(r).replace('<div class="att-fee">', `<div class="att-fee">`))
       + section("Nicht erschienen – noch nicht angeschrieben", "Rechnung oder zweite Chance per E-Mail senden. Ohne E-Mail-Adresse: anrufen und danach „Erledigt“.", notYet,
-        r => row(r, `${feeControls(r)} ${done}`));
+        r => row(r, `${feeControls(r)} ${done}`))
+      + `<details class="card att-card" style="margin-bottom:14px"><summary><strong>Nicht bezahlt (${unpaid.length})</strong> <span class="small muted">– aus der Liste genommen, bleibt aber vermerkt</span></summary>
+          <p class="small muted" style="margin:6px 0">Meldet sich die Person wieder an, siehst du am Kurstag bei ihr „⚠ Offene Ausfallgebühr“. Dann kannst du das Geld vor Ort kassieren und hier „Doch bezahlt“ drücken.</p>
+          ${unpaid.length ? unpaid.sort(byDay).map(r => row(r, `${feeControls(r)} <button class="btn btn-sm" type="button" data-fee="paid">✓ Doch bezahlt</button>`)).join("") : '<p class="small muted">Niemand.</p>'}</details>`;
   }
   // Wurde für einen Nicht-Erschienenen schon ein Nachholtermin gebucht (ohne zweite Chance)? Dann nicht anmahnen.
   const followUpOf = r => attRegs.find(x => x.id !== r.id && x.status !== "storniert" && samePerson(x, r) && courseOf(x) && courseOf(x).starts_at > courseOf(r).starts_at);
@@ -1975,6 +1986,9 @@
         for (const inv of await db.invoicesForRegistrations([r.id])) {
           if (inv.type === "rechnung" && inv.status === "offen" && String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) await db.setInvoiceStatus(inv.id, "bezahlt");
         }
+      } else if (fee.dataset.fee === "unpaid") {
+        if (!confirm(`${r.first_name} ${r.last_name} hat die Ausfallgebühr nicht bezahlt? Die Person kommt aus der offenen Liste unter „Nicht bezahlt“. Meldet sie sich wieder an, wird die offene Gebühr angezeigt.`)) return true;
+        await db.updateRegistration(r.id, { fee_state: "unbezahlt", fee_state_at: new Date().toISOString() });
       } else if (fee.dataset.fee === "done") {
         if (!confirm(`${r.first_name} ${r.last_name} als erledigt aus der Liste nehmen?`)) return true;
         await db.updateRegistration(r.id, { fee_state: "erledigt", fee_state_at: new Date().toISOString() });
