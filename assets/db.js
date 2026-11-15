@@ -207,7 +207,7 @@
       },
       // Beleg nachträglich einem Schüler zuordnen
       async linkInvoice(id, registrationId) {
-        check(await sb.from("invoices").update({ registration_id: registrationId }).eq("id", id));
+        check(await sb.rpc("link_invoice", { p_id: id, p_registration: registrationId }));
       },
       // Beleg direkt über dein Postfach info@ehfy.de senden (Funktion "beleg-mail")
       // Gesendete Schreiben festhalten (Tabelle mail_log)
