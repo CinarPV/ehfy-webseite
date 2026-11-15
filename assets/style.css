@@ -857,3 +857,11 @@ dialog.sign-big::backdrop { background: #fff; }
 .pay-docs { font-size: .8rem; color: var(--muted); }
 .pay-amount { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; text-align: right; }
 .pay-amount b { font-size: 1.15rem; white-space: nowrap; }
+
+/* PDF-Vorschau */
+.pv-dlg { width: min(1000px, 96vw); height: 94vh; max-height: 94vh; padding: 0; border: 0; border-radius: 16px; overflow: hidden; }
+.pv-dlg[open] { display: flex; flex-direction: column; }
+.pv-dlg::backdrop { background: rgba(10, 37, 64, .55); }
+.pv-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: var(--soft); border-bottom: 1px solid var(--line); }
+.pv-bar strong { font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+.pv-dlg iframe { flex: 1 1 auto; width: 100%; border: 0; background: #525659; }

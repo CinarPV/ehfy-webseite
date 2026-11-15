@@ -3116,13 +3116,44 @@
   const appMode = window.navigator.standalone === true;
 
   // PDF im vorher geöffneten Tab anzeigen (Pop-up-Blocker) oder im Dialog anbieten
+  // Am Mac/PC zeigt die App PDFs zuerst in einer Vorschau (mit „Drucken“-Knopf). iPhone/iPad wie bisher.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const usePreview = !isIOS;
   function openTab() {
-    if (appMode) return null;
+    if (appMode || usePreview) return null;
     const win = window.open("", "_blank");
     if (win) win.document.write("<p style='font:16px system-ui,sans-serif;padding:24px'>PDF wird erstellt …</p>");
     return win;
   }
+  // Vorschau: PDF ansehen, dann erst drucken oder speichern
+  let pvUrl = null;
+  function previewDlg() {
+    let d = $("pv-dialog");
+    if (d) return d;
+    d = document.createElement("dialog");
+    d.id = "pv-dialog"; d.className = "pv-dlg";
+    d.innerHTML = `<div class="pv-bar"><strong id="pv-name"></strong>
+        <div class="btn-row"><button class="btn" type="button" id="pv-print">🖨 Drucken</button>
+        <a class="btn btn-ghost" id="pv-dl" href="#">Speichern</a>
+        <button class="btn btn-ghost" type="button" id="pv-close">Schließen</button></div></div>
+      <iframe id="pv-frame" title="Vorschau"></iframe>`;
+    document.body.appendChild(d);
+    $("pv-close").onclick = () => d.close();
+    $("pv-print").onclick = () => { try { $("pv-frame").contentWindow.focus(); $("pv-frame").contentWindow.print(); } catch (e) { window.open(pvUrl, "_blank"); } };
+    d.addEventListener("close", () => { $("pv-frame").src = "about:blank"; if (pvUrl) { URL.revokeObjectURL(pvUrl); pvUrl = null; } });
+    return d;
+  }
+  function previewPdf(bytes, name) {
+    const d = previewDlg();
+    if (pvUrl) URL.revokeObjectURL(pvUrl);
+    pvUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    $("pv-name").textContent = name;
+    $("pv-frame").src = pvUrl;
+    $("pv-dl").href = pvUrl; $("pv-dl").download = name;
+    if (!d.open) d.showModal();
+  }
   function showPdf(bytes, name, win) {
+    if (!win && usePreview) return previewPdf(bytes, name);
     const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     if (win && !win.closed) { win.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); }
     else { URL.revokeObjectURL(url); pdfDialog(bytes, name); }
