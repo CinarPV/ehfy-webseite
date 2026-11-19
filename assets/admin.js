@@ -2489,7 +2489,7 @@
     const people = new Map();
     for (const r of studentRegs) {
       const c = courseFor(r);
-      const hay = [r.first_name, r.last_name, birthText(r.birth_date), r.email, r.phone, c && c.location].join(" ").toLowerCase();
+      const hay = [r.first_name, r.last_name, birthText(r.birth_date), r.email, r.phone, c && c.location, r.sehtest_nr].join(" ").toLowerCase();
       if (!words.every(w => hay.includes(w))) continue;
       const key = `${r.last_name}|${r.first_name}|${r.birth_date || ""}`.toLowerCase();
       if (!people.has(key)) people.set(key, []);
@@ -2505,6 +2505,7 @@
       return `<article class="sc-person">
         <h3>${esc(p.last_name)}, ${esc(p.first_name)}</h3>
         <p class="small muted" style="margin:2px 0 0">geb. ${birthText(p.birth_date)}${p.email ? ` · <a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}${p.phone ? ` · <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""}</p>
+        ${quickInfo(entries)}
         ${entries.map(r => studentEntry(r)).join("")}
       </article>`;
     }).join("") + (sorted.length > limit ? `<p class="muted small">Es werden die neuesten ${limit} angezeigt. Bitte die Suche genauer eingeben.</p>` : "")
@@ -2517,6 +2518,13 @@
         <span class="small muted">${r.sehtest_on ? birthText(r.sehtest_on) : ""} · ${r.sehtest_passed === true ? "bestanden" : r.sehtest_passed === false ? "nicht bestanden" : "hochgeladen"}${r.sehtest_only && !r.course_id ? " · nur Sehtest" : ""}</span></div>
         <button class="btn btn-sm btn-ghost" type="button" data-proto-open>Protokoll</button></div>`).join("") : '<p class="small muted">Keine Protokolle gefunden.</p>');
   }
+  $("sc-list").addEventListener("click", ev => {
+    const b = ev.target.closest("[data-qi-proto]");
+    if (!b) return;
+    ev.stopPropagation();
+    const r = studentRegs.find(x => x.id === b.dataset.qiProto);
+    if (r) sehtestPdf(r, courseFor(r), m => { $("sc-error").textContent = m; });
+  }, true);
   $("sc-protos").addEventListener("click", ev => {
     const b = ev.target.closest("[data-proto-open]");
     if (!b) return;
@@ -2534,6 +2542,21 @@
     const from = Date.now() - 60 * 864e5, to = Date.now() + 120 * 864e5;
     const list = courses.filter(x => x.id === cur.id || (x.status !== "abgesagt" && new Date(x.starts_at) >= from && new Date(x.starts_at) <= to));
     return list.map(x => `<option value="${x.id}"${x.id === cur.id ? " selected" : ""}>${dayText(x.starts_at)} · ${esc(x.location)}</option>`).join("");
+  }
+  // Auskunft auf einen Blick (z. B. für Straßenverkehrsamt / Ersatzbescheinigung): Kurs gemacht? Sehtest, Ergebnis, Sehhilfe, Protokoll
+  const AID_TEXT = { ohne: "ohne Sehhilfe", brille: "mit Brille", linse: "mit Kontaktlinsen" };
+  function quickInfo(entries) {
+    const kurs = entries.filter(r => { const c = courseFor(r); return c && !c.virtual && r.status === "teilgenommen"; })
+      .map(r => `✓ ${birthText(dayOf(courseFor(r).starts_at))}`);
+    const seh = entries.filter(r => r.sehtest_passed != null && !r.sehtest_void_at).sort((a, b) => String(b.sehtest_on || "").localeCompare(String(a.sehtest_on || "")));
+    const sehHtml = seh.length ? seh.map(r => `<div class="qi-row"><span class="${r.sehtest_passed ? "qi-ok" : "qi-no"}">${r.sehtest_passed ? "✓ bestanden" : "✗ nicht bestanden"}</span>
+        <span>${AID_TEXT[aidKind(r)] || (r.sehtest_aid ? "mit Sehhilfe" : r.sehtest_aid === false ? "ohne Sehhilfe" : "")}</span>
+        <span class="small muted">${r.sehtest_nr ? "Nr. " + esc(r.sehtest_nr) + " · " : ""}${r.sehtest_on ? birthText(r.sehtest_on) : ""}</span>
+        <button class="btn btn-sm btn-ghost" type="button" data-qi-proto="${r.id}">Protokoll öffnen</button></div>`).join("")
+      : '<span class="muted">kein Sehtest</span>';
+    return `<div class="quick-info">
+      <div><label>Erste-Hilfe-Kurs</label>${kurs.length ? `<strong class="qi-ok">${kurs.join(", ")}</strong>` : '<strong class="qi-no">nicht teilgenommen</strong>'}</div>
+      <div><label>Sehtest</label>${sehHtml}</div></div>`;
   }
   function studentEntry(r) {
     const c = courseFor(r);

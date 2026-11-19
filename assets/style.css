@@ -876,3 +876,11 @@ dialog.sign-big::backdrop { background: #fff; }
 .mail-body { white-space: pre-wrap; font: inherit; font-size: .92rem; background: var(--soft); border-radius: 10px; padding: 10px 12px; margin: 6px 0; }
 
 .print-course { background: var(--soft); border-radius: 12px; padding: 10px 12px; }
+
+/* ---------- Schülersuche: Auskunft auf einen Blick ---------- */
+.quick-info { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 10px 0; padding: 12px; border: 2px solid var(--aid-light, #dcf5f4); border-radius: 12px; background: #f6fbfb; }
+@media (min-width: 700px) { .quick-info { grid-template-columns: minmax(150px, 1fr) minmax(0, 2.5fr); } }
+.quick-info label { display: block; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--aid-dark, #0b7b7f); }
+.quick-info .qi-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.quick-info .qi-ok { color: var(--ok); font-weight: 700; }
+.quick-info .qi-no { color: var(--danger); font-weight: 700; }
