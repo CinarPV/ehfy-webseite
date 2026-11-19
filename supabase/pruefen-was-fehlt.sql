@@ -7,6 +7,7 @@ with checks(datei, art, name) as (values
   ('update-zahlung-teilnehmerliste.sql', 'c', 'registrations.on_list'),
   ('update-paypal-privat.sql', 'k', 'paypal_privat'),
   ('update-beleg-zuordnen.sql', 'f', 'link_invoice'),
+  ('update-rechnung-betrieb.sql', 'f', 'set_invoice_recipient'),
   ('update-schreiben.sql', 't', 'mail_log'),
   ('update-ausweisnummer.sql', 'c', 'registrations.sehtest_id_no'),
   ('update-nur-sehtest.sql', 'c', 'registrations.sehtest_only'),
