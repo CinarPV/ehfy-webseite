@@ -895,3 +895,11 @@ dialog.sign-big::backdrop { background: #fff; }
 .cs-nr span { font-weight: 600; }
 .cs-nr b { font-size: 3rem; line-height: 1.1; letter-spacing: .04em; color: var(--ink, #0a2a35); }
 .cs-nr-miss { border-color: var(--danger); background: #fdecea; }
+/* Startseite am Kurstag: große antippbare Zahlen */
+.day-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; }
+.day-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; border: 2px solid var(--line); border-radius: 14px; background: #fff; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.day-tile b { font-size: 2rem; line-height: 1; }
+.day-tile span { font-size: .85rem; font-weight: 600; color: var(--muted); }
+.day-tile.bad { border-color: var(--danger); }
+.day-tile.bad b { color: var(--danger); }
+.day-tile.ok b { color: var(--ok); }

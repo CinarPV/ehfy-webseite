@@ -85,7 +85,7 @@
     await loadCourses();
     db.startAuto(); // Änderungen gehen sofort raus, Neues kommt sofort rein
     askToSync(); // Noch offene Änderungen vom letzten Mal
-    setTimeout(() => askCertificates(), 800); // Bescheinigungen, die noch nicht geschrieben sind
+    setTimeout(() => askCertsOnce(), 800); // Bescheinigungen, die noch nicht geschrieben sind (nur einmal beim Öffnen)
   }
 
   // ---------- Uhrzeit-Felder: vier Ziffern, danach fängt die nächste Ziffer von vorne an ----------
@@ -1099,7 +1099,7 @@
   $("rm-sync").onclick = () => { $("remind-dialog").close(); runSync(); };
   $("rm-later").onclick = () => $("remind-dialog").close();
   // Nach der Sync-Frage gleich nach offenen Sehtest-Bescheinigungen fragen
-  $("remind-dialog").addEventListener("close", () => setTimeout(() => askCertificates(), 300));
+  $("remind-dialog").addEventListener("close", () => setTimeout(() => askCertsOnce(), 300));
 
   async function swRegistration() {
     return "serviceWorker" in navigator ? navigator.serviceWorker.getRegistration().catch(() => null) : null;
@@ -1122,7 +1122,6 @@
     }
     if (reg && reg.getNotifications) (await reg.getNotifications({ tag: "ehfy-sync-erinnerung" }).catch(() => [])).forEach(x => x.close());
     if (leftPending) { leftPending = false; askToSync(); }
-    setTimeout(() => askCertificates(), 500);
   });
 
   let lastView = "";
@@ -1148,7 +1147,7 @@
     // Für den Zurück-Knopf merken, woher du kommst
     const was = $("main-tabs").querySelector("button.active");
     // Beim Wechsel in einen anderen Bereich einmal fragen, ob synchronisiert werden soll
-    if (was && was !== b) { askToSync(true); setTimeout(() => askCertificates(), 300); }
+    if (was && was !== b) askToSync(true);
     if (was && was !== b && !navRestoring) window.EHFYNav.push(() => { navRestoring = true; was.click(); navRestoring = false; });
     $("main-tabs").querySelectorAll("button[data-view]").forEach(x => x.classList.toggle("active", x === b));
     document.querySelectorAll("[data-section]").forEach(el => el.classList.add("hidden"));
@@ -1159,7 +1158,8 @@
     if (b.dataset.view === "termine") { $("courses-view").classList.remove("hidden"); loadCourses(); }
     // Kurstag öffnet die Anwesenheit, „Bezahlung“ dieselbe Seite direkt bei Bezahlung
     if (b.dataset.view === "anwesenheit" || b.dataset.view === "bezahlung") {
-      attTab = b.dataset.view === "bezahlung" ? "bezahlung" : "anwesenheit";
+      attTab = b.dataset.view === "bezahlung" ? "bezahlung" : (wantTab || "anwesenheit");
+      wantTab = null;
       try { localStorage.setItem("ehfy-att-tab", attTab); } catch (e) { /* egal */ }
       $("attendance-view").classList.remove("hidden"); loadCourses();
     }
@@ -1180,6 +1180,7 @@
 
   // ---------- Start: heute, zu erledigen, nächste Kurse ----------
   let uncheckedCount = 0, feeTotal = 0;
+  let wantTab = null; // Startseite → Kurstag direkt auf einer bestimmten Seite (Sehtest, Bezahlung …)
   const goView = v => document.querySelector(`#main-tabs [data-view="${v}"]`).click();
   function goCourse(id) {
     const c = courses.find(x => x.id === id);
@@ -1243,12 +1244,26 @@
     const todays = courses.filter(c => day(c) === today);
     const upcoming = courses.filter(c => day(c) > today && c.status !== "abgesagt").sort((a, b) => a.starts_at.localeCompare(b.starts_at));
     const people = c => attRegs.filter(r => r.course_id === c.id && r.status !== "storniert");
+    // Am Kurstag: große Zahlen, jede führt direkt zur passenden Seite im Kurstag. Erfassen und QR-Code stehen im Kurs.
+    const live = todays.filter(c => c.status !== "abgesagt");
+    $("start-view").querySelector(".start-capture").classList.toggle("hidden", live.length > 0);
     $("start-today").innerHTML = `<h2>Heute</h2>` + (todays.length ? todays.map(c => {
-      const list = people(c), da = list.filter(r => r.status === "teilgenommen").length;
-      const seh = list.filter(r => r.package === "komplett" || r.sehtest_passed != null), sehDone = seh.filter(r => r.sehtest_passed != null).length;
-      return `<p class="start-big">${esc(c.location)} · ${fmtRange(c.starts_at, c.ends_at)}${c.status === "abgesagt" ? " · ABGESAGT" : ""}</p>
-        <p class="small muted">${list.length} angemeldet · ${da} da${seh.length ? ` · Sehtests ${sehDone} von ${seh.length}` : ""}</p>
-        <div class="btn-row"><button class="btn" type="button" data-go="anwesenheit">Kurstag öffnen</button><button class="btn btn-ghost" type="button" data-qr="${c.id}">QR-Code zum Eintragen</button><button class="btn btn-ghost" type="button" data-open="${c.id}">Teilnehmerliste</button></div>`;
+      const list = people(c), here = list.filter(r => r.status === "teilgenommen");
+      if (c.status === "abgesagt") return `<p class="start-big">${esc(c.location)} · ${fmtRange(c.starts_at, c.ends_at)} · ABGESAGT</p>`;
+      const unchecked = list.filter(r => r.status === "angemeldet").length;
+      const st = here.filter(r => isST(r) && !r.sehtest_void_at);
+      const stOpen = st.filter(r => r.sehtest_passed == null).length, certOpen = st.filter(r => r.sehtest_passed === true && r.sehtest_nr && !r.sehtest_issued_at).length;
+      const unpaid = here.filter(r => !r.payment_method).length;
+      const tile = (n, label, tab, bad) => `<button class="day-tile ${bad && n ? "bad" : n ? "" : "ok"}" type="button" data-day-tab="${tab}" data-day-course="${c.id}"><b>${n}</b><span>${label}</span></button>`;
+      return `<p class="start-big">${esc(c.location)} · ${fmtRange(c.starts_at, c.ends_at)}</p>
+        <div class="day-tiles">
+          ${tile(`${here.length}/${list.length}`, unchecked ? `da · ${unchecked} nicht abgehakt` : "da", "anwesenheit", unchecked > 0)}
+          ${tile(stOpen, `Sehtests offen (von ${st.length})`, "sehtest", true)}
+          ${tile(certOpen, "Sehtest-Bescheinigungen schreiben", "sehtest", true)}
+          ${tile(unpaid, "nicht bezahlt", "bezahlung", true)}
+        </div>
+        <div class="btn-row" style="margin-top:10px"><button class="btn" type="button" data-day-tab="anwesenheit" data-day-course="${c.id}">Kurstag öffnen</button>
+          <button class="btn btn-ghost" type="button" data-cap-open>📷 Schüler erfassen</button><button class="btn btn-ghost" type="button" data-qr-general>▦ QR-Code (immer gültig)</button></div>`;
     }).join("") : `<p class="start-big">Heute ist kein Kurs.</p>${upcoming[0] ? `<p class="small muted">Nächster Kurs: ${dayText(upcoming[0].starts_at)} in ${esc(upcoming[0].location)}</p>` : ""}`);
     const st = db.status(), unwritten = attRegs.filter(r => r.sehtest_nr && !r.sehtest_issued_at && !r.sehtest_void_at).length;
     const todo = [
@@ -1269,6 +1284,15 @@
     if (go) return goView(go.dataset.go);
     const qr = ev.target.closest("[data-qr]");
     if (qr) return openQr(courses.find(c => c.id === qr.dataset.qr));
+    // Große Zahlen am Kurstag: direkt zur passenden Seite im Kurstag, Kurs aufgeklappt
+    const dt = ev.target.closest("[data-day-tab]");
+    if (dt) {
+      wantTab = dt.dataset.dayTab;
+      attOpen.add(dt.dataset.dayCourse);
+      return goView("anwesenheit");
+    }
+    if (ev.target.closest("[data-cap-open]")) return $("cap-open").click();
+    if (ev.target.closest("[data-qr-general]")) return $("qr-general").click();
     if (open) return goCourse(open.dataset.open);
     if (ev.target.closest("[data-sync]")) return runSync();
     if (ev.target.closest("[data-unchecked]")) {
@@ -1403,6 +1427,14 @@
     });
     d.addEventListener("close", refreshViews);
     return d;
+  }
+  // Erinnerung nur einmal je App-Start; danach steht es still unter „Zu erledigen“ auf der Startseite
+  let certsAsked = false;
+  async function askCertsOnce() {
+    if (certsAsked) return;
+    if ($("app-view").classList.contains("hidden") || document.querySelector("dialog[open]")) return;
+    certsAsked = true;
+    return askCertificates();
   }
   async function askCertificates(onlyIds) {
     if ($("app-view").classList.contains("hidden") || document.querySelector("dialog[open]")) return;
