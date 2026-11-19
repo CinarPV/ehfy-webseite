@@ -151,7 +151,8 @@
     if (filter === "past") list = courses.filter(isPast).reverse();
     $("course-rows").innerHTML = list.length ? list.map(c => {
       const pill = c.status === "abgesagt" ? '<span class="pill pill-full">abgesagt</span>'
-        : c.intern ? '<span class="pill pill-muted">intern</span>'
+        : c.intern && (c.booked || 0) < 3 ? `<span class="pill pill-muted" title="Per QR-Code entstanden; ab 3 Anmeldungen ein normaler Kurs">per QR · ${c.booked || 0} Anm.</span>`
+        : c.intern ? '<span class="pill pill-ok">Kurs (per QR)</span>'
         : !c.online_booking ? '<span class="pill pill-muted">nur telefonisch</span>'
         : '<span class="pill pill-ok">offen</span>';
       return `
@@ -2044,14 +2045,17 @@
   const nameBlock = (r, extra = "") => `<div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}${lateCancel(r) ? ' <span class="small muted">(zu spät abgesagt)</span>' : ""}${dupTag(r)}
       <span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}${extra}</span>${absent(r) ? "" : debtTag(r)}</div>`;
   // Anwesenheit: da / nicht da, Sehtest ja / nein
+  // Per QR-Code am Kurstag selbst eingetragen und unterschrieben = da (keine Anwesenheit nötig)
+  const qrHere = r => !!r.checkin_at && r.status === "teilgenommen" && (() => { const c = attById[r.course_id]; return !c || localDate(new Date(r.checkin_at)) >= dayOf(c.starts_at); })();
   function rowAtt(r) {
     const late = lateCancel(r), away = absent(r);
     return `<div class="att-row" data-att="${r.id}">${nameBlock(r)}
-      ${late ? "" : `<div class="att-btns">
+      ${late ? "" : qrHere(r) ? '<div class="att-btns"><span class="chip ok">✓ da – selbst eingetragen und unterschrieben (QR-Code)</span></div>' : `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button></div>`}
       ${away ? `<div class="att-fee">${feeControls(r)}</div><div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-att-free style="color:var(--danger)">Rechtzeitig abgesagt – ohne Gebühr löschen</button></div>` : pkgRow(r)}
       ${away ? "" : `<details class="att-more" data-more="${r.id}" ${attMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Daten ändern, löschen …</summary>
+        ${qrHere(r) ? '<div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-mark="nicht_erschienen">Doch nicht da</button></div>' : ""}
         <div class="att-btns"><button class="btn btn-sm" type="button" data-reg-edit>✎ Daten ändern (Name, Adresse, Geburtsdatum …)</button><button class="btn btn-sm btn-ghost" type="button" data-att-del style="color:var(--danger)">✕ Schüler komplett löschen (z. B. doppelt eingetragen)</button></div></details>`}
     </div>`;
   }
@@ -2102,7 +2106,8 @@
       else if (attTab === "sehtest") {
         const st = list.filter(r => !absent(r) && isST(r)), rest = list.filter(r => !absent(r) && !isST(r));
         body = (st.length ? st.map(rowST).join("") : '<p class="small muted">Niemand mit Sehtest. Auf der Seite „Anwesenheit“ bei „Mit Sehtest“ antippen.</p>')
-          + (rest.length ? `<p class="small muted" style="margin-top:10px">Ohne Sehtest: ${rest.map(r => esc(`${r.first_name} ${r.last_name}`)).join(", ")}</p>` : "");
+          + (rest.length ? `<details class="att-more" style="margin-top:10px"><summary class="small">Ohne Sehtest-Wunsch (${rest.length}) – nur bei Bedarf aufklappen</summary>
+              ${rest.map(r => `<div class="att-row" data-att="${r.id}">${nameBlock(r)}<div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-st-run>Sehtest trotzdem durchführen</button></div></div>`).join("")}</details>` : "");
       } else if (attTab === "drucken") {
         const here = list.filter(r => !absent(r));
         const b = (k, l) => `<button class="btn btn-sm" type="button" data-course-print="${k}">${l}</button>`;
@@ -2562,7 +2567,7 @@
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>` : ""}
       ${c && !c.virtual && absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
-      <div class="btn-row"><button class="btn btn-sm" type="button" data-st-run>${runLabel}</button>${issuedBtn(r)}</div>
+      ${isST(r) ? `<div class="btn-row"><button class="btn btn-sm" type="button" data-st-run>${runLabel}</button>${issuedBtn(r)}</div>` : ""}
       ${off ? "" : `<div class="btn-row">
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="datenblatt">Datenblatt</button>
@@ -2576,6 +2581,7 @@
           ${r.checkin_at ? `<div><label>Datenblatt</label><span class="small">✍ selbst eingetragen und unterschrieben (QR-Code) am ${birthText(r.checkin_at.slice(0, 10))}</span></div>` : ""}
           <div><label>Papier-Protokoll (eingescannt)</label>${r.protocol_added_on ? `<span class="small">hochgeladen am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Papier-Protokoll hochladen</button>`}</div>
         </div>
+        ${isST(r) ? "" : '<div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" data-st-run>Sehtest trotzdem durchführen (kein Sehtest-Wunsch)</button></div>'}
         ${r.sehtest_nr ? '<div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" data-st-nr>Protokoll-Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button></div>' : ""}
         ${off ? "" : discountControls(r)}
         <div style="margin-top:8px"><button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
