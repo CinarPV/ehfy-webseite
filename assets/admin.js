@@ -1289,18 +1289,6 @@
   // ---------- Sehtest abhaken: gemacht, Ergebnis, Verlauf, Sehhilfe, Ausweis, Protokoll ----------
   const ID_DOCS = [["personalausweis", "Personalausweis"], ["reisepass", "Reisepass"], ["aufenthaltstitel", "Aufenthaltstitel"], ["sonstiges", "Sonstiges (z. B. Duldung)"]];
   const aidKind = r => r.sehtest_aid_kind || (r.sehtest_aid === false ? "ohne" : null);
-  // Nur Anzeige: Alle Angaben (Ergebnis, Verlauf, Sehhilfe, Ausweis, Datum) werden im Protokoll eingetragen
-  function sehtestControls(r, c) {
-    const day = sehtestDay(r, c);
-    const res = r.sehtest_passed === true ? '<strong style="color:var(--ok)">bestanden</strong>'
-      : r.sehtest_passed === false ? '<strong style="color:var(--danger)">nicht bestanden</strong>'
-      : stStarted(r) ? "zwischengespeichert, noch kein Ergebnis" : "—";
-    return `<div class="st-row st-sum">
-      <div class="st-group"><span class="st-label">Sehtest:</span><strong>${r.sehtest_passed != null ? "gemacht" : stStarted(r) ? "angefangen" : "nicht gemacht"}</strong>${r.sehtest_passed != null && day ? ` <span class="small muted">am ${birthText(day)}</span>` : ""}</div>
-      <div class="st-group"><span class="st-label">Ergebnis:</span>${res}${r.sehtest_nr ? ` <span class="small muted">· Nr. ${esc(r.sehtest_nr)}</span>` : ""}${issuedTag(r)}</div>
-      <div class="st-group"><button class="btn btn-sm" type="button" data-st-run>${stRunLabel(r)}</button>${issuedBtn(r)}<button class="btn btn-sm btn-ghost" type="button" data-st-print>Protokoll (PDF)</button>${r.sehtest_nr ? '<button class="btn btn-sm btn-ghost" type="button" data-st-nr>Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button>' : ""}</div>
-    </div>`;
-  }
   async function handleSehtest(btn, r, c) {
     const today = () => (c ? dayOf(c.starts_at) : localDate(new Date()));
     const group = btn.dataset.st, raw = btn.dataset.val;
@@ -2558,32 +2546,46 @@
       <div><label>Erste-Hilfe-Kurs</label>${kurs.length ? `<strong class="qi-ok">${kurs.join(", ")}</strong>` : '<strong class="qi-no">nicht teilgenommen</strong>'}</div>
       <div><label>Sehtest</label>${sehHtml}</div></div>`;
   }
+  // Schülerkarte: Oben steht die Auskunft (Kurs, Sehtest, Ergebnis). Hier nur noch, was man tun kann – ohne Wiederholungen.
+  // Selten Gebrauchtes (Kurstag ändern, Papier-Protokoll, Nummer, Gutschein, Löschen) liegt unter „Mehr …“.
+  const scMoreOpen = new Set();
   function studentEntry(r) {
     const c = courseFor(r);
     const off = r.status === "storniert" || !c || c.status === "abgesagt";
+    const head = c ? `${dayText(c.starts_at)} · ${esc(c.location)}${c.virtual ? " · nur angemeldet" : c.status === "abgesagt" ? " · Kurs abgesagt" : ""}`
+      : r.sehtest_only ? "Nur Sehtest, kein Kurs" : "Termin gelöscht";
+    const runLabel = r.sehtest_passed != null ? "Sehtest ansehen / ändern" : stRunLabel(r);
     return `<div class="sc-entry" data-reg="${r.id}">
-      <div class="sc-facts">
-        <div><label>Erste-Hilfe-Kurs</label><strong>${c ? dayText(c.starts_at) : r.sehtest_only ? "Nur Sehtest, kein Kurs" : "Termin gelöscht"}</strong>${!c && r.sehtest_only ? "" : `<br><span class="small">${c ? esc(c.location) + " · " : ""}Kurs gemacht: <span class="sc-done">${c && c.virtual ? "nicht belegt, nur angemeldet" : c && c.status === "abgesagt" ? "Nein, Kurs abgesagt" : courseDone(r)}</span></span>`}</div>
-        ${c && !c.virtual ? `<div><label for="sc-mv-${r.id}">Kurstag ändern</label><select id="sc-mv-${r.id}" data-sc-move>${moveOptions(c)}</select></div>` : ""}
-        ${r.checkin_at ? `<div><label>Datenblatt</label><span class="small">✍ selbst eingetragen und unterschrieben (QR-Code) am ${birthText(r.checkin_at.slice(0, 10))}</span></div>` : ""}
-        <div><label>Protokoll</label>${r.protocol_added_on ? `<span class="small">hinzugefügt am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Protokoll hinzufügen</button>`}</div>
-      </div>
+      <div class="sc-head"><strong>${head}</strong>${r.status === "storniert" ? ' <span class="small muted">(storniert)</span>' : ""}</div>
       ${!off && !c.virtual ? `<div class="att-btns">
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "teilgenommen" ? "on-yes" : ""}" type="button" data-mark="teilgenommen" aria-pressed="${r.status === "teilgenommen"}">✓ Da</button>
         <button class="btn btn-sm btn-ghost att-btn ${r.status === "nicht_erschienen" ? "on-no" : ""}" type="button" data-mark="nicht_erschienen" aria-pressed="${r.status === "nicht_erschienen"}">✗ Nicht da</button>
       </div>` : ""}
       ${c && !c.virtual && absent(r) ? `<div class="att-fee">${feeControls(r)}</div>` : ""}
-      ${sehtestControls(r, c)}
-      ${off ? "" : discountControls(r)}
+      <div class="btn-row"><button class="btn btn-sm" type="button" data-st-run>${runLabel}</button>${issuedBtn(r)}</div>
       ${off ? "" : `<div class="btn-row">
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="bescheinigung">Bescheinigung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="datenblatt">Datenblatt</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="quittung">Quittung</button>
         <button class="btn btn-sm btn-ghost" type="button" data-sc-print="rechnung">Rechnung</button>
+        <button class="btn btn-sm" type="button" data-reg-edit>✎ Daten ändern</button>
       </div>`}
-      <div><button class="btn btn-sm" type="button" data-reg-edit>✎ Daten ändern</button> <button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
+      <details class="sc-more" data-scmore="${r.id}" ${scMoreOpen.has(r.id) ? "open" : ""}><summary class="small">Mehr … (Kurstag ändern, Papier-Protokoll, Nummer, Gutschein, Löschen)</summary>
+        <div class="sc-facts">
+          ${c && !c.virtual ? `<div><label for="sc-mv-${r.id}">Kurstag ändern</label><select id="sc-mv-${r.id}" data-sc-move>${moveOptions(c)}</select></div>` : ""}
+          ${r.checkin_at ? `<div><label>Datenblatt</label><span class="small">✍ selbst eingetragen und unterschrieben (QR-Code) am ${birthText(r.checkin_at.slice(0, 10))}</span></div>` : ""}
+          <div><label>Papier-Protokoll (eingescannt)</label>${r.protocol_added_on ? `<span class="small">hochgeladen am ${birthText(r.protocol_added_on)}</span><br><button class="btn btn-sm btn-ghost" type="button" data-proto="print">Ansehen / drucken</button> <button class="btn btn-sm btn-ghost" type="button" data-proto="remove">Entfernen</button>` : `<button class="btn btn-sm btn-ghost" type="button" data-proto="add">Papier-Protokoll hochladen</button>`}</div>
+        </div>
+        ${r.sehtest_nr ? '<div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" data-st-nr>Protokoll-Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button></div>' : ""}
+        ${off ? "" : discountControls(r)}
+        <div style="margin-top:8px"><button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
+      </details>
     </div>`;
   }
+  document.addEventListener("toggle", ev => {
+    const d = ev.target;
+    if (d && d.dataset && d.dataset.scmore) d.open ? scMoreOpen.add(d.dataset.scmore) : scMoreOpen.delete(d.dataset.scmore);
+  }, true);
   // Anmeldung löschen. Hat die Person den Sehtest abgeschlossen (oder ein hochgeladenes Protokoll),
   // bleibt das Protokoll erhalten: Der Eintrag wird zu „nur Sehtest“ und steht weiter unter Sehtests.
   const protoDone = r => (r.sehtest_passed != null && !r.sehtest_void_at) || !!r.protocol_added_on;

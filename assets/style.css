@@ -884,3 +884,6 @@ dialog.sign-big::backdrop { background: #fff; }
 .quick-info .qi-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .quick-info .qi-ok { color: var(--ok); font-weight: 700; }
 .quick-info .qi-no { color: var(--danger); font-weight: 700; }
+.sc-entry .sc-head { margin: 4px 0 6px; }
+.sc-entry .sc-more { margin-top: 8px; }
+.sc-entry .sc-more > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
