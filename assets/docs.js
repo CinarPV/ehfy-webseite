@@ -210,9 +210,16 @@
     });
   }
 
+  // Rechnung an einen Betrieb: Firma als Empfänger, der Schüler steht darunter als Teilnehmer
+  function billTo(rc) {
+    const co = rc && rc.company;
+    if (!rc || rc.bill_to !== "firma" || !co || !co.name) return rc;
+    return { name: co.name, attn: co.attn ? `z. Hd. ${co.attn}` : "", street: co.street, zip: co.zip, city: co.city,
+      extra: `Teilnehmer/in: ${rc.name}${rc.birth_date ? ", geb. " + fmtBirth(rc.birth_date) : ""}` };
+  }
   function addressBlock(page, f, label, r, y) {
     page.drawText(label.toUpperCase(), { x: M, y, size: 7.5, font: f.bold, color: rgb(C.aid) });
-    [r.name, r.street, [r.zip, r.city].filter(Boolean).join(" ")].filter(Boolean).forEach((t, i) => {
+    [r.name, r.attn, r.street, [r.zip, r.city].filter(Boolean).join(" "), r.extra].filter(Boolean).forEach((t, i) => {
       page.drawText(t, { x: M, y: y - 16 - i * 15, size: i === 0 ? 12 : 11, font: i === 0 ? f.bold : f.regular, color: rgb(C.ink) });
     });
   }
@@ -315,7 +322,7 @@
     if (inv.service_date) rows.push(["Leistungsdatum", fmtDate(inv.service_date)]);
     if (issuer.taxNumber) rows.push(["Steuernummer", issuer.taxNumber]);
     frame(page, f, issuer, "Rechnung", rows);
-    addressBlock(page, f, "Rechnung an", inv.recipient, A4[1] - 230);
+    addressBlock(page, f, "Rechnung an", billTo(inv.recipient), A4[1] - 222);
     const y = itemsTable(page, f, inv.items, A4[1] - 340, true);
     totalBox(page, f, inv.total, y - 20, "Rechnungsbetrag");
     let yy = y - 80;

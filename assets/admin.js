@@ -2583,6 +2583,7 @@
         </div>
         ${isST(r) ? "" : '<div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" data-st-run>Sehtest trotzdem durchführen (kein Sehtest-Wunsch)</button></div>'}
         ${r.sehtest_nr ? '<div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" data-st-nr>Protokoll-Nr. ändern</button><button class="btn btn-sm btn-ghost" type="button" data-st-again>Neuer Sehtest (neue Nr.)</button></div>' : ""}
+        ${off ? "" : '<div class="btn-row"><button class="btn btn-sm btn-ghost" type="button" data-sc-mail="rechnung">✉ Rechnung per E-Mail senden (auch an Betrieb)</button><button class="btn btn-sm btn-ghost" type="button" data-sc-mail="quittung">✉ Quittung per E-Mail senden</button></div>'}
         ${off ? "" : discountControls(r)}
         <div style="margin-top:8px"><button class="btn btn-sm btn-ghost" type="button" data-sc-del style="color:var(--danger)">✕ Aus der Liste löschen</button></div>
       </details>
@@ -2686,6 +2687,14 @@
       await attendanceAction(ev.target, r, $("sc-error"));
       await loadStudents();
       return;
+    }
+    const mailKind = ev.target.closest("[data-sc-mail]");
+    if (mailKind) {
+      return (async () => {
+        await ensurePdf();
+        const [inv] = await billsFor(mailKind.dataset.scMail, [r], courseFor(r));
+        await sendBill({ ...inv, recipient: { ...inv.recipient, email: inv.recipient.email || r.email || "" } });
+      })().catch(e => show(e.message));
     }
     const printKind = ev.target.closest("[data-sc-print]");
     if (printKind) return runDoc(printKind.dataset.scPrint, [r], courseFor(r), show);
@@ -3280,6 +3289,7 @@
   const pdlg = $("pdf-dialog");
   let pd = null;
   function pdfDialog(bytes, name, mail, fix) {
+    $("pd-company").innerHTML = "";
     $("pd-fix").classList.toggle("hidden", !fix);
     $("pd-fix").textContent = fix ? fix.label : "";
     $("pd-fix").disabled = false;
@@ -3368,15 +3378,17 @@
     const isReceipt = inv.type === "quittung";
     const doc = isReceipt ? "Quittung" : "Rechnung";
     const subject = `${doc} ${inv.number} – Erste Hilfe for you`;
+    const rc = inv.recipient || {}, firma = !isReceipt && rc.bill_to === "firma" && rc.company && rc.company.name;
     const lines = [
-      `Hallo ${inv.recipient.name},`, "",
-      `anbei erhalten Sie Ihre ${doc} Nr. ${inv.number} über ${eur(inv.total)}.`,
+      firma ? "Sehr geehrte Damen und Herren," : `Hallo ${rc.name},`, "",
+      firma ? `anbei erhalten Sie die ${doc} Nr. ${inv.number} über ${eur(inv.total)} für den Erste-Hilfe-Kurs von ${rc.name}.`
+        : `anbei erhalten Sie Ihre ${doc} Nr. ${inv.number} über ${eur(inv.total)}.`,
       !isReceipt && inv.status === "offen" ? `Bitte überweisen Sie den Betrag innerhalb von ${cfg.documents.paymentDays} Tagen – Bankverbindung und PayPal finden Sie in der Rechnung.` : "",
       "", `Diese ${doc} wurde maschinell erstellt und ist mit der eingefügten digitalen Unterschrift gültig.`,
       "", "Herzlichen Dank für Ihr Vertrauen!", "", "Viele Grüße",
       cfg.issuer.owner, cfg.issuer.name, `Tel. ${cfg.issuer.phone}`, cfg.issuer.web
     ];
-    return { invoice_id: inv.id, to: inv.recipient.email || "", subject, body: lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n") };
+    return { invoice_id: inv.id, to: (firma ? rc.company.email : rc.email) || "", subject, body: lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n") };
   }
 
   // Bescheinigung (mit deiner Unterschrift) oder Datenblatt (ohne, das unterschreibt der Schüler) per E-Mail
@@ -3402,6 +3414,59 @@
       ? await receiptPdf([inv], true)
       : await EHFYDocs.invoice(inv, await issuer(true), loadFont, cfg.documents.paymentDays);
     pdfDialog(bytes, `${inv.type === "quittung" ? "Quittung" : "Rechnung"}_${inv.number}.pdf`, billMail(inv));
+    companyChooser(inv);
+  }
+  // Rechnung an Schüler oder Betrieb (Firma zahlt). Gleiche Nummer; nur der Empfänger wird umgestellt.
+  // Der Betrieb ist versteckt (selten gebraucht) und erscheint erst nach Antippen.
+  function companyChooser(inv) {
+    const box = $("pd-company");
+    if (!inv || inv.type !== "rechnung") { box.innerHTML = ""; return; }
+    let cur = { ...inv, recipient: { ...(inv.recipient || {}) } };
+    const rc = () => cur.recipient, co = () => rc().company || {};
+    const draw = () => {
+      const has = !!co().name, firma = rc().bill_to === "firma" && has;
+      box.innerHTML = `${has ? `<div class="pd-who"><span class="small"><strong>Rechnung an:</strong></span>
+          <label><input type="radio" name="pd-who" value="person" ${firma ? "" : "checked"}> Schüler: ${esc(rc().name || "")}${rc().email ? ` (${esc(rc().email)})` : ""}</label>
+          <label><input type="radio" name="pd-who" value="firma" ${firma ? "checked" : ""}> Betrieb: ${esc(co().name)}${co().email ? ` (${esc(co().email)})` : ""}</label></div>` : ""}
+        <details class="pd-co"><summary class="small">${has ? "Betrieb ändern …" : "Rechnung an einen Betrieb (Firma zahlt) …"}</summary>
+          <div class="form-grid" style="margin-top:8px">
+            <div class="field full"><label for="co-name">Betrieb / Firma</label><input id="co-name" value="${esc(co().name || "")}"></div>
+            <div class="field full"><label for="co-attn">z. Hd. (freiwillig)</label><input id="co-attn" value="${esc(co().attn || "")}"></div>
+            <div class="field full"><label for="co-street">Straße und Nr.</label><input id="co-street" value="${esc(co().street || "")}"></div>
+            <div class="field"><label for="co-zip">PLZ</label><input id="co-zip" inputmode="numeric" value="${esc(co().zip || "")}"></div>
+            <div class="field"><label for="co-city">Ort</label><input id="co-city" value="${esc(co().city || "")}"></div>
+            <div class="field full"><label for="co-email">E-Mail des Betriebs</label><input id="co-email" type="email" inputmode="email" value="${esc(co().email || "")}"></div>
+          </div>
+          <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="co-save">Betrieb als Rechnungsempfänger übernehmen</button></div>
+        </details>`;
+      box.querySelectorAll('input[name="pd-who"]').forEach(x => x.onchange = () => apply(null, x.value));
+      $("co-save").onclick = () => {
+        const c = { name: $("co-name").value.trim(), attn: $("co-attn").value.trim(), street: $("co-street").value.trim(),
+          zip: $("co-zip").value.trim(), city: $("co-city").value.trim(), email: $("co-email").value.trim() };
+        if (!c.name) { $("pd-status").textContent = "Bitte den Namen des Betriebs eintragen."; return; }
+        apply(c, "firma");
+      };
+    };
+    // Speichern, PDF neu erstellen, Empfänger-Adresse und Text anpassen
+    async function apply(company, billTo) {
+      $("pd-status").textContent = "";
+      try {
+        const rec = await db.setInvoiceRecipient(cur.id, company, billTo);
+        cur = { ...cur, recipient: rec || { ...rc(), bill_to: billTo, ...(company ? { company } : {}) } };
+        const bytes = await EHFYDocs.invoice(cur, await issuer(true), loadFont, cfg.documents.paymentDays);
+        URL.revokeObjectURL(pd.url);
+        pd.file = new File([bytes], pd.file.name, { type: "application/pdf" });
+        pd.url = URL.createObjectURL(pd.file);
+        $("pd-open").href = pd.url; $("pd-download").href = pd.url;
+        const m = billMail(cur);
+        $("pd-to").value = m.to; $("pd-text").value = m.body;
+        $("pd-status").className = "small"; $("pd-status").style.color = "var(--aid-dark)";
+        $("pd-status").textContent = billTo === "firma" ? `Rechnung jetzt an ${cur.recipient.company.name} (gleiche Nummer ${cur.number}).` : `Rechnung jetzt an ${cur.recipient.name} (gleiche Nummer ${cur.number}).`;
+        if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
+        draw();
+      } catch (e) { $("pd-status").className = "form-error"; $("pd-status").style.color = ""; $("pd-status").textContent = e.message; }
+    }
+    draw();
   }
 
   // Quittungen/Rechnungen: vorhandene wiederverwenden, fehlende mit neuer Nummer anlegen

@@ -206,6 +206,9 @@
         check(await sb.from("invoices").update({ status, paid_on: status === "bezahlt" ? new Date().toISOString().slice(0, 10) : null }).eq("id", id));
       },
       // Beleg nachträglich einem Schüler zuordnen
+      async setInvoiceRecipient(id, company, billTo) {
+        return check(await sb.rpc("set_invoice_recipient", { p_id: id, p_company: company || null, p_bill_to: billTo }));
+      },
       async linkInvoice(id, registrationId) {
         check(await sb.rpc("link_invoice", { p_id: id, p_registration: registrationId }));
       },
@@ -554,6 +557,11 @@
       async setInvoiceStatus(id, status) {
         const inv = (load().invoices || []).find(i => i.id === id);
         inv.status = status; inv.paid_on = status === "bezahlt" ? new Date().toISOString().slice(0, 10) : null; save();
+      },
+      async setInvoiceRecipient(id, company, billTo) {
+        const inv = (load().invoices || []).find(i => i.id === id);
+        inv.recipient = { ...inv.recipient, bill_to: billTo, ...(company ? { company } : {}) }; save();
+        return inv.recipient;
       },
       async linkInvoice(id, registrationId) {
         const inv = (load().invoices || []).find(i => i.id === id);
