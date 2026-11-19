@@ -891,3 +891,7 @@ dialog.sign-big::backdrop { background: #fff; }
 .pd-who label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .pd-co { margin: 0 0 12px; }
 .pd-co > summary { cursor: pointer; color: var(--muted); }
+.cs-nr { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 8px 0 10px; padding: 12px; border: 3px solid var(--aid); border-radius: 14px; background: var(--aid-light, #dcf5f4); text-align: center; }
+.cs-nr span { font-weight: 600; }
+.cs-nr b { font-size: 3rem; line-height: 1.1; letter-spacing: .04em; color: var(--ink, #0a2a35); }
+.cs-nr-miss { border-color: var(--danger); background: #fdecea; }

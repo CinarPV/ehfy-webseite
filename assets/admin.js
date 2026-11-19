@@ -1372,14 +1372,15 @@
   const issuedOk = r => Boolean(r.sehtest_issued_at);
   const issuedTag = r => r.sehtest_void_at ? ` <span class="st-void">Ausschuss${r.sehtest_void_nr ? ` (Nr. ${esc(r.sehtest_void_nr)})` : ""}${r.sehtest_void_reason ? ` · ${esc(r.sehtest_void_reason)}` : ""}</span>`
     : !r.sehtest_nr ? "" : r.sehtest_issued_at ? ' <span class="st-fix">✓ Bescheinigung geschrieben</span>' : ' <span class="st-reissue">✗ Bescheinigung noch nicht geschrieben</span>';
-  const issuedBtn = r => r.sehtest_nr && !r.sehtest_void_at ? `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${issuedOk(r) ? "✓ Bescheinigung geschrieben" : "Bescheinigung geschrieben?"}</button>`
+  const issuedBtn = r => r.sehtest_nr && !r.sehtest_void_at ? `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${issuedOk(r) ? "✓ Bescheinigung geschrieben" : "📄 Sehtest-Bescheinigung schreiben ›"}</button>`
     + '<button class="btn btn-sm btn-ghost" type="button" data-st-void style="color:var(--danger)">Ausschuss</button>' : "";
   async function toggleIssued(r) {
     if (r.sehtest_issued_at) {
       if (!confirm(`Haken „Bescheinigung geschrieben“ bei Nr. ${r.sehtest_nr} entfernen?`)) return;
       return db.updateRegistration(r.id, { sehtest_issued_at: null });
     }
-    return db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString() });
+    // Nicht direkt abhaken: erst das Fenster mit allen Angaben und der großen Nummer, dort schreiben und bestätigen
+    return certSheet(r, null);
   }
   // ---------- Nachfragen: Sehtest-Bescheinigung schon geschrieben? (bis „Ja“ kommt) ----------
   const openCerts = async () => (await db.listAllRegistrations()).filter(r => r.sehtest_nr && !r.sehtest_issued_at && !r.sehtest_void_at);
@@ -1396,10 +1397,9 @@
     $("cert-list").addEventListener("click", async ev => {
       const b = ev.target.closest("[data-cert]");
       if (!b) return;
-      b.disabled = true;
-      await db.updateRegistration(b.dataset.cert, { sehtest_issued_at: new Date().toISOString() });
-      b.closest(".cert-row").remove();
-      if (!$("cert-list").children.length) { d.close(); refreshViews(); }
+      const r = (await openCerts()).find(x => x.id === b.dataset.cert);
+      d.close();
+      if (r) certSheet(r, null);
     });
     d.addEventListener("close", refreshViews);
     return d;
@@ -1411,7 +1411,7 @@
     if (!list.length) return;
     const d = certDialog();
     $("cert-list").innerHTML = list.map(r => `<div class="cert-row"><span><strong>Nr. ${esc(r.sehtest_nr)}</strong> · ${esc(r.last_name)}, ${esc(r.first_name)}${r.sehtest_on ? ` <span class="small muted">· ${birthText(r.sehtest_on)}</span>` : ""}</span>
-      <button class="btn btn-sm" type="button" data-cert="${r.id}">Ja, geschrieben</button></div>`).join("");
+      <button class="btn btn-sm" type="button" data-cert="${r.id}">Jetzt schreiben ›</button></div>`).join("");
     d.showModal();
   }
   function refreshViews() {
@@ -1660,11 +1660,11 @@
     if (d) return d;
     d = document.createElement("dialog");
     d.id = "cs-dialog"; d.className = "qr-dlg";
-    d.innerHTML = `<h3 style="margin:0 0 4px">④ Bescheinigung schreiben</h3>
+    d.innerHTML = `<h3 style="margin:0 0 4px">Sehtest-Bescheinigung schreiben</h3>
       <div id="cs-body"></div>
       <p class="small" id="cs-error" style="color:var(--danger)"></p>
       <div class="btn-row" style="margin-top:10px;flex-wrap:wrap">
-        <button class="btn" type="button" id="cs-done">✓ Bescheinigung geschrieben</button>
+        <button class="btn" type="button" id="cs-done">✓ Bescheinigung ist geschrieben – bestätigen</button>
         <button class="btn btn-ghost" type="button" id="cs-pdf">Protokoll (PDF)</button>
         <button class="btn btn-ghost" type="button" id="cs-close">Später</button></div>`;
     document.body.appendChild(d);
@@ -1676,20 +1676,24 @@
     const d = certDlg(), ok = r.sehtest_passed === true;
     const line = (k, v) => `<tr><th style="text-align:left;padding:4px 10px 4px 0;font-weight:400;color:var(--muted)">${k}</th><td style="padding:4px 0"><strong>${v}</strong></td></tr>`;
     const day = sehtestDay(r, c);
-    $("cs-body").innerHTML = `<p style="margin:0 0 8px;font-size:1.05em" class="${ok ? "" : ""}"><strong style="color:${ok ? "var(--ok)" : "var(--danger)"}">${ok ? "Bestanden" : "Nicht bestanden"}</strong>${r.sehtest_nr ? ` · Nr. ${esc(r.sehtest_nr)}` : ""}</p>
-      <table style="border-collapse:collapse;font-size:1.05em">
+    $("cs-body").innerHTML = `${r.sehtest_nr ? `<div class="cs-nr"><span>Diese Nummer auf die Bescheinigung:</span><b>${esc(r.sehtest_nr)}</b></div>`
+        : '<div class="cs-nr cs-nr-miss"><span>Noch keine feste Nummer.</span><b>–</b><span class="small">Bitte erst synchronisieren (Internet), dann dieses Fenster neu öffnen. Nicht ohne Nummer schreiben!</span></div>'}
+      <p style="margin:8px 0;font-size:1.15em"><strong style="color:${ok ? "var(--ok)" : "var(--danger)"}">${ok ? "✓ Bestanden" : "✗ Nicht bestanden"}</strong></p>
+      <table style="border-collapse:collapse;font-size:1.1em">
         ${line("Name", `${esc(r.last_name)}, ${esc(r.first_name)}`)}
         ${line("Geburtsdatum", r.birth_date ? birthText(r.birth_date) : '<span style="color:var(--danger)">fehlt</span>')}
         ${line("Ausweis", `${r.sehtest_id_doc ? esc(ID_LABEL[r.sehtest_id_doc] || r.sehtest_id_doc) + " · " : ""}${r.sehtest_id_no ? esc(r.sehtest_id_no) : '<span style="color:var(--danger)">keine Nr.</span>'}`)}
         ${line("Sehhilfe", AID_LABEL[aidKind(r)] || "–")}
         ${line("Datum", day ? birthText(day) : "–")}
         ${line("Bezahlt", r.payment_method ? esc(payLabel(r.payment_method)) : '<span style="color:var(--danger)">nein</span>')}
-      </table>${ok ? "" : '<p class="small muted">Nicht bestanden: keine Bescheinigung. Protokoll trotzdem aufbewahren.</p>'}`;
+      </table>${ok ? '<p class="small muted" style="margin-top:8px">Erst die Bescheinigung mit diesen Angaben schreiben, dann bestätigen.</p>' : '<p class="small muted">Nicht bestanden: keine Bescheinigung. Protokoll trotzdem aufbewahren.</p>'}`;
     $("cs-error").textContent = "";
-    $("cs-done").textContent = ok ? "✓ Bescheinigung geschrieben" : "✓ Erledigt";
+    $("cs-done").textContent = ok ? "✓ Bescheinigung ist geschrieben – bestätigen" : "✓ Erledigt";
+    $("cs-done").disabled = ok && !r.sehtest_nr;
     $("cs-done").onclick = async () => {
       $("cs-done").disabled = true;
       try {
+        if (ok && !r.sehtest_nr) { $("cs-error").textContent = "Ohne feste Nummer kann nicht bestätigt werden. Bitte erst synchronisieren."; return; }
         if (ok && !r.sehtest_issued_at) await db.updateRegistration(r.id, { sehtest_issued_at: new Date().toISOString() });
         d.close();
       } catch (e) { $("cs-error").textContent = e.message; }
@@ -1984,7 +1988,7 @@
     else if (r.package === "komplett" || r.sehtest_only) chips.push(`<button class="btn btn-sm" type="button" data-st-run>👁 ${stStarted(r) ? "Sehtest weitermachen" : "Sehtest durchführen"}</button>`);
     // Bescheinigung: ein Tipp genügt
     if (r.sehtest_passed === true && r.sehtest_nr && !r.sehtest_void_at)
-      chips.push(`<button class="chip-btn ${r.sehtest_issued_at ? "on" : ""}" type="button" data-st-issued aria-pressed="${!!r.sehtest_issued_at}">📄 Bescheinigung ${r.sehtest_issued_at ? "geschrieben ✓" : "schreiben – antippen, wenn erledigt"}</button>`);
+      chips.push(`<button class="chip-btn ${r.sehtest_issued_at ? "on" : ""}" type="button" data-st-issued aria-pressed="${!!r.sehtest_issued_at}">📄 ${r.sehtest_issued_at ? "Sehtest-Bescheinigung geschrieben ✓" : "Sehtest-Bescheinigung schreiben ›"}</button>`);
     return `<div class="att-chips">${chips.join("")}</div>`;
   }
   function attRow(r) {
@@ -2067,7 +2071,7 @@
     else if (r.sehtest_passed === false) state = `<span class="chip no">nicht bestanden${r.sehtest_nr ? " · Nr. " + esc(r.sehtest_nr) : ""}</span>`;
     else state = `<span class="chip">${stStarted(r) ? "angefangen" : "offen"}</span>`;
     const cert = r.sehtest_passed === true && r.sehtest_nr && !r.sehtest_void_at
-      ? `<button class="chip-btn ${r.sehtest_issued_at ? "on" : ""}" type="button" data-st-issued aria-pressed="${!!r.sehtest_issued_at}">📄 Bescheinigung ${r.sehtest_issued_at ? "geschrieben ✓" : "schreiben – antippen, wenn erledigt"}</button>` : "";
+      ? `<button class="chip-btn ${r.sehtest_issued_at ? "on" : ""}" type="button" data-st-issued aria-pressed="${!!r.sehtest_issued_at}">📄 ${r.sehtest_issued_at ? "Sehtest-Bescheinigung geschrieben ✓" : "Sehtest-Bescheinigung schreiben ›"}</button>` : "";
     return `<div class="att-row" data-att="${r.id}">
       <button class="st-pick" type="button" data-st-run>${nameBlock(r, `${r.sehtest_id_no ? ` · Ausweis-Nr. ${esc(r.sehtest_id_no)}` : ' · <span style="color:var(--danger)">Ausweis-Nr. fehlt</span>'}`)}<span class="st-pick-go">${r.sehtest_passed != null ? "Öffnen ›" : "Sehtest ›"}</span></button>
       <div class="att-chips">${state}${r.payment_method ? `<span class="chip ok">✓ ${esc(payLabel(r.payment_method))}</span>` : '<span class="chip no">nicht bezahlt</span>'}${cert}
