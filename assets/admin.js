@@ -2575,8 +2575,16 @@
   // Auskunft auf einen Blick (z. B. für Straßenverkehrsamt / Ersatzbescheinigung): Kurs gemacht? Sehtest, Ergebnis, Sehhilfe, Protokoll
   const AID_TEXT = { ohne: "ohne Sehhilfe", brille: "mit Brille", linse: "mit Kontaktlinsen" };
   function quickInfo(entries) {
-    const kurs = entries.filter(r => { const c = courseFor(r); return c && !c.virtual && r.status === "teilgenommen"; })
-      .map(r => `✓ ${birthText(dayOf(courseFor(r).starts_at))}`);
+    // Je Kurs der richtige Stand: teilgenommen nur nach „Da“, nicht teilgenommen nur nach ausdrücklich „Nicht da“
+    const today = localDate(new Date());
+    const kurs = entries.filter(r => { const c = courseFor(r); return c && !c.virtual; }).map(r => {
+      const c = courseFor(r), d = dayOf(c.starts_at), dt = birthText(d);
+      if (c.status === "abgesagt") return `<span class="muted">Kurs am ${dt} abgesagt</span>`;
+      if (r.status === "teilgenommen") return `<span class="qi-ok">✓ ${dt}</span>`;
+      if (r.status === "nicht_erschienen") return `<span class="qi-no">✗ nicht teilgenommen (${dt})</span>`;
+      if (r.status === "storniert") return `<span class="muted">abgemeldet (${dt})</span>`;
+      return d >= today ? `<span>angemeldet für ${dt}</span>` : `<span class="muted">${dt} – noch nicht abgehakt</span>`;
+    });
     const seh = entries.filter(r => r.sehtest_passed != null && !r.sehtest_void_at).sort((a, b) => String(b.sehtest_on || "").localeCompare(String(a.sehtest_on || "")));
     const sehHtml = seh.length ? seh.map(r => `<div class="qi-row"><span class="${r.sehtest_passed ? "qi-ok" : "qi-no"}">${r.sehtest_passed ? "✓ bestanden" : "✗ nicht bestanden"}</span>
         <span>${AID_TEXT[aidKind(r)] || (r.sehtest_aid ? "mit Sehhilfe" : r.sehtest_aid === false ? "ohne Sehhilfe" : "")}</span>
@@ -2584,7 +2592,7 @@
         <button class="btn btn-sm btn-ghost" type="button" data-qi-proto="${r.id}">Protokoll öffnen</button></div>`).join("")
       : '<span class="muted">kein Sehtest</span>';
     return `<div class="quick-info">
-      <div><label>Erste-Hilfe-Kurs</label>${kurs.length ? `<strong class="qi-ok">${kurs.join(", ")}</strong>` : '<strong class="qi-no">nicht teilgenommen</strong>'}</div>
+      <div><label>Erste-Hilfe-Kurs</label>${kurs.length ? `<strong>${kurs.join("<br>")}</strong>` : '<span class="muted">kein Kurs</span>'}</div>
       <div><label>Sehtest</label>${sehHtml}</div></div>`;
   }
   // Schülerkarte: Oben steht die Auskunft (Kurs, Sehtest, Ergebnis). Hier nur noch, was man tun kann – ohne Wiederholungen.
