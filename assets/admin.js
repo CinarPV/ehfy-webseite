@@ -2984,7 +2984,7 @@
       const folder = inv.status === "storniert" ? "Storniert" : inv.type === "quittung" ? "Quittungen" : "Rechnungen";
       const year = String(inv.issued_on || "").slice(0, 4) || "ohne Jahr";
       jobs.push(async () => files.push({
-        name: `${folder}/${year}/${fileSafe(inv.number)} - ${fileSafe((inv.recipient && inv.recipient.name) || "")}${inv.status === "storniert" ? " (storniert)" : ""}.pdf`,
+        name: `${folder}/${year}/${fileSafe(inv.number)} - ${fileSafe(billName(inv))}${inv.status === "storniert" ? " (storniert)" : ""}.pdf`,
         data: inv.type === "quittung" ? await receiptPdf([inv]) : await EHFYDocs.invoice(inv, await issuer(), loadFont, cfg.documents.paymentDays)
       }));
     }
@@ -3418,6 +3418,8 @@
   }
   // Rechnung an Schüler oder Betrieb (Firma zahlt). Gleiche Nummer; nur der Empfänger wird umgestellt.
   // Der Betrieb ist versteckt (selten gebraucht) und erscheint erst nach Antippen.
+  // Wer bekommt die Rechnung? Bei „Betrieb“ der Betrieb (mit Hinweis auf den Schüler)
+  const billName = inv => { const rc = inv.recipient || {}; return rc.bill_to === "firma" && rc.company && rc.company.name ? `${rc.company.name} (für ${rc.name})` : (rc.name || ""); };
   function companyChooser(inv) {
     const box = $("pd-company");
     if (!inv || inv.type !== "rechnung") { box.innerHTML = ""; return; }
@@ -3714,14 +3716,14 @@
     $("inv-cancelled").innerHTML = cancelled.length ? `<details class="card" style="margin-top:16px"><summary><strong>Stornierte Belege (${cancelled.length})</strong> <span class="small muted">– zählen nirgends mit, nur zur Aufbewahrung</span></summary>
       <div class="table-wrap"><table><thead><tr><th>Nr.</th><th>Datum</th><th>Art</th><th>Empfänger</th><th>Betrag</th><th></th></tr></thead><tbody>
       ${cancelled.sort((a, b) => b.seq - a.seq).map(i => `<tr class="is-past"><td><strong>${esc(i.number)}</strong></td><td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
-        <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td><td>${esc(i.recipient.name)}</td><td>${eur(i.total)}</td>
+        <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td><td>${esc(billName(i))}</td><td>${eur(i.total)}</td>
         <td><button class="btn btn-sm btn-outline" data-inv="pdf" data-id="${i.id}">PDF</button></td></tr>`).join("")}</tbody></table></div></details>` : "";
     $("inv-rows").innerHTML = shown.length ? shown.map(i => `
       <tr class="${i.status === "storniert" ? "is-past" : ""}">
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
         <td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
         <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td>
-        <td>${esc(i.recipient.name)}${i.registration_id ? "" : `<br><button class="btn btn-sm" data-inv="link" data-id="${i.id}">Schüler zuordnen</button>`}</td>
+        <td>${esc(billName(i))}${i.registration_id ? "" : `<br><button class="btn btn-sm" data-inv="link" data-id="${i.id}">Schüler zuordnen</button>`}</td>
         <td><strong>${eur(i.total)}</strong></td>
         <td>${INV_STATUS[i.status]}${i.sent_at ? `<br><span class="small muted" title="${esc(i.sent_to || "")}">✉ ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}</td>
         <td><div class="btn-row">
