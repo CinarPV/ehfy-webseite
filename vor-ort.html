@@ -23,6 +23,7 @@
     .vo-info { background: var(--soft); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; font-size: .85rem; color: var(--muted); }
     .vo-info p { margin: 6px 0 0; }
     .vo-done .big { font-size: 3rem; line-height: 1; }
+    .vo-st-btns { display: grid; gap: 10px; max-width: 320px; margin: 0 auto; }
     @media (max-width: 480px) { .vo-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -49,8 +50,6 @@
             <div class="field"><label for="vo-city">Ort</label><input id="vo-city" autocomplete="address-level2" required maxlength="80"></div>
             <div class="field"><label for="vo-phone">Telefon <span class="muted small">(freiwillig)</span></label><input id="vo-phone" type="tel" autocomplete="tel" maxlength="40"></div>
             <div class="field"><label for="vo-email">E-Mail <span class="muted small">(für Quittung oder Rechnung)</span></label><input id="vo-email" type="email" autocomplete="email" inputmode="email" maxlength="120" required></div>
-            <div class="field wide"><label for="vo-pkg">Möchtest du zusätzlich einen Sehtest machen?</label>
-              <select id="vo-pkg" required><option value="" selected disabled>Bitte wählen …</option><option value="komplett">Ja, mit Sehtest</option><option value="kurs">Nein, ohne Sehtest</option></select></div>
           </div>
 
           <div class="vo-sign-head"><strong>Unterschrift</strong><button class="btn btn-sm btn-ghost hidden" type="button" id="vo-clear">Neu unterschreiben</button></div>
@@ -71,7 +70,16 @@
         <div id="vo-done" class="card vo-done hidden">
           <div class="big">✓</div>
           <h2 id="vo-thanks">Danke!</h2>
-          <p class="muted">Du bist für den Kurs eingetragen. Du kannst diese Seite jetzt schließen.</p>
+          <p class="muted">Du bist für den Kurs eingetragen.</p>
+          <div id="vo-st" class="vo-st">
+            <p style="margin:18px 0 10px"><strong>Möchtest du heute zusätzlich einen Sehtest machen?</strong></p>
+            <div class="vo-st-btns">
+              <button class="btn" type="button" data-pkg="komplett">Ja, mit Sehtest</button>
+              <button class="btn btn-ghost" type="button" data-pkg="kurs">Nein, ohne Sehtest</button>
+            </div>
+            <p class="form-error" id="vo-st-err" role="alert"></p>
+          </div>
+          <p class="muted hidden" id="vo-close"><span id="vo-st-ok"></span> Du kannst diese Seite jetzt schließen.</p>
         </div>
       </div>
     </section>
@@ -136,6 +144,17 @@
       e.target.value = [d.slice(0, 2), d.slice(2, 4), d.slice(4)].filter(Boolean).join(".");
     });
 
+    let sent = null;
+    document.querySelectorAll("[data-pkg]").forEach(b => b.addEventListener("click", async () => {
+      const pkg = b.dataset.pkg, all = document.querySelectorAll("[data-pkg]");
+      all.forEach(x => { x.disabled = true; }); $("vo-st-err").textContent = "";
+      try {
+        await db.checkinSetPackage({ ...sent, package: pkg });
+        $("vo-st").classList.add("hidden");
+        $("vo-st-ok").textContent = pkg === "komplett" ? "Alles klar, der Sehtest ist vorgemerkt. 👓" : "Alles klar, nur der Erste-Hilfe-Kurs.";
+        $("vo-close").classList.remove("hidden");
+      } catch (e) { $("vo-st-err").textContent = "Das hat nicht geklappt. Bitte sag es kurz deinem Kursleiter."; all.forEach(x => { x.disabled = false; }); }
+    }));
     $("vo-form").addEventListener("submit", async ev => {
       ev.preventDefault();
       const err = $("vo-error"), btn = $("vo-send");
@@ -147,7 +166,6 @@
       if (!v("vo-street") || !v("vo-zip") || !v("vo-city")) { err.textContent = "Bitte die vollständige Adresse eintragen."; return; }
       if (!v("vo-email")) { err.textContent = "Bitte deine E-Mail-Adresse eintragen (für Quittung oder Rechnung)."; return; }
       if (!$("vo-email").checkValidity() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v("vo-email"))) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
-      if (!$("vo-pkg").value) { err.textContent = "Bitte angeben, ob du zusätzlich einen Sehtest machen möchtest."; $("vo-pkg").focus(); return; }
       if (!drawn) { err.textContent = "Bitte im Feld unterschreiben."; return; }
       if (!$("vo-ok").checked) { err.textContent = "Bitte bestätige, dass Name und Geburtsdatum genau wie in deinem Ausweis stehen."; return; }
       // Gewählter Kurs oder Tag
@@ -166,8 +184,10 @@
         const name = await db.checkinRegister({
           token, course: chosen.course, day: chosen.day, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth,
           street: v("vo-street"), zip: v("vo-zip"), city: v("vo-city"), phone: v("vo-phone"), email: v("vo-email"),
-          package: $("vo-pkg").value, signature
+          package: "kurs", signature
         });
+        // Sehtest-Frage erst jetzt – sie gehört nicht zum unterschriebenen Datenblatt
+        sent = { token, first_name: v("vo-first"), last_name: v("vo-last"), birth_date: birth };
         $("vo-thanks").textContent = `Danke, ${name}!`;
         $("vo-form").classList.add("hidden");
         $("vo-done").classList.remove("hidden");

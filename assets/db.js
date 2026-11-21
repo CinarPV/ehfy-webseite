@@ -168,6 +168,10 @@
           p_street: d.street, p_zip: d.zip, p_city: d.city, p_phone: d.phone, p_email: d.email, p_package: d.package, p_signature: d.signature
         }));
       },
+      // Sehtest-Antwort nach dem Datenblatt
+      async checkinSetPackage(d) {
+        return check(await sb.rpc("checkin_set_package", { p_token: d.token, p_first_name: d.first_name, p_last_name: d.last_name, p_birth_date: d.birth_date, p_package: d.package }));
+      },
       // Bankverbindung und Steuernummer (nur für das Verwaltungs-Konto lesbar)
       async getSettings() {
         const row = check(await sb.from("app_settings").select("value").eq("key", "issuer").maybeSingle());
@@ -501,6 +505,15 @@
           message: "manuell eingetragen", signature_png: d.signature, checkin_at: new Date().toISOString(), created_at: new Date().toISOString(), cancel_token: uid() });
         save();
         return d.first_name.trim();
+      },
+      async checkinSetPackage(d) {
+        const db = load(), k = t => String(t || "").trim().toLowerCase();
+        const r = db.regs.filter(x => x.checkin_at && Date.now() - new Date(x.checkin_at) < 30 * 60e3 && x.birth_date === d.birth_date
+          && k(x.first_name) === k(d.first_name) && k(x.last_name) === k(d.last_name)).sort((x, y) => String(y.checkin_at).localeCompare(String(x.checkin_at)))[0];
+        if (!r) return false;
+        r.package = d.package === "komplett" ? "komplett" : "kurs";
+        save();
+        return true;
       },
       async setNextSehtestNr(nr) {
         nr = String(nr || "").trim();
