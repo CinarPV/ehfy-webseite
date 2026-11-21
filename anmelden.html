@@ -66,18 +66,10 @@
               <div class="pkg-toggle pkg-list" id="pkg-options"></div>
             </div>
 
-            <div class="id-notice" role="note">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#c77700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2.5"/><path d="M14 10h5M14 14h3"/></svg>
-              <div>
-                <strong>Name und Geburtsdatum bitte genau wie im Ausweis!</strong>
-                <p>Deine Bescheinigung wird <b>vorab ausgestellt</b>. Schreib Vor- und Nachnamen und dein Geburtsdatum deshalb exakt so, wie sie in deinem Personalausweis oder Reisepass stehen – mit allen Vornamen, Umlauten, Akzenten und Bindestrichen. Keine Spitznamen, keine Abkürzungen.</p>
-                <p><b>Wichtig:</b> Für Fehler auf der Bescheinigung, die durch falsche oder vom Ausweis abweichende Angaben entstehen, übernehmen wir keine Haftung.</p>
-              </div>
-            </div>
-
             <div class="form-grid">
               <div class="field"><label for="first_name">Vorname(n) laut Ausweis *</label><input id="first_name" name="first_name" autocomplete="given-name" required maxlength="80" placeholder="z. B. Anna-Lena Marie"></div>
               <div class="field"><label for="last_name">Nachname laut Ausweis *</label><input id="last_name" name="last_name" autocomplete="family-name" required maxlength="80" placeholder="z. B. Müller"></div>
+              <p class="id-hint full" id="id-hint" hidden>Bitte Namen und Geburtsdatum genau wie im Ausweis eintragen – die Bescheinigung wird vorab ausgestellt. Für Fehler durch abweichende Angaben übernehmen wir keine Haftung.</p>
               <div class="field"><label for="birth_date">Geburtsdatum *</label><input id="birth_date" name="birth_date" type="text" inputmode="numeric" placeholder="TT.MM.JJJJ" autocomplete="bday" maxlength="10" required></div>
               <div class="field"><label for="email">E-Mail *</label><input id="email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="120"></div>
               <div class="field full"><label for="phone">Handynummer <span class="muted">(optional, für kurzfristige Infos)</span></label><input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="40"></div>
@@ -132,6 +124,8 @@
     const cfg = EHFY_CONFIG;
     const $ = id => document.getElementById(id);
     const form = $("form"), list = $("courses"), err = $("error");
+    // Kleiner Ausweis-Hinweis erst, wenn jemand Name oder Geburtsdatum antippt
+    ["first_name", "last_name", "birth_date"].forEach(id => $(id).addEventListener("focus", () => { $("id-hint").hidden = false; }, { once: true }));
     // Buchungsoptionen aus config.js
     const wanted = new URLSearchParams(location.search).get("paket");
     $("pkg-options").innerHTML = cfg.packages.map((p, i) => `
