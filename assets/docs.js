@@ -327,8 +327,14 @@
     totalBox(page, f, inv.total, y - 20, "Rechnungsbetrag");
     let yy = y - 80;
     const due = new Date(inv.issued_on); due.setDate(due.getDate() + (paymentDays || 14));
-    const pay = inv.payment === "bar"
+    // Schon bezahlt (Schüler hat bar, per PayPal oder per Überweisung bezahlt): keine Zahlungsaufforderung
+    const via = { bar: "in bar", paypal: "per PayPal", ueberweisung: "per Überweisung" }[(inv.recipient && inv.recipient.paid_via) || ""];
+    const pay = via
+      ? [`Der Rechnungsbetrag wurde bereits ${via} bezahlt. Es ist keine Zahlung mehr offen.`]
+      : inv.payment === "bar"
       ? [`Den Rechnungsbetrag haben wir am ${fmtDate(inv.issued_on)} in bar erhalten.`]
+      : inv.status === "bezahlt"
+      ? [`Der Rechnungsbetrag wurde bereits bezahlt. Es ist keine Zahlung mehr offen.`]
       : [`Bitte überweisen Sie den Rechnungsbetrag innerhalb von ${paymentDays || 14} Tagen (bis zum ${fmtDate(due)}).`];
     // Bankverbindung und PayPal stehen in der Fußzeile
     pay.filter(Boolean).forEach(t => { page.drawText(t, { x: M, y: yy, size: 10.5, font: f.regular, color: rgb(C.ink) }); yy -= 16; });

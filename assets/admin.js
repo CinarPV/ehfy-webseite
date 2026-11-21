@@ -2152,7 +2152,7 @@
             ${b("bescheinigung", "Bescheinigungen (alle)")}${b("quittung", "Quittungen (Bar)")}${b("rechnung", "Rechnungen (PayPal/Überweisung)")}${b("teilnehmerliste", "Teilnehmerliste")}</div></div>
           <h4 style="margin:16px 0 4px">Einzeln je Schüler</h4>`
           + (here.length ? here.map(r => `<div class="att-row" data-att="${r.id}"><div class="att-name">${esc(r.first_name)} ${esc(r.last_name)}<span class="small muted" style="display:block;font-weight:400">geb. ${birthText(r.birth_date)}</span></div>
-            <div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-one-print="datenblatt">Datenblatt</button><button class="btn btn-sm btn-ghost" type="button" data-one-print="bescheinigung">Bescheinigung</button>${isST(r) ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Sehtest-Protokoll</button>' : ""}${r.payment_method === "bar" ? '<button class="btn btn-sm btn-ghost" type="button" data-one-print="quittung">Quittung</button>' : ""}${r.payment_method === "paypal" || r.payment_method === "ueberweisung" ? '<button class="btn btn-sm btn-ghost" type="button" data-one-print="rechnung">Rechnung</button>' : ""}</div></div>`).join("")
+            <div class="att-btns"><button class="btn btn-sm btn-ghost" type="button" data-one-print="datenblatt">Datenblatt</button><button class="btn btn-sm btn-ghost" type="button" data-one-print="bescheinigung">Bescheinigung</button>${isST(r) ? '<button class="btn btn-sm btn-ghost" type="button" data-st-print>Sehtest-Protokoll</button>' : ""}${r.payment_method === "bar" ? '<button class="btn btn-sm btn-ghost" type="button" data-one-print="quittung">Quittung</button>' : ""}${r.payment_method === "paypal" || r.payment_method === "ueberweisung" || r.payment_method === "bar" ? '<button class="btn btn-sm btn-ghost" type="button" data-one-print="rechnung">Rechnung</button>' : ""}</div></div>`).join("")
             : '<p class="small muted">Noch niemand da.</p>');
       } else if (attTab === "bezahlung") {
         const here = list.filter(r => !absent(r));
@@ -2737,6 +2737,7 @@
       return (async () => {
         await ensurePdf();
         const [inv] = await billsFor(mailKind.dataset.scMail, [r], courseFor(r));
+        if (!inv) throw new Error("Bei „PayPal privat“ wird keine Rechnung und keine Quittung erstellt.");
         await sendBill({ ...inv, recipient: { ...inv.recipient, email: inv.recipient.email || r.email || "" } });
       })().catch(e => show(e.message));
     }
@@ -3524,12 +3525,21 @@
     const cash = type === "quittung";
     const out = [];
     for (const r of people.filter(x => x.payment_method !== OWN)) { // PayPal privat: kein Beleg
+      // Rechnung für jemanden, der schon bezahlt hat (bar, PayPal, Überweisung): steht als „bereits bezahlt“ drauf
+      const paidVia = !cash && ["bar", "paypal", "ueberweisung"].includes(r.payment_method) ? r.payment_method : null;
       let inv = existing.find(i => i.registration_id === r.id && i.type === type);
+      // Kursrechnung war noch offen, der Schüler hat inzwischen bezahlt: als bezahlt vermerken (nicht bei Ausfallgebühr)
+      if (inv && paidVia && !preview && inv.status === "offen" && !String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) {
+        await db.setInvoiceStatus(inv.id, "bezahlt");
+        inv = { ...inv, status: "bezahlt", recipient: { ...inv.recipient, paid_via: paidVia } };
+      } else if (inv && paidVia && inv.status === "bezahlt" && !inv.recipient?.paid_via && !String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) {
+        inv = { ...inv, recipient: { ...inv.recipient, paid_via: paidVia } };
+      }
       if (!inv) {
         const data = {
-          type, registration_id: r.id, status: cash ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
+          type, registration_id: r.id, status: cash || paidVia ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
           issued_on: cash ? day : localDate(new Date()), service_date: day,
-          recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "" },
+          recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "", ...(paidVia ? { paid_via: paidVia } : {}) },
           items: [...EHFYDocs.receiptItems(r, course, cfg.packages),
             ...(Number(r.discount) > 0 ? [{ text: `Gutschein${r.discount_note ? ": " + r.discount_note : ""}`, qty: 1, price: -Number(r.discount) }] : [])]
         };
@@ -3645,6 +3655,7 @@
       (async () => {
         await ensurePdf();
         const [inv] = await billsFor(kind.replace("-mail", ""), people, current);
+        if (!inv) throw new Error("Bei „PayPal privat“ wird keine Rechnung und keine Quittung erstellt.");
         await sendBill({ ...inv, recipient: { ...inv.recipient, email: inv.recipient.email || people[0].email || "" } });
       })().catch(e => { $("doc-error").textContent = e.message; });
       return;
