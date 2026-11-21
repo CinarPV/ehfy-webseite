@@ -20,7 +20,7 @@ const PACKAGES = {
   komplett: "Erste-Hilfe-Kurs + Sehtest (55 €)"
 };
 const TZ = "Europe/Berlin";
-const DEFAULT_SITE = "https://cinarpv.github.io/ehfy-webseite";
+const DEFAULT_SITE = "https://www.ehfy.de";
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

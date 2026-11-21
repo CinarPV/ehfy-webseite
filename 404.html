@@ -29,7 +29,12 @@
       var rules = [[/anmeld|buch|termin/, "anmelden.html"], [/preis/, "preise.html"], [/datenschutz/, "datenschutz.html"],
         [/impressum/, "impressum.html"], [/ersatz/, "ersatzbescheinigung.html"], [/absag|storn/, "absage.html"], [/info|kurs/, "kurs.html"]];
       var target = base;
-      for (var i = 0; i < rules.length; i++) if (rules[i][0].test(path)) { target = base + rules[i][1]; break; }
+      // Alte WordPress-Links mit Nummer, z. B. ehfy.de/index.php?page_id=825
+      var pid = (location.search.match(/[?&]page_id=(\d+)/) || [])[1];
+      var ids = { "825": "anmelden.html", "936": "anmelden.html", "847": "datenschutz.html", "862": "ersatzbescheinigung.html",
+        "865": "impressum.html", "868": "kurs.html", "871": "preise.html", "817": "absage.html" };
+      if (pid && ids[pid]) target = base + ids[pid];
+      else for (var i = 0; i < rules.length; i++) if (rules[i][0].test(path)) { target = base + rules[i][1]; break; }
       document.getElementById("home").href = base;
       document.getElementById("book").href = base + "anmelden.html";
       setTimeout(function () { location.replace(target); }, target === base ? 2500 : 0);
