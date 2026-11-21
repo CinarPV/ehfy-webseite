@@ -408,7 +408,9 @@
     <form method="dialog" class="dialog-body" id="inv-form">
       <h2 style="margin-top:0">Neue Rechnung</h2>
       <div class="form-grid">
-        <div class="field full"><label for="iv-name">Empfänger (Name oder Firma) *</label><input id="iv-name" required></div>
+        <div class="field full" style="position:relative"><label for="iv-name">Empfänger (Name oder Firma) *</label><input id="iv-name" required autocomplete="off" placeholder="Name tippen – Vorschläge aus deinen Kursen">
+          <div id="iv-sugg" class="hidden" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--card,#fff);border:1px solid var(--line,#ddd);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);max-height:290px;overflow:auto"></div>
+          <p class="small muted hidden" id="iv-picked" style="margin:6px 0 0"></p></div>
         <div class="field full"><label for="iv-street">Straße und Hausnummer</label><input id="iv-street"></div>
         <div class="field"><label for="iv-zip">PLZ</label><input id="iv-zip" inputmode="numeric" maxlength="5"></div>
         <div class="field"><label for="iv-city">Ort</label><input id="iv-city"></div>

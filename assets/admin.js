@@ -3930,7 +3930,60 @@
   function sumItems() { $("iv-sum").textContent = eur(readItems().reduce((s, i) => s + i.qty * i.price, 0)); }
 
   $("iv-add").onclick = () => itemRow();
+
+  // Namensvorschläge aus deinen Anmeldungen (zuletzt besuchte Kurse zuerst). Antippen übernimmt alle Daten.
+  let ivPeople = [], ivCourses = {}, ivPick = null;
+  async function loadIvPeople() {
+    try {
+      const [regsAll, list] = await Promise.all([db.listAllRegistrations(), db.listCourses()]);
+      ivCourses = Object.fromEntries(list.map(c => [c.id, c]));
+      const when = r => { const c = ivCourses[r.course_id]; return c ? c.starts_at : r.legacy_course_date ? `${r.legacy_course_date}T10:00:00` : r.created_at || ""; };
+      ivPeople = regsAll.filter(r => r.status !== "storniert" && (r.first_name || r.last_name))
+        .map(r => ({ r, when: when(r) })).sort((a, b) => String(b.when).localeCompare(String(a.when)));
+    } catch { ivPeople = []; }
+  }
+  function ivSuggest() {
+    const box = $("iv-sugg"), q = $("iv-name").value.trim().toLowerCase();
+    const words = q.split(/\s+/).filter(Boolean);
+    const hits = ivPeople.filter(({ r }) => { const t = `${r.first_name} ${r.last_name} ${r.last_name} ${r.city || ""}`.toLowerCase(); return words.every(w => t.includes(w)); }).slice(0, 8);
+    if (!hits.length) { box.classList.add("hidden"); return; }
+    box.innerHTML = hits.map(({ r, when }, n) => `<button type="button" data-ivp="${n}" style="display:block;width:100%;text-align:left;padding:10px 12px;border:0;border-bottom:1px solid var(--line,#eee);background:none;font:inherit;cursor:pointer">
+        <strong>${esc(r.first_name)} ${esc(r.last_name)}</strong><span class="small muted" style="display:block">${when ? "Kurs " + new Date(when).toLocaleDateString("de-DE") : "ohne Kurs"}${r.city ? " · " + esc(r.city) : ""}${r.on_list ? " · auf Teilnehmerliste" : ""}</span></button>`).join("");
+    box.querySelectorAll("[data-ivp]").forEach(b => b.onmousedown = b.onclick = ev => { ev.preventDefault(); ivTake(hits[Number(b.dataset.ivp)].r); });
+    box.classList.remove("hidden");
+  }
+  async function ivTake(r) {
+    $("iv-sugg").classList.add("hidden");
+    $("iv-name").value = `${r.first_name} ${r.last_name}`;
+    $("iv-street").value = r.street || ""; $("iv-zip").value = r.zip || ""; $("iv-city").value = r.city || ""; $("iv-email").value = r.email || "";
+    const c = ivCourses[r.course_id] || (r.legacy_course_date ? { starts_at: `${r.legacy_course_date}T10:00:00` } : null);
+    if (c) $("iv-service").value = localDate(new Date(c.starts_at));
+    $("iv-cash").checked = r.payment_method === "bar";
+    // Positionen wie beim Kurs, mit dem Teilnehmer dabei (falls die Rechnung später an einen Betrieb geht)
+    $("iv-items").innerHTML = "";
+    const who = `Teilnehmer/in: ${r.first_name} ${r.last_name}${r.birth_date ? ", geb. " + birthText(r.birth_date) : ""}`;
+    const items = c ? EHFYDocs.receiptItems(r, c, cfg.packages) : [{ text: "Erste-Hilfe-Kurs", qty: 1, price: cfg.prices.kurs }];
+    items.forEach((it, k) => itemRow({ ...it, text: k === 0 ? `${it.text}\n${who}` : it.text }));
+    if (Number(r.discount) > 0) itemRow({ text: `Gutschein${r.discount_note ? ": " + r.discount_note : ""}`, qty: 1, price: -Number(r.discount) });
+    sumItems();
+    // Mit der Anmeldung verknüpfen – außer sie hat schon eine gültige Rechnung
+    let note = "";
+    try {
+      const old = (await db.invoicesForRegistrations([r.id])).find(i => i.type === "rechnung" && i.status !== "storniert");
+      ivPick = old ? null : r;
+      if (old) note = ` Achtung: ${r.first_name} hat schon die Rechnung Nr. ${old.number}. Die neue wird nicht mit der Anmeldung verknüpft.`;
+    } catch { ivPick = r; }
+    $("iv-picked").textContent = `Daten von ${r.first_name} ${r.last_name} übernommen${c ? " (Kurs " + new Date(c.starts_at).toLocaleDateString("de-DE") + ")" : ""}. Du kannst alles noch ändern.${note}`;
+    $("iv-picked").classList.remove("hidden");
+  }
+  // Name später ändern (z. B. Firma statt Schüler) behält die Verknüpfung; Feld leeren hebt sie auf
+  $("iv-name").addEventListener("input", () => { if (!$("iv-name").value.trim()) { ivPick = null; $("iv-picked").classList.add("hidden"); } ivSuggest(); });
+  $("iv-name").addEventListener("focus", ivSuggest);
+  $("iv-name").addEventListener("blur", () => setTimeout(() => $("iv-sugg").classList.add("hidden"), 200));
+
   $("inv-new").onclick = () => {
+    ivPick = null; $("iv-picked").classList.add("hidden"); $("iv-sugg").classList.add("hidden");
+    loadIvPeople();
     $("inv-form").reset();
     $("iv-items").innerHTML = "";
     itemRow({ text: "Erste-Hilfe-Schulung", qty: 1, price: cfg.prices.kurs });
@@ -3950,7 +4003,9 @@
       const inv = await db.createInvoice({
         type: "rechnung", items, payment: bar ? "bar" : "ueberweisung", status: bar ? "bezahlt" : "offen",
         issued_on: $("iv-date").value, service_date: $("iv-service").value || null,
-        recipient: { name: $("iv-name").value.trim(), street: $("iv-street").value.trim(), zip: $("iv-zip").value.trim(), city: $("iv-city").value.trim(), email: $("iv-email").value.trim() }
+        ...(ivPick ? { registration_id: ivPick.id } : {}),
+        recipient: { name: $("iv-name").value.trim(), street: $("iv-street").value.trim(), zip: $("iv-zip").value.trim(), city: $("iv-city").value.trim(), email: $("iv-email").value.trim(),
+          ...(ivPick ? { birth_date: ivPick.birth_date || null, manual: true } : {}) }
       });
       idlg.close();
       $("inv-year").value = String(inv.year);
