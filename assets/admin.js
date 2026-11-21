@@ -2736,8 +2736,8 @@
     if (mailKind) {
       return (async () => {
         await ensurePdf();
-        const [inv] = await billsFor(mailKind.dataset.scMail, [r], courseFor(r));
-        if (!inv) throw new Error("Bei „PayPal privat“ wird keine Rechnung und keine Quittung erstellt.");
+        const [inv] = await billsForOne(mailKind.dataset.scMail, r, courseFor(r));
+        if (!inv) return;
         await sendBill({ ...inv, recipient: { ...inv.recipient, email: inv.recipient.email || r.email || "" } });
       })().catch(e => show(e.message));
     }
@@ -3537,7 +3537,19 @@
 
   // Quittungen/Rechnungen: vorhandene wiederverwenden, fehlende mit neuer Nummer anlegen
   // preview = true: fehlende Belege nur als Vorschau ohne Nummer (die Nummer wird erst beim Drucken oder Senden fest vergeben)
-  async function billsFor(type, people, course, preview) {
+  // Beleg für einen Schüler zum Senden: steht er nicht auf der Teilnehmerliste, erst fragen
+  async function billsForOne(type, r, course) {
+    if (r.payment_method === OWN) throw new Error("Bei „PayPal privat“ wird keine Rechnung und keine Quittung erstellt.");
+    const label = type === "rechnung" ? "Rechnung" : "Quittung";
+    const has = (await db.invoicesForRegistrations([r.id])).some(i => i.registration_id === r.id && i.type === type);
+    if (!has && !billable(r, type) && !confirm(`${r.first_name} ${r.last_name} steht nicht auf der Teilnehmerliste.\n\n${label} trotzdem erstellen? Dabei wird eine feste Nummer vergeben.`)) return [];
+    return billsFor(type, [r], course, false, true);
+  }
+  // Wer bekommt automatisch einen Beleg mit fester Nummer? Nur wer auf der Teilnehmerliste steht
+  // (Quittung zusätzlich nur bei Barzahlung). Alle anderen nur, wenn du ausdrücklich „erstellen“ drückst.
+  const onList = r => !!r.on_list && r.payment_method !== OWN && r.status !== "storniert" && r.status !== "nicht_erschienen";
+  const billable = (r, type) => onList(r) && (type === "rechnung" || r.payment_method === "bar");
+  async function billsFor(type, people, course, preview, force) {
     const existing = await db.invoicesForRegistrations(people.map(r => r.id));
     const day = localDate(new Date(course.starts_at));
     // Quittung = bar am Kurstag bezahlt; Rechnung = normal mit Zahlungsziel ab heute
@@ -3549,11 +3561,12 @@
       // beim Senden kannst du selbst „noch offen“ oder „bereits bezahlt“ wählen.
       const paidVia = !cash && r.payment_method === "bar" ? "bar" : null;
       let inv = existing.find(i => i.registration_id === r.id && i.type === type);
+      if (!inv && !billable(r, type) && !force) continue; // nicht auf der Teilnehmerliste: kein Beleg im Voraus
       if (!inv) {
         const data = {
           type, registration_id: r.id, status: cash || paidVia ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
           issued_on: cash ? day : localDate(new Date()), service_date: day,
-          recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "", ...(paidVia ? { paid_via: paidVia } : {}) },
+          recipient: { name: `${r.first_name} ${r.last_name}`, birth_date: r.birth_date || null, street: r.street || "", zip: r.zip || "", city: r.city || "", email: r.email || "", ...(paidVia ? { paid_via: paidVia } : {}), ...(!billable(r, type) ? { manual: true } : {}) },
           items: [...EHFYDocs.receiptItems(r, course, cfg.packages),
             ...(Number(r.discount) > 0 ? [{ text: `Gutschein${r.discount_note ? ": " + r.discount_note : ""}`, qty: 1, price: -Number(r.discount) }] : [])]
         };
@@ -3568,7 +3581,7 @@
   }
 
   // Ein Dokument-Typ als PDF-Bytes (eine Seite pro Teilnehmer, gleiche Reihenfolge)
-  async function docBytes(kind, people, course, forMail, preview) {
+  async function docBytes(kind, people, course, forMail, preview, force) {
     const D = window.EHFYDocs;
     // Deine Unterschrift kommt nur auf Bescheinigungen, die per E-Mail rausgehen
     if (kind === "bescheinigung") return D.certificates(await template("bescheinigung"), course, people, loadFont, { infoLeafletHanded: cfg.documents.infoLeafletHanded, signature: forMail ? await signatureBytes() : null });
@@ -3580,8 +3593,11 @@
         helper: people.length > 15 ? DOC_HELPER : "", approval: DOC_APPROVAL, printed: new Date() });
       return joinPdfs([doc, sheets]);
     }
-    if (kind === "quittung") return receiptPdf(await billsFor("quittung", people, course, preview));
-    if (kind === "rechnung") return D.invoices(await billsFor("rechnung", people, course, preview), await issuer(), loadFont, cfg.documents.paymentDays);
+    if (kind === "quittung" || kind === "rechnung") {
+      const list = await billsFor(kind, people, course, preview, force);
+      if (!list.length) return null; // niemand auf der Teilnehmerliste
+      return kind === "quittung" ? receiptPdf(list) : D.invoices(list, await issuer(), loadFont, cfg.documents.paymentDays);
+    }
     if (kind === "dokumentation") {
       // Dokumentation einzeln: Anzahl = anwesende Teilnehmende des Kurses
       const n = people.filter(r => r.status !== "storniert" && r.status !== "nicht_erschienen").length;
@@ -3615,27 +3631,34 @@
     await ensurePdf();
     const who = people.length === 1 ? `_${people[0].last_name}_${people[0].first_name}` : "";
     const name = `${DOC_NAMES[kind]}_${localDate(new Date(course.starts_at))}_${course.location}${who}.pdf`;
-    // Kursmappe: PayPal-privat-Schüler ans Ende, sie bekommen keine Quittung – so bleiben die Seiten richtig zugeordnet
-    if (kind === "alles") people = [...people.filter(r => r.payment_method !== OWN), ...people.filter(r => r.payment_method === OWN)];
     if ((kind === "quittung" || kind === "rechnung") && people.every(r => r.payment_method === OWN)) throw new Error("PayPal privat: Dafür wird kein Beleg erstellt.");
-    const build = preview => kind === "alles"
-      ? Promise.all(BUNDLE.map(k => docBytes(k, people, course, false, preview))).then(parts => EHFYDocs.bundle(parts))
-      : docBytes(kind, people, course, false, preview);
-    // Quittung/Rechnung: Fehlt noch ein Beleg, erst fragen – Nummern werden nur beim Drucken fest vergeben
     const type = kind === "rechnung" ? "rechnung" : ["quittung", "alles"].includes(kind) ? "quittung" : null;
+    const existing = type ? await db.invoicesForRegistrations(people.map(r => r.id)) : [];
+    const has = r => existing.some(i => i.registration_id === r.id && i.type === type);
+    // Einzelner Schüler, nicht auf der Teilnehmerliste: Beleg nur, wenn du ausdrücklich „erstellen“ drückst
+    const single = kind !== "alles" && people.length === 1 && !has(people[0]) && !billable(people[0], type);
+    // Kursmappe: wer eine Quittung bekommt, zuerst – so bleiben die Seiten richtig zugeordnet
+    if (kind === "alles") people = [...people.filter(r => has(r) || billable(r, "quittung")), ...people.filter(r => !has(r) && !billable(r, "quittung"))];
+    const build = (preview, force) => kind === "alles"
+      ? Promise.all(BUNDLE.map(k => docBytes(k, people, course, false, preview))).then(parts => EHFYDocs.bundle(parts.filter(Boolean)))
+      : docBytes(kind, people, course, false, preview, force).then(b => {
+        if (!b) throw new Error("Dafür gibt es keinen Beleg: Niemand davon steht auf der Teilnehmerliste.");
+        return b;
+      });
+    // Quittung/Rechnung: Fehlt noch ein Beleg, erst Vorschau – Nummern werden nur über den Knopf fest vergeben
     if (type) {
-      const existing = await db.invoicesForRegistrations(people.map(r => r.id));
-      const missing = people.filter(r => !existing.some(i => i.registration_id === r.id && i.type === type)).length;
+      const missing = people.filter(r => !has(r) && (single || billable(r, type))).length;
       if (missing) {
         if (win && !win.closed) win.close();
         const label = type === "rechnung" ? "Rechnung" : "Quittung";
-        // Immer erst Vorschau ohne Nummer; erstellt (mit fester Nummer) wird nur über den Knopf
         const many = missing > 1 ? `${missing} ${label}en` : label;
-        pdfDialog(await build(true), name.replace(".pdf", "_Vorschau.pdf"), null, {
-          label: `${many} erstellen (Nummer fest vergeben)`,
-          run: async () => pdfDialog(await build(false), name)
+        const skipped = single ? 0 : people.filter(r => !has(r) && !billable(r, type) && r.payment_method !== OWN).length;
+        pdfDialog(await build(true, single), name.replace(".pdf", "_Vorschau.pdf"), null, {
+          label: single ? `${label} trotzdem erstellen (nicht auf der Teilnehmerliste, Nummer wird fest vergeben)` : `${many} erstellen (Nummer fest vergeben)`,
+          run: async () => pdfDialog(await build(false, single), name)
         });
         $("pd-title").textContent = `${label}-Vorschau – noch keine Nummer`;
+        if (skipped) $("pd-name").textContent += ` · ${skipped} ${skipped === 1 ? "Schüler steht" : "Schüler stehen"} nicht auf der Teilnehmerliste und ${skipped === 1 ? "bekommt" : "bekommen"} keine ${label}.`;
         return;
       }
     }
@@ -3668,8 +3691,8 @@
       $("doc-error").textContent = "";
       (async () => {
         await ensurePdf();
-        const [inv] = await billsFor(kind.replace("-mail", ""), people, current);
-        if (!inv) throw new Error("Bei „PayPal privat“ wird keine Rechnung und keine Quittung erstellt.");
+        const [inv] = await billsForOne(kind.replace("-mail", ""), people[0], current);
+        if (!inv) return;
         await sendBill({ ...inv, recipient: { ...inv.recipient, email: inv.recipient.email || people[0].email || "" } });
       })().catch(e => { $("doc-error").textContent = e.message; });
       return;
@@ -3683,7 +3706,14 @@
     bezahlt: '<span class="pill">bezahlt</span>',
     storniert: '<span class="pill pill-muted">storniert</span>'
   };
-  let invoices = [];
+  let invoices = [], invRegs = new Map();
+  // Fürs Finanzamt (Download/Druck): nur Belege von Schülern auf der Teilnehmerliste, freie Rechnungen,
+  // Ausfallgebühren und Belege, die du ausdrücklich erstellt hast
+  const forOffice = i => {
+    if (!i.registration_id || (i.recipient && i.recipient.manual) || String(i.items?.[0]?.text || "").startsWith("Ausfallgebühr")) return true;
+    const r = invRegs.get(i.registration_id);
+    return !r || (!!r.on_list && r.payment_method !== OWN);
+  };
   const thisYear = new Date().getFullYear();
   $("inv-year").innerHTML = [thisYear + 1, thisYear, thisYear - 1, thisYear - 2]
     .map(y => `<option value="${y}" ${y === thisYear ? "selected" : ""}>${y}</option>`).join("");
@@ -3695,7 +3725,7 @@
   // Alle Belege des gewählten Monats als eine PDF, in Nummernfolge
   async function printMonth(type, label) {
     $("inv-print-error").textContent = "";
-    const list = invoices.filter(i => i.type === type && inMonth(i) && !i.draft && i.status !== "storniert").sort((a, b) => a.seq - b.seq);
+    const list = invoices.filter(i => i.type === type && inMonth(i) && !i.draft && i.status !== "storniert" && forOffice(i)).sort((a, b) => a.seq - b.seq);
     if (!list.length) { $("inv-print-error").textContent = `Für diese Auswahl gibt es keine ${label}.`; return; }
     const win = openTab();
     try {
@@ -3721,7 +3751,7 @@
     return out.save();
   }
   // Stornierte Belege zählen nirgends mit: nicht drucken, nicht herunterladen, nicht in den Summen
-  const belegeOf = all => (all ? invoices : invoices.filter(inMonth)).filter(i => !i.draft && i.status !== "storniert").sort((a, b) => a.seq - b.seq);
+  const belegeOf = all => (all ? invoices : invoices.filter(inMonth)).filter(i => !i.draft && i.status !== "storniert" && forOffice(i)).sort((a, b) => a.seq - b.seq);
   function saveFile(bytes, name) {
     // In der iPhone-App geht das Speichern über den PDF-Dialog
     if (appMode) return pdfDialog(bytes, name);
@@ -3756,7 +3786,10 @@
   $("inv-print-receipts").onclick = () => printMonth("quittung", "Quittungen");
 
   async function loadInvoices() {
-    try { invoices = await db.listInvoices(Number($("inv-year").value)); } catch (e) { alert(e.message); return; }
+    try {
+      invoices = await db.listInvoices(Number($("inv-year").value));
+      invRegs = new Map((await db.listAllRegistrations()).map(r => [r.id, r]));
+    } catch (e) { alert(e.message); return; }
     const valid = invoices.filter(i => i.status !== "storniert");
     const open = valid.filter(i => i.status === "offen");
     const sum = list => list.reduce((s, i) => s + Number(i.total), 0);
@@ -3776,12 +3809,12 @@
       return `<option value="${key}" ${key === invMonth ? "selected" : ""}>${m} (${counts[key] || 0})</option>`;
     }).join("");
     const shown = live.filter(inMonth);
-    const of = t => shown.filter(i => i.type === t && !i.draft).length;
+    const of = t => shown.filter(i => i.type === t && !i.draft && forOffice(i)).length;
     $("inv-print-bills").textContent = `Nur Rechnungen (${of("rechnung")})`;
     $("inv-print-receipts").textContent = `Nur Quittungen (${of("quittung")})`;
     $("inv-print-all").textContent = `Alles drucken (${of("rechnung") + of("quittung")})`;
     $("inv-dl-all").textContent = `Herunterladen (${of("rechnung") + of("quittung")})`;
-    $("inv-dl-year").textContent = `Ganzes Jahr herunterladen (${live.filter(i => !i.draft).length})`;
+    $("inv-dl-year").textContent = `Ganzes Jahr herunterladen (${live.filter(i => !i.draft && forOffice(i)).length})`;
     $("inv-cancelled").innerHTML = cancelled.length ? `<details class="card" style="margin-top:16px"><summary><strong>Stornierte Belege (${cancelled.length})</strong> <span class="small muted">– zählen nirgends mit, nur zur Aufbewahrung</span></summary>
       <div class="table-wrap"><table><thead><tr><th>Nr.</th><th>Datum</th><th>Art</th><th>Empfänger</th><th>Betrag</th><th></th></tr></thead><tbody>
       ${cancelled.sort((a, b) => b.seq - a.seq).map(i => `<tr class="is-past"><td><strong>${esc(i.number)}</strong></td><td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
@@ -3792,7 +3825,7 @@
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
         <td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
         <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td>
-        <td>${esc(billName(i))}${i.registration_id ? "" : `<br><button class="btn btn-sm" data-inv="link" data-id="${i.id}">Schüler zuordnen</button>`}</td>
+        <td>${esc(billName(i))}${forOffice(i) ? "" : '<br><span class="small muted">nicht auf der Teilnehmerliste – nicht im Download</span>'}${i.registration_id ? "" : `<br><button class="btn btn-sm" data-inv="link" data-id="${i.id}">Schüler zuordnen</button>`}</td>
         <td><strong>${eur(i.total)}</strong></td>
         <td>${INV_STATUS[i.status]}${i.sent_at ? `<br><span class="small muted" title="${esc(i.sent_to || "")}">✉ ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}</td>
         <td><div class="btn-row">
