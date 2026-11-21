@@ -1193,8 +1193,9 @@
       <strong>${esc(m.kind || "E-Mail")}</strong>${m.invoice_number ? ` · Nr. ${esc(m.invoice_number)}` : ""} · ${esc(m.person || "")} <span class="small muted">an ${esc(m.to_addr || "")}</span></summary>
       <p class="small" style="margin:8px 0 4px"><strong>Betreff:</strong> ${esc(m.subject || "")}</p>
       <pre class="mail-body">${esc(m.body || "")}</pre>${m.attachment ? `<p class="small muted">Anhang: ${esc(m.attachment)}</p>` : ""}</details>`;
-  async function showMails(registrationId, who) {
-    const list = await db.listMailLog(registrationId);
+  async function showMails(registrationId, who, invoiceId) {
+    let list = await db.listMailLog(registrationId);
+    if (invoiceId) list = list.filter(m => m.invoice_id === invoiceId);
     let d = $("mail-dialog");
     if (!d) {
       d = document.createElement("dialog"); d.id = "mail-dialog"; d.className = "qr-dlg";
@@ -1202,7 +1203,7 @@
       document.body.appendChild(d); $("ml-close").onclick = () => d.close();
     }
     $("ml-title").textContent = `Gesendete Schreiben · ${who}`;
-    $("ml-list").innerHTML = list.length ? list.map(mailCard).join("") : '<p class="muted small">Noch nichts protokolliert. (Schreiben werden ab jetzt festgehalten.)</p>';
+    $("ml-list").innerHTML = list.length ? list.map(mailCard).join("").replace("<details ", "<details open ") : '<p class="muted small">Noch nichts protokolliert. (Schreiben werden ab jetzt festgehalten.)</p>';
     d.showModal();
   }
   async function loadMailView() {
@@ -1215,6 +1216,13 @@
     } catch (e) { $("mail-error").textContent = e.message.includes("mail_log") ? "Bitte einmal das SQL „update-schreiben.sql“ in Supabase ausführen." : e.message; }
   }
   $("mail-filter").addEventListener("input", () => loadMailView());
+  // Verschickten Text einer Rechnung/Quittung ansehen (Schülerkarte, Liste „Per E-Mail verschickt“)
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-show-mail]");
+    if (!b) return;
+    ev.preventDefault(); ev.stopPropagation();
+    showMails(b.dataset.reg || null, b.dataset.who || "", b.dataset.showMail).catch(e => alert(e.message));
+  }, true);
 
   // ---------- Notizen (Start): freier Text, automatisch gespeichert in den Einstellungen ----------
   let notesTimer = null, notesLoaded = false;
@@ -1982,7 +1990,7 @@
           ${docs ? `<span class="pay-docs">${docs}</span>` : ""}</div>
         <div class="pay-amount"><b>${eur(amount)}</b><span class="chip ${paid ? "ok" : "no"}">${label}</span></div>
       </div>`;
-    const docText = r => docOf(r).map(i => `${i.type === "rechnung" ? "Rechnung" : "Quittung"} ${esc(i.number || "Entwurf")}${i.status === "bezahlt" ? " ✓" : i.status === "offen" && i.type === "rechnung" ? " (offen)" : ""}`).join(" · ");
+    const docText = r => docOf(r).map(i => `${i.type === "rechnung" ? "Rechnung" : "Quittung"} ${esc(i.number || "Entwurf")}${i.status === "bezahlt" ? " ✓" : i.status === "offen" && i.type === "rechnung" ? " (offen)" : ""}${i.sent_at ? ` <span class="mail-badge">✉ per E-Mail ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}`).join(" · ");
     for (const r of regsC) {
       const away = r.status === "nicht_erschienen" || r.status === "storniert";
       if (away) {
@@ -2506,10 +2514,26 @@
   const courseFor = r => studentCourses[r.course_id] || (r.legacy_course_date
     ? { id: null, virtual: true, starts_at: new Date(`${r.legacy_course_date}T10:00:00`).toISOString(), ends_at: new Date(`${r.legacy_course_date}T17:30:00`).toISOString(), location: "Ort unbekannt", status: "offen" }
     : null);
+  let studentInvs = [];
+  const sentDate = i => new Date(i.sent_at).toLocaleDateString("de-DE");
+  // Rechnung per E-Mail gesendet? Deutlich sichtbar beim Schüler
+  function billInfo(entries) {
+    const ids = new Set(entries.map(r => r.id));
+    const mine = studentInvs.filter(i => ids.has(i.registration_id) && !i.draft && (i.type === "rechnung" || i.sent_at))
+      .sort((a, b) => String(b.issued_on).localeCompare(String(a.issued_on)));
+    if (!mine.length) return "";
+    return `<div><label>Rechnung</label>${mine.map(i => {
+      const art = i.type === "quittung" ? "Quittung" : "Rechnung", paid = i.status === "bezahlt" ? " · ✓ bezahlt" : i.type === "rechnung" && i.status === "offen" ? " · noch offen" : "";
+      return i.sent_at
+        ? `<div class="qi-row"><span class="qi-mail">✉ ${art} ${esc(i.number)} per E-Mail gesendet am ${sentDate(i)}</span><span class="small muted">an ${esc(i.sent_to || "")}${paid}</span><button class="btn btn-sm btn-ghost" type="button" data-show-mail="${i.id}" data-reg="${i.registration_id || ""}" data-who="${esc(billName(i))}">📄 Text ansehen</button></div>`
+        : `<div class="qi-row"><span>${art} ${esc(i.number)} erstellt – <strong>nicht</strong> per E-Mail gesendet</span><span class="small muted">${paid.replace(" · ", "")}</span></div>`;
+    }).join("")}</div>`;
+  }
   async function loadStudents() {
     const [regsAll, list] = await Promise.all([db.listAllRegistrations(), db.listCourses()]);
     studentRegs = regsAll;
     studentCourses = Object.fromEntries(list.map(c => [c.id, c]));
+    studentInvs = await db.invoicesForRegistrations(regsAll.map(r => r.id)).catch(() => []);
     renderStudents();
   }
   function renderStudents() {
@@ -2532,7 +2556,7 @@
     $("sc-list").innerHTML = sorted.length ? sorted.slice(0, limit).map(entries => {
       const p = entries[0];
       return `<article class="sc-person">
-        <h3>${esc(p.last_name)}, ${esc(p.first_name)}</h3>
+        <h3>${esc(p.last_name)}, ${esc(p.first_name)}${studentInvs.some(i => i.sent_at && i.type === "rechnung" && entries.some(r => r.id === i.registration_id)) ? ' <span class="mail-badge">✉ Rechnung gesendet</span>' : ""}</h3>
         <p class="small muted" style="margin:2px 0 0">geb. ${birthText(p.birth_date)}${p.email ? ` · <a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""}${p.phone ? ` · <a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""}</p>
         ${quickInfo(entries)}
         ${entries.map(r => studentEntry(r)).join("")}
@@ -2593,7 +2617,7 @@
       : '<span class="muted">kein Sehtest</span>';
     return `<div class="quick-info">
       <div><label>Erste-Hilfe-Kurs</label>${kurs.length ? `<strong>${kurs.join("<br>")}</strong>` : '<span class="muted">kein Kurs</span>'}</div>
-      <div><label>Sehtest</label>${sehHtml}</div></div>`;
+      <div><label>Sehtest</label>${sehHtml}</div>${billInfo(entries)}</div>`;
   }
   // Schülerkarte: Oben steht die Auskunft (Kurs, Sehtest, Ergebnis). Hier nur noch, was man tun kann – ohne Wiederholungen.
   // Selten Gebrauchtes (Kurstag ändern, Papier-Protokoll, Nummer, Gutschein, Löschen) liegt unter „Mehr …“.
@@ -3393,9 +3417,10 @@
       });
       $("pd-status").className = "small";
       $("pd-status").style.color = "var(--aid-dark)";
-      $("pd-status").textContent = res && res.demo ? `Demo: Versand an ${m.to} wurde nur vermerkt.` : `Gesendet an ${m.to} ✓ – eine Kopie liegt in deinem Postfach.`;
+      $("pd-status").textContent = res && res.demo ? `Demo: Versand an ${m.to} wurde nur vermerkt.` : `Gesendet an ${m.to} ✓ – beim Schüler als „Rechnung per E-Mail gesendet“ vermerkt.`;
       $("pd-send").textContent = "Gesendet ✓";
       if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
+      if (!$("students-view").classList.contains("hidden")) loadStudents().catch(() => {});
     } catch (e) {
       $("pd-status").className = "form-error";
       $("pd-status").style.color = "";
@@ -3820,6 +3845,12 @@
       ${cancelled.sort((a, b) => b.seq - a.seq).map(i => `<tr class="is-past"><td><strong>${esc(i.number)}</strong></td><td>${new Date(i.issued_on + "T12:00").toLocaleDateString("de-DE")}</td>
         <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td><td>${esc(billName(i))}</td><td>${eur(i.total)}</td>
         <td><button class="btn btn-sm btn-outline" data-inv="pdf" data-id="${i.id}">PDF</button></td></tr>`).join("")}</tbody></table></div></details>` : "";
+    const sent = shown.filter(i => i.sent_at && !i.draft).sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at)));
+    $("inv-sent").innerHTML = `<details class="card" style="margin-bottom:16px"><summary><strong>✉ Per E-Mail verschickt (${sent.length})</strong> <span class="small muted">– wer hat eine Rechnung oder Quittung bekommen (${$("inv-month").selectedOptions[0] ? esc($("inv-month").selectedOptions[0].textContent.replace(/ \(\d+\)$/, "")) : ""})</span></summary>
+      ${sent.length ? `<div class="table-wrap"><table><thead><tr><th>Gesendet am</th><th>Empfänger</th><th>Beleg</th><th>an E-Mail</th><th>Status</th></tr></thead><tbody>
+      ${sent.map(i => `<tr><td>${new Date(i.sent_at).toLocaleDateString("de-DE")}</td><td><strong>${esc(billName(i))}</strong></td>
+        <td>${i.type === "quittung" ? "Quittung" : "Rechnung"} ${esc(i.number)} · ${eur(i.total)}</td><td class="small">${esc(i.sent_to || "")}</td><td>${INV_STATUS[i.status]} <button class="btn btn-sm btn-ghost" type="button" data-show-mail="${i.id}" data-reg="${i.registration_id || ""}" data-who="${esc(billName(i))}">📄 Text</button></td></tr>`).join("")}
+      </tbody></table></div>` : '<p class="muted small">In dieser Auswahl wurde noch nichts per E-Mail verschickt.</p>'}</details>`;
     $("inv-rows").innerHTML = shown.length ? shown.map(i => `
       <tr class="${i.status === "storniert" ? "is-past" : ""}">
         <td><strong>${esc(i.number)}</strong>${i.draft ? '<br><span class="small muted">Nummer folgt beim Abgleich</span>' : ""}</td>
@@ -3827,7 +3858,7 @@
         <td>${i.type === "quittung" ? "Quittung" : "Rechnung"}</td>
         <td>${esc(billName(i))}${forOffice(i) ? "" : '<br><span class="small muted">nicht auf der Teilnehmerliste – nicht im Download</span>'}${i.registration_id ? "" : `<br><button class="btn btn-sm" data-inv="link" data-id="${i.id}">Schüler zuordnen</button>`}</td>
         <td><strong>${eur(i.total)}</strong></td>
-        <td>${INV_STATUS[i.status]}${i.sent_at ? `<br><span class="small muted" title="${esc(i.sent_to || "")}">✉ ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}</td>
+        <td>${INV_STATUS[i.status]}${i.sent_at ? `<br><span class="mail-badge" title="${esc(i.sent_to || "")}">✉ gesendet ${new Date(i.sent_at).toLocaleDateString("de-DE")}</span>` : ""}</td>
         <td><div class="btn-row">
           <button class="btn btn-sm btn-outline" data-inv="pdf" data-id="${i.id}">PDF</button>
           ${i.status !== "storniert" && !i.draft ? `<button class="btn btn-sm btn-outline" data-inv="mail" data-id="${i.id}">E-Mail</button>` : ""}

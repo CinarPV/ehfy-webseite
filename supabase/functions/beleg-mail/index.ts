@@ -7,7 +7,7 @@
 //   IONOS_PASSWORD  – das Passwort dieses Postfachs (nur hier eintragen, nie in die Webseite)
 // Optional:
 //   MAIL_NAME       – Absendername (Standard: Erste Hilfe for you)
-//   COPY_TO_SELF    – "false", wenn du keine Kopie an dich selbst möchtest
+//   COPY_TO_SELF    – "true", nur wenn du doch eine Kopie an dich selbst möchtest (Standard: keine Kopie)
 
 import nodemailer from "npm:nodemailer@6.9.14";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
@@ -47,7 +47,8 @@ Deno.serve(async req => {
     await transport.sendMail({
       from: `"${oneLine(Deno.env.get("MAIL_NAME") ?? "Erste Hilfe for you", 80)}" <${from}>`,
       to: b.to,
-      bcc: Deno.env.get("COPY_TO_SELF") === "false" ? undefined : from,
+      // Keine Kopie an dich: Der Versand wird beim Schüler und unter „Per E-Mail verschickt“ vermerkt.
+      bcc: Deno.env.get("COPY_TO_SELF") === "true" ? from : undefined,
       subject: oneLine(b.subject, 200),
       text: String(b.text ?? "").slice(0, 5000),
       attachments: b.textOnly ? [] : [{

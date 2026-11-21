@@ -903,3 +903,6 @@ dialog.sign-big::backdrop { background: #fff; }
 .day-tile.bad { border-color: var(--danger); }
 .day-tile.bad b { color: var(--danger); }
 .day-tile.ok b { color: var(--ok); }
+/* Rechnung per E-Mail gesendet – deutlich sichtbar */
+.mail-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; background: #e3f0ff; color: #0b4f9c; font-size: .78rem; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+.quick-info .qi-mail { color: #0b4f9c; font-weight: 700; }
