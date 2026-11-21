@@ -328,10 +328,10 @@
     let yy = y - 80;
     const due = new Date(inv.issued_on); due.setDate(due.getDate() + (paymentDays || 14));
     // Schon bezahlt (Schüler hat bar, per PayPal oder per Überweisung bezahlt): keine Zahlungsaufforderung
-    const via = { bar: "in bar", paypal: "per PayPal", ueberweisung: "per Überweisung" }[(inv.recipient && inv.recipient.paid_via) || ""];
+    const via = inv.status === "bezahlt" ? { bar: "in bar", paypal: "per PayPal", ueberweisung: "per Überweisung" }[(inv.recipient && inv.recipient.paid_via) || ""] : null;
     const pay = via
       ? [`Der Rechnungsbetrag wurde bereits ${via} bezahlt. Es ist keine Zahlung mehr offen.`]
-      : inv.payment === "bar"
+      : inv.payment === "bar" && inv.status !== "offen"
       ? [`Den Rechnungsbetrag haben wir am ${fmtDate(inv.issued_on)} in bar erhalten.`]
       : inv.status === "bezahlt"
       ? [`Der Rechnungsbetrag wurde bereits bezahlt. Es ist keine Zahlung mehr offen.`]

@@ -3472,7 +3472,11 @@
     const rc = () => cur.recipient, co = () => rc().company || {};
     const draw = () => {
       const has = !!co().name, firma = rc().bill_to === "firma" && has;
-      box.innerHTML = `${has ? `<div class="pd-who"><span class="small"><strong>Rechnung an:</strong></span>
+      const paid = cur.status === "bezahlt";
+      box.innerHTML = `${cur.status === "storniert" ? "" : `<div class="pd-who"><span class="small"><strong>Zahlung:</strong></span>
+          <label><input type="radio" name="pd-paid" value="offen" ${paid ? "" : "checked"}> noch offen (mit Bitte um Überweisung)</label>
+          <label><input type="radio" name="pd-paid" value="bezahlt" ${paid ? "checked" : ""}> bereits bezahlt</label></div>`}
+        ${has ? `<div class="pd-who"><span class="small"><strong>Rechnung an:</strong></span>
           <label><input type="radio" name="pd-who" value="person" ${firma ? "" : "checked"}> Schüler: ${esc(rc().name || "")}${rc().email ? ` (${esc(rc().email)})` : ""}</label>
           <label><input type="radio" name="pd-who" value="firma" ${firma ? "checked" : ""}> Betrieb: ${esc(co().name)}${co().email ? ` (${esc(co().email)})` : ""}</label></div>` : ""}
         <details class="pd-co"><summary class="small">${has ? "Betrieb ändern …" : "Rechnung an einen Betrieb (Firma zahlt) …"}</summary>
@@ -3487,6 +3491,7 @@
           <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="co-save">Betrieb als Rechnungsempfänger übernehmen</button></div>
         </details>`;
       box.querySelectorAll('input[name="pd-who"]').forEach(x => x.onchange = () => apply(null, x.value));
+      box.querySelectorAll('input[name="pd-paid"]').forEach(x => x.onchange = () => setPaid(x.value));
       $("co-save").onclick = () => {
         const c = { name: $("co-name").value.trim(), attn: $("co-attn").value.trim(), street: $("co-street").value.trim(),
           zip: $("co-zip").value.trim(), city: $("co-city").value.trim(), email: $("co-email").value.trim() };
@@ -3499,7 +3504,24 @@
       $("pd-status").textContent = "";
       try {
         const rec = await db.setInvoiceRecipient(cur.id, company, billTo);
-        cur = { ...cur, recipient: rec || { ...rc(), bill_to: billTo, ...(company ? { company } : {}) } };
+        cur = { ...cur, recipient: { ...(rec || { ...rc(), bill_to: billTo, ...(company ? { company } : {}) }), ...(rc().paid_via ? { paid_via: rc().paid_via } : {}) } };
+        await refresh();
+        $("pd-status").textContent = billTo === "firma" ? `Rechnung jetzt an ${cur.recipient.company.name} (gleiche Nummer ${cur.number}).` : `Rechnung jetzt an ${cur.recipient.name} (gleiche Nummer ${cur.number}).`;
+        draw();
+      } catch (e) { $("pd-status").className = "form-error"; $("pd-status").style.color = ""; $("pd-status").textContent = e.message; }
+    }
+    // Zahlung offen / bezahlt umstellen (gleiche Nummer), PDF und E-Mail-Text neu
+    async function setPaid(status) {
+      $("pd-status").textContent = "";
+      try {
+        await db.setInvoiceStatus(cur.id, status);
+        cur = { ...cur, status };
+        await refresh();
+        $("pd-status").textContent = status === "bezahlt" ? "Rechnung steht jetzt auf „bereits bezahlt“." : "Rechnung steht jetzt auf „noch offen“ – mit Bitte um Überweisung.";
+        draw();
+      } catch (e) { $("pd-status").className = "form-error"; $("pd-status").style.color = ""; $("pd-status").textContent = e.message; }
+    }
+    async function refresh() {
         const bytes = await EHFYDocs.invoice(cur, await issuer(true), loadFont, cfg.documents.paymentDays);
         URL.revokeObjectURL(pd.url);
         pd.file = new File([bytes], pd.file.name, { type: "application/pdf" });
@@ -3508,10 +3530,7 @@
         const m = billMail(cur);
         $("pd-to").value = m.to; $("pd-text").value = m.body;
         $("pd-status").className = "small"; $("pd-status").style.color = "var(--aid-dark)";
-        $("pd-status").textContent = billTo === "firma" ? `Rechnung jetzt an ${cur.recipient.company.name} (gleiche Nummer ${cur.number}).` : `Rechnung jetzt an ${cur.recipient.name} (gleiche Nummer ${cur.number}).`;
         if (!$("invoices-view").classList.contains("hidden")) loadInvoices();
-        draw();
-      } catch (e) { $("pd-status").className = "form-error"; $("pd-status").style.color = ""; $("pd-status").textContent = e.message; }
     }
     draw();
   }
@@ -3526,15 +3545,10 @@
     const out = [];
     for (const r of people.filter(x => x.payment_method !== OWN)) { // PayPal privat: kein Beleg
       // Rechnung für jemanden, der schon bezahlt hat (bar, PayPal, Überweisung): steht als „bereits bezahlt“ drauf
-      const paidVia = !cash && ["bar", "paypal", "ueberweisung"].includes(r.payment_method) ? r.payment_method : null;
+      // Bar bezahlt: Rechnung gleich als bezahlt. PayPal/Überweisung: erst offen (Geld evtl. noch nicht da) –
+      // beim Senden kannst du selbst „noch offen“ oder „bereits bezahlt“ wählen.
+      const paidVia = !cash && r.payment_method === "bar" ? "bar" : null;
       let inv = existing.find(i => i.registration_id === r.id && i.type === type);
-      // Kursrechnung war noch offen, der Schüler hat inzwischen bezahlt: als bezahlt vermerken (nicht bei Ausfallgebühr)
-      if (inv && paidVia && !preview && inv.status === "offen" && !String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) {
-        await db.setInvoiceStatus(inv.id, "bezahlt");
-        inv = { ...inv, status: "bezahlt", recipient: { ...inv.recipient, paid_via: paidVia } };
-      } else if (inv && paidVia && inv.status === "bezahlt" && !inv.recipient?.paid_via && !String(inv.items?.[0]?.text || "").startsWith("Ausfallgebühr")) {
-        inv = { ...inv, recipient: { ...inv.recipient, paid_via: paidVia } };
-      }
       if (!inv) {
         const data = {
           type, registration_id: r.id, status: cash || paidVia ? "bezahlt" : "offen", payment: cash ? "bar" : "ueberweisung",
