@@ -69,8 +69,9 @@
             <div class="id-notice" role="note">
               <svg viewBox="0 0 24 24" fill="none" stroke="#c77700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2.5"/><path d="M14 10h5M14 14h3"/></svg>
               <div>
-                <strong>Name bitte genau wie im Personalausweis!</strong>
-                <p>Deine Bescheinigung wird <b>vorab ausgestellt</b>. Schreib Vor- und Nachnamen deshalb exakt so, wie sie in deinem Ausweis stehen – mit allen Vornamen, Umlauten, Akzenten und Bindestrichen. Keine Spitznamen, keine Abkürzungen.</p>
+                <strong>Name und Geburtsdatum bitte genau wie im Ausweis!</strong>
+                <p>Deine Bescheinigung wird <b>vorab ausgestellt</b>. Schreib Vor- und Nachnamen und dein Geburtsdatum deshalb exakt so, wie sie in deinem Personalausweis oder Reisepass stehen – mit allen Vornamen, Umlauten, Akzenten und Bindestrichen. Keine Spitznamen, keine Abkürzungen.</p>
+                <p><b>Wichtig:</b> Für Fehler auf der Bescheinigung, die durch falsche oder vom Ausweis abweichende Angaben entstehen, übernehmen wir keine Haftung.</p>
               </div>
             </div>
 
@@ -82,7 +83,7 @@
               <div class="field full"><label for="phone">Handynummer <span class="muted">(optional, für kurzfristige Infos)</span></label><input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="40"></div>
               <div class="hp" aria-hidden="true"><label>Bitte leer lassen <input name="website" tabindex="-1" autocomplete="off"></label></div>
 
-              <label class="check full"><input type="checkbox" name="agree_name" required><span><strong>Ich habe meinen Namen genau wie im Personalausweis eingetragen.</strong> *</span></label>
+              <label class="check full"><input type="checkbox" name="agree_name" required><span><strong>Ich habe Name und Geburtsdatum genau wie in meinem Ausweis eingetragen.</strong> Mir ist bewusst, dass für Fehler durch falsche Angaben keine Haftung übernommen wird. *</span></label>
               <label class="check full"><input type="checkbox" name="agree_terms" required><span>Ich akzeptiere die <a href="absage.html" target="_blank">Absagebedingungen</a> (kostenfreie Abmeldung bis 48 Std. vor Kursbeginn, danach wird eine Ausfallgebühr von 50 € fällig) und die <a href="datenschutz.html" target="_blank">Datenschutzerklärung</a>. *</span></label>
 
               <div class="full sticky-submit">
@@ -241,7 +242,7 @@
       for (const name of ["first_name", "last_name", "email"]) {
         if (!f[name].value.trim() || !f[name].checkValidity()) { err.textContent = "Bitte fülle alle Pflichtfelder (*) korrekt aus."; f[name].focus(); return; }
       }
-      if (!f.agree_name.checked) { err.textContent = "Bitte bestätige, dass dein Name genau wie im Personalausweis eingetragen ist."; f.agree_name.focus(); return; }
+      if (!f.agree_name.checked) { err.textContent = "Bitte bestätige, dass Name und Geburtsdatum genau wie in deinem Ausweis eingetragen sind."; f.agree_name.focus(); return; }
       if (!f.agree_terms.checked) { err.textContent = "Bitte akzeptiere die Absagebedingungen und die Datenschutzerklärung."; f.agree_terms.focus(); return; }
 
       const btn = $("submit");

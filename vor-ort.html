@@ -41,8 +41,8 @@
           <div class="vo-grid">
             <div class="field wide hidden" id="vo-course-box"><label for="vo-course-sel">Kursdatum</label><select id="vo-course-sel"></select></div>
             <div class="field wide hidden" id="vo-day-box"><label for="vo-day">An welchem Tag ist dein Kurs?</label><input id="vo-day" type="date"></div>
-            <div class="field"><label for="vo-first">Vorname</label><input id="vo-first" autocomplete="given-name" required maxlength="80"></div>
-            <div class="field"><label for="vo-last">Nachname</label><input id="vo-last" autocomplete="family-name" required maxlength="80"></div>
+            <div class="field"><label for="vo-first">Vorname(n) laut Ausweis</label><input id="vo-first" autocomplete="given-name" required maxlength="80"></div>
+            <div class="field"><label for="vo-last">Nachname laut Ausweis</label><input id="vo-last" autocomplete="family-name" required maxlength="80"></div>
             <div class="field wide"><label for="vo-birth">Geburtsdatum</label><input id="vo-birth" inputmode="numeric" autocomplete="bday" placeholder="TT.MM.JJJJ" required maxlength="10"></div>
             <div class="field wide"><label for="vo-street">Straße und Hausnummer</label><input id="vo-street" autocomplete="street-address" required maxlength="120"></div>
             <div class="field"><label for="vo-zip">PLZ</label><input id="vo-zip" inputmode="numeric" autocomplete="postal-code" required maxlength="10"></div>
@@ -57,7 +57,7 @@
           <button type="button" id="vo-pad" class="sign-preview" aria-label="Zum Unterschreiben tippen">✍ Zum Unterschreiben hier tippen</button>
           <p class="small muted" style="margin:6px 0 0">Tippe ins Feld: Es wird groß (quer), dort mit dem Finger unterschreiben und „Unterschrift bestätigen“ tippen.</p>
 
-          <label class="vo-check"><input type="checkbox" id="vo-ok"> <span>Meine Angaben sind richtig. Die Hinweise unten und die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> habe ich zur Kenntnis genommen.</span></label>
+          <label class="vo-check"><input type="checkbox" id="vo-ok"> <span>Name und Geburtsdatum stehen genau wie in meinem Ausweis. Für Fehler durch falsche Angaben wird keine Haftung übernommen. Die Hinweise unten und die <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzhinweise</a> habe ich zur Kenntnis genommen.</span></label>
 
           <div class="vo-info">
             <strong>Wofür wir deine Daten brauchen</strong>
@@ -149,7 +149,7 @@
       if (!$("vo-email").checkValidity() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v("vo-email"))) { err.textContent = "Bitte die E-Mail-Adresse prüfen."; return; }
       if (!$("vo-pkg").value) { err.textContent = "Bitte angeben, ob du zusätzlich einen Sehtest machen möchtest."; $("vo-pkg").focus(); return; }
       if (!drawn) { err.textContent = "Bitte im Feld unterschreiben."; return; }
-      if (!$("vo-ok").checked) { err.textContent = "Bitte bestätigen, dass deine Angaben richtig sind."; return; }
+      if (!$("vo-ok").checked) { err.textContent = "Bitte bestätige, dass Name und Geburtsdatum genau wie in deinem Ausweis stehen."; return; }
       // Gewählter Kurs oder Tag
       const chosen = {};
       if (general) {
