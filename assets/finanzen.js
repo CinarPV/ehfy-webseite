@@ -48,7 +48,14 @@
       return p ? p.price : 0;
     };
     const off = r => Math.min(num(r.discount), price(r));
-    return { count: here.length, discount: round2(here.reduce((s, r) => s + off(r), 0)), amount: round2(here.reduce((s, r) => s + price(r) - off(r), 0)) };
+    // Bezahlte Ausfallgebühren dieses Kurses (Betrag aus der Notiz, sonst die übliche Gebühr)
+    const feeOf = r => { const m = /Ausfallgebühr:\s*([\d.,]+)\s*€/.exec(r.message || ""); return m ? num(m[1]) : num(cfg.documents.noShowFee); };
+    const paidFees = regs.filter(r => r.course_id === course.id && r.fee_state === "bezahlt");
+    // Tagessumme laut Papierliste (wenn Namen fehlen) geht vor
+    const fixed = /Summe laut Papierliste:\s*([\d.,]+)\s*€/.exec(course.note || "");
+    const computed = round2(here.reduce((s, r) => s + price(r) - off(r), 0));
+    return { count: here.length, discount: round2(here.reduce((s, r) => s + Math.max(0, off(r)), 0)), amount: fixed ? num(fixed[1]) : computed,
+      fees: round2(paidFees.reduce((s, r) => s + feeOf(r), 0)), feeCount: paidFees.length };
   }
   // Kurse aus den Papierlisten (vor dem Neuanfang) dürfen trotzdem in die Jahresrechnung übernommen werden
   const PAPER = "Aus Papierliste übernommen";
@@ -68,6 +75,7 @@
   function incomeOfYear(y) {
     const of = list => list.filter(x => String(x.date).slice(0, 4) === String(y));
     return sum(Object.values(fin.incomes).filter(x => String(x.date).slice(0, 4) === String(y)), x => x.amount)
+      + sum(Object.values(fin.incomes).filter(x => String(x.date).slice(0, 4) === String(y)), x => x.fees || 0)
       + sum(of(fin.aed), x => x.amount) + sum(of(fin.firm), x => x.amount) + sum(of(fin.fees), x => x.amount) + sum(of(fin.other), x => x.amount);
   }
   function limitCard(totalIncome, totalOut) {
@@ -143,22 +151,22 @@
           <button class="btn btn-sm" type="button" id="fin-take">In die Rechnung übernehmen (${[...picked].filter(id => list.some(c => c.id === id)).length})</button>
           <button class="btn btn-sm btn-ghost" type="button" id="fin-trips">Fahrten ins Fahrtenbuch (${[...picked].filter(id => list.some(c => c.id === id)).length})</button>
         </div>
-        ${list.length ? `<div class="fin-scroll">${table(["", "Kurstag", "Ort", "Schüler", "Betrag", "Stand", ""], list.map(c => {
+        ${list.length ? `<div class="fin-scroll">${table(["", "Kurstag", "Ort", "Schüler", "Betrag", "Ausfall", "Stand", ""], list.map(c => {
           const key = dayKey(new Date(c.starts_at)), a = attendance(c), done = fin.incomes[c.id];
           return `<tr><td><input type="checkbox" data-pick="${c.id}" aria-label="${dateText(key)} auswählen" ${picked.has(c.id) ? "checked" : ""}></td>
-            <td>${dateText(key)}</td><td>${esc(c.location)}</td><td class="fin-num">${a.count}</td><td class="fin-num">${eur(a.amount)}</td>
-            <td class="small">${done ? (num(done.amount) !== a.amount || num(done.count) !== a.count ? "weicht ab, neu übernehmen?" : "✓ übernommen") : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten ✓" : ""}</td>
+            <td>${dateText(key)}</td><td>${esc(c.location)}</td><td class="fin-num">${a.count}</td><td class="fin-num">${eur(a.amount)}</td><td class="fin-num">${a.fees ? `${eur(a.fees)} <span class="small muted">(${a.feeCount})</span>` : "–"}</td>
+            <td class="small">${done ? (num(done.amount) !== a.amount || num(done.count) !== a.count || num(done.fees) !== a.fees ? "weicht ab, neu übernehmen?" : "✓ übernommen") : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten ✓" : ""}</td>
             <td><button class="btn btn-sm ${done ? "btn-ghost" : ""}" type="button" data-take-one="${c.id}">${done ? "Neu übernehmen" : "Übernehmen"}</button></td></tr>`;
         }).join(""))}</div>` : '<p class="muted small">In diesem Jahr gibt es noch keine vergangenen Kurstage.</p>'}
       </div>
 
       <div class="card fin-card">
         <h3>Einnahmen aus Kursen: ${eur(totalIn)}</h3>
-        ${incomes.length ? table(["Tag", "Ort", "Gutscheine", "Personen", "Betrag", ""], monthGroups(incomes, x => `<tr>
-            <td>${dateText(x.date)}</td><td>${esc(x.location)}</td><td class="fin-num">${x.discount ? "− " + eur(x.discount) : "–"}</td>
+        ${incomes.length ? table(["Tag", "Ort", "Gutscheine", "Ausfallgebühr", "Personen", "Betrag", ""], monthGroups(incomes, x => `<tr>
+            <td>${dateText(x.date)}</td><td>${esc(x.location)}</td><td class="fin-num">${x.discount ? "− " + eur(x.discount) : "–"}</td><td class="fin-num">${num(x.fees) ? `${eur(x.fees)} (${x.feeCount || 1})` : "–"}</td>
             <td><input class="fin-input-sm" inputmode="numeric" data-income="${x.id}" data-field="count" value="${x.count}" aria-label="Schüler"></td>
             <td><input class="fin-input" inputmode="decimal" data-income="${x.id}" data-field="amount" value="${String(x.amount).replace(".", ",")}" aria-label="Betrag"></td>
-            <td>${removeBtn("income", x.id)}</td></tr>`, 6) + `<tr class="fin-total"><td colspan="4">Gesamt</td><td class="fin-num">${eur(totalIn)}</td><td></td></tr>`)
+            <td>${removeBtn("income", x.id)}</td></tr>`, 7) + `<tr class="fin-total"><td colspan="3">Gesamt</td><td class="fin-num">${eur(sum(incomes, x => x.fees || 0))}</td><td></td><td class="fin-num">${eur(totalIn)}</td><td></td></tr>`)
           : '<p class="muted small">Noch keine Kurstage übernommen.</p>'}
       </div>
 
@@ -229,7 +237,8 @@
   function monthlyResult(incomes, aed, firm, fees, other, expenses) {
     const rows = MONTHS.map((name, i) => {
       const m = pad(i + 1), of = list => sum(list.filter(x => x.date.slice(5, 7) === m), x => x.amount);
-      const a = of(incomes), k = of(firm), b = of(aed), f = of(fees), o = of(other), c = of(expenses);
+      const a = of(incomes), k = of(firm), b = of(aed), o = of(other), c = of(expenses);
+      const f = round2(of(fees) + sum(incomes.filter(x => x.date.slice(5, 7) === m), x => x.fees || 0));
       return { name, a, k, b, f, o, c, r: round2(a + k + b + f + o - c) };
     }).filter(x => x.a || x.k || x.b || x.f || x.o || x.c);
     const add = key => round2(rows.reduce((s, x) => s + x[key], 0));
@@ -253,7 +262,7 @@
     if (!list.length) return fail("Bitte zuerst Kurstage anhaken.");
     for (const c of list) {
       const a = attendance(c);
-      fin.incomes[c.id] = { date: dayKey(new Date(c.starts_at)), location: c.location, count: a.count, discount: a.discount, amount: a.amount };
+      fin.incomes[c.id] = { date: dayKey(new Date(c.starts_at)), location: c.location, count: a.count, discount: a.discount, amount: a.amount, fees: a.fees, feeCount: a.feeCount };
       // Kurstag übernommen → Vortag, Kurstag und Folgetag (je hin und zurück) ins Fahrtenbuch
       if (!num(fin.km[c.location])) fin.km[c.location] = HOME_KM;
       if (!fin.trips.some(t => t.courseId === c.id)) courseTrips(c);
@@ -408,7 +417,7 @@
       [...incomes].sort((a, b) => a.date.localeCompare(b.date)).forEach(x => { const m = x.date.slice(5, 7); months.set(m, [...(months.get(m) || []), x]); });
       for (const [m, group] of months) {
         room(32); text(MONTHS[Number(m) - 1], M, bold, 10); y -= 14;
-        group.forEach(x => row(dateText(x.date), x.location, String(x.count), x.discount ? "− " + eur(x.discount) : "–", eur(x.amount)));
+        group.forEach(x => row(dateText(x.date), `${x.location}${num(x.fees) ? ` · Ausfallgebühr ${eur(x.fees)}` : ""}`, String(x.count), x.discount ? "− " + eur(x.discount) : "–", eur(x.amount)));
         line(); y -= 3;
         row("Zwischensumme", "", String(group.reduce((s, x) => s + num(x.count), 0)), "", eur(sum(group, x => x.amount)), bold); y -= 3;
       }

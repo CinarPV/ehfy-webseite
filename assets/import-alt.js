@@ -186,7 +186,7 @@
     const courseDay = new Map(opts.courses.map(c => [c.id, dayOf(c.starts_at)]));
     const existing = opts.existing.filter(r => r.first_name && r.last_name);
     const used = new Set();
-    const courses = [], items = [], skipped = [];
+    const courses = [], items = [], skipped = [], totals = [];
     for (const k of data.courses) {
       const day = k.day;
       if (!validDay(day)) { skipped.push({ who: `Kurs ${day}`, why: "Datum unklar" }); continue; }
@@ -197,6 +197,8 @@
           online_booking: false, status: "offen", note: ["Aus Papierliste übernommen", k.note].filter(Boolean).join(" · ") };
         courses.push(c); byDay.set(day, c); isNew = true;
       }
+      // Tagessumme laut Papierliste (z. B. wenn eine Seite mit Namen fehlt): gilt für die Jahresrechnung
+      if (Number(k.total) > 0) totals.push({ course: c, total: Number(k.total) });
       for (const p of k.people || []) {
         if (!p.last || !p.first) { skipped.push({ who: `${p.first || ""} ${p.last || ""}`.trim() || "(ohne Namen)", why: "Name fehlt" }); continue; }
         // Bester Treffer im System
@@ -221,19 +223,22 @@
         items.push(it);
       }
     }
-    return { courses, items, skipped, total: items.length };
+    return { courses, items, skipped, totals, total: items.length };
   }
   // Aus dem Plan (mit den Häkchen der Vorschau) die Schreibvorgänge machen
   async function buildPaper(plan) {
     const regs = [], updates = [];
     for (const it of plan.items) {
       const p = it.p, r = it.take ? it.match : null;
-      const base = { on_list: true, status: "teilgenommen", package: p.sehtest ? "komplett" : "kurs", discount: Number(p.discount) || null };
+      // Nicht erschienen mit bezahlter Ausfallgebühr: nicht auf die Teilnehmerliste, Gebühr beim Kurs
+      const base = p.noShow
+        ? { on_list: false, status: "nicht_erschienen", fee_state: "bezahlt", fee_state_at: it.course.starts_at, ...(p.fee ? { message: `Aus Papierliste übernommen · Ausfallgebühr: ${p.fee} €` } : {}) }
+        : { on_list: true, status: "teilgenommen", package: p.sehtest ? "komplett" : "kurs", discount: Number(p.discount) || null };
       if (r && (!r.course_id || r.course_id === it.course.id)) {
         // Vorhandenen Eintrag diesem Kurs zuordnen; Name aus dem System bleibt, Leeres wird ergänzt
         const patch = { ...base, course_id: it.course.id };
         if (r.legacy_course_date) patch.legacy_course_date = null;
-        if (!r.payment_method) patch.payment_method = p.pay;
+        if (!r.payment_method && !p.noShow) patch.payment_method = p.pay;
         if (!r.birth_date && p.birth) patch.birth_date = p.birth;
         // Korrigierte Schreibweise nur bei Einträgen, die selbst aus einer Papierliste stammen
         if (p.fixName && r.message === "Aus Papierliste übernommen") Object.assign(patch, { first_name: String(p.first).trim().slice(0, 80), last_name: String(p.last).trim().slice(0, 80) });
@@ -245,11 +250,19 @@
           first_name: String(r ? r.first_name : p.first).trim().slice(0, 80), last_name: String(r ? r.last_name : p.last).trim().slice(0, 80),
           birth_date: (r && r.birth_date) || p.birth || null, email: (r && r.email) || null, phone: (r && r.phone) || null,
           street: p.street || (r && r.street) || null, zip: p.zip || (r && r.zip) || null, city: p.city || (r && r.city) || null,
-          ...base, payment_method: p.pay, message: "Aus Papierliste übernommen", created_at: it.course.starts_at
+          payment_method: p.noShow ? null : p.pay, message: "Aus Papierliste übernommen", ...base, package: base.package || "kurs", created_at: it.course.starts_at
         });
       }
     }
-    return { courses: plan.courses, regs, updates };
+    // Tagessumme in die Kursnotiz (neue Kurse direkt, vorhandene per Änderung)
+    const MARK = /\s*·?\s*Summe laut Papierliste: [\d.,]+ €/;
+    const courseNotes = [];
+    for (const { course, total } of plan.totals || []) {
+      const rest = String(course.note || "").replace(MARK, "").trim();
+      const note = `${rest ? rest + " · " : ""}Summe laut Papierliste: ${total} €`;
+      if (plan.courses.includes(course)) course.note = note; else courseNotes.push({ id: course.id, note });
+    }
+    return { courses: plan.courses, regs, updates, courseNotes };
   }
 
   root.EHFYImport = { plan, planWordpress, planPaper, buildPaper, parseCsv, UNKNOWN };

@@ -3320,6 +3320,10 @@
       await db.importLegacy(w.courses, w.regs, n => { note.textContent = `${n} von ${w.regs.length} neuen Teilnehmern übertragen …`; });
       let n = 0;
       for (const u of w.updates) { await db.updateRegistration(u.id, u.patch); note.textContent = `${++n} von ${w.updates.length} vorhandenen Schülern zugeordnet …`; }
+      if (w.courseNotes.length) {
+        const all = await db.listCourses();
+        for (const x of w.courseNotes) { const c = all.find(k => k.id === x.id); if (c) await db.saveCourse({ ...c, note: x.note }); }
+      }
       const ids = [...new Set(p.items.map(i => i.course.id))];
       note.innerHTML = `<strong>Import fertig ✓</strong> Die Kurse stehen unter Termine (vergangene), die Teilnehmerliste fürs Finanzamt kannst du dort drucken. Ein zweiter Import derselben Datei verdoppelt nichts.
         <br><button class="btn btn-sm" type="button" id="im-sheets" style="margin-top:8px">📄 Teilnehmerdatenblätter aller ${ids.length} Kurse (eine PDF)</button>`;
