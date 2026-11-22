@@ -204,8 +204,11 @@
         for (const r of existing) {
           if (used.has(r.id)) continue;
           const s = nameSim(p, r), sameBirth = !!p.birth && r.birth_date === p.birth;
+          const rDay0 = r.course_id ? courseDay.get(r.course_id) : r.legacy_course_date;
           let level = null;
           if (sameBirth && s >= 0.72) level = "sicher";
+          // Nachtrag: gleicher Kurstag, Name (fast) gleich, im System noch ohne Geburtsdatum → derselbe Eintrag
+          else if (!r.birth_date && rDay0 === day && s >= 0.9) level = "sicher";
           else if (sameBirth && s >= 0.45) level = "pruefen";
           else if (s >= 0.93) level = "pruefen";
           if (!level) continue;
@@ -232,6 +235,8 @@
         if (r.legacy_course_date) patch.legacy_course_date = null;
         if (!r.payment_method) patch.payment_method = p.pay;
         if (!r.birth_date && p.birth) patch.birth_date = p.birth;
+        // Korrigierte Schreibweise nur bei Einträgen, die selbst aus einer Papierliste stammen
+        if (p.fixName && r.message === "Aus Papierliste übernommen") Object.assign(patch, { first_name: String(p.first).trim().slice(0, 80), last_name: String(p.last).trim().slice(0, 80) });
         if (!r.street && !r.zip && !r.city) Object.assign(patch, { street: p.street || null, zip: p.zip || null, city: p.city || null });
         updates.push({ id: r.id, patch });
       } else {
