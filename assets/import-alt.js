@@ -150,5 +150,102 @@
     return { courses, regs, check, skipped, duplicates, coming, card, total: rows.length };
   }
 
-  root.EHFYImport = { plan, planWordpress, parseCsv, UNKNOWN };
+  // ---------- Papier-Teilnehmerlisten (von Fotos abgeschrieben) ----------
+  // Datei: { format: "ehfy-papierlisten", courses: [{ day, note, people: [{ last, first, birth, street, zip, city, sehtest, pay, discount }] }] }
+  // Jede Person wird mit den Schülern im System verglichen. Erkannte bekommen die Schreibweise aus dem System
+  // und werden dem Kurs zugeordnet; alle anderen werden neu angelegt. Alle kommen auf die Teilnehmerliste.
+  const nrm = s => String(s || "").toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim();
+  const flat = s => nrm(s).replace(/ /g, "");
+  function lev(a, b) {
+    if (a === b) return 0;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  const sim = (a, b) => (a && b ? 1 - lev(a, b) / Math.max(a.length, b.length) : 0);
+  const tokens = s => nrm(s).split(" ").filter(Boolean).sort().join(" ");
+  // Ähnlichkeit 0…1; berücksichtigt vertauschte Vor-/Nachnamen und Tippfehler
+  function nameSim(p, r) {
+    const pl = flat(p.last), pf = flat(p.first), rl = flat(r.last_name), rf = flat(r.first_name);
+    const straight = sim(pl, rl) * 0.6 + sim(pf, rf) * 0.4;
+    const swapped = sim(pl, rf) * 0.6 + sim(pf, rl) * 0.4;
+    const firstWord = sim(pl, rl) * 0.6 + sim(pf.slice(0, rf.length), rf) * 0.4; // „Sarah K.“ ↔ „Sarah“
+    return Math.max(straight, swapped, firstWord, sim(tokens(`${p.first} ${p.last}`), tokens(`${r.first_name} ${r.last_name}`)));
+  }
+
+  async function planPaper(data, opts) {
+    if (!data || data.format !== "ehfy-papierlisten" || !Array.isArray(data.courses)) throw new Error("Das ist nicht die erwartete Papierlisten-Datei.");
+    const price = (st, disc) => Math.max(0, (opts.prices[st ? "komplett" : "kurs"] || 0) - (Number(disc) || 0));
+    const dayOf = iso => new Date(iso).toLocaleDateString("sv-SE");
+    const byDay = new Map(opts.courses.filter(c => c.status !== "abgesagt").map(c => [dayOf(c.starts_at), c]));
+    const courseDay = new Map(opts.courses.map(c => [c.id, dayOf(c.starts_at)]));
+    const existing = opts.existing.filter(r => r.first_name && r.last_name);
+    const used = new Set();
+    const courses = [], items = [], skipped = [];
+    for (const k of data.courses) {
+      const day = k.day;
+      if (!validDay(day)) { skipped.push({ who: `Kurs ${day}`, why: "Datum unklar" }); continue; }
+      let c = byDay.get(day), isNew = false;
+      if (!c) {
+        c = { id: await stableId(`papier:kurs:${day}`), starts_at: new Date(`${day}T10:00:00`).toISOString(), ends_at: new Date(`${day}T17:30:00`).toISOString(),
+          location: "Siegen", address: opts.siegenAddress || "Siegen", capacity: Math.min(Math.max(k.people.length, 12), 999),
+          online_booking: false, status: "offen", note: ["Aus Papierliste übernommen", k.note].filter(Boolean).join(" · ") };
+        courses.push(c); byDay.set(day, c); isNew = true;
+      }
+      for (const p of k.people || []) {
+        if (!p.last || !p.first) { skipped.push({ who: `${p.first || ""} ${p.last || ""}`.trim() || "(ohne Namen)", why: "Name fehlt" }); continue; }
+        // Bester Treffer im System
+        let best = null;
+        for (const r of existing) {
+          if (used.has(r.id)) continue;
+          const s = nameSim(p, r), sameBirth = !!p.birth && r.birth_date === p.birth;
+          let level = null;
+          if (sameBirth && s >= 0.72) level = "sicher";
+          else if (sameBirth && s >= 0.45) level = "pruefen";
+          else if (s >= 0.93) level = "pruefen";
+          if (!level) continue;
+          const rDay = r.course_id ? courseDay.get(r.course_id) : r.legacy_course_date;
+          const score = (level === "sicher" ? 2 : 1) + s + (rDay === day ? 1 : 0) + (r.course_id === c.id ? 1 : 0) + (r.status === "storniert" ? -0.5 : 0);
+          if (!best || score > best.score) best = { r, level, s, score };
+        }
+        const it = { day, course: c, courseNew: isNew, p, amount: price(p.sehtest, p.discount), match: best ? best.r : null, level: best ? best.level : null, take: best ? best.level === "sicher" : false };
+        if (best) used.add(best.r.id);
+        items.push(it);
+      }
+    }
+    return { courses, items, skipped, total: items.length };
+  }
+  // Aus dem Plan (mit den Häkchen der Vorschau) die Schreibvorgänge machen
+  async function buildPaper(plan) {
+    const regs = [], updates = [];
+    for (const it of plan.items) {
+      const p = it.p, r = it.take ? it.match : null;
+      const base = { on_list: true, status: "teilgenommen", package: p.sehtest ? "komplett" : "kurs", discount: Number(p.discount) || null };
+      if (r && (!r.course_id || r.course_id === it.course.id)) {
+        // Vorhandenen Eintrag diesem Kurs zuordnen; Name aus dem System bleibt, Leeres wird ergänzt
+        const patch = { ...base, course_id: it.course.id };
+        if (r.legacy_course_date) patch.legacy_course_date = null;
+        if (!r.payment_method) patch.payment_method = p.pay;
+        if (!r.birth_date && p.birth) patch.birth_date = p.birth;
+        if (!r.street && !r.zip && !r.city) Object.assign(patch, { street: p.street || null, zip: p.zip || null, city: p.city || null });
+        updates.push({ id: r.id, patch });
+      } else {
+        regs.push({
+          id: await stableId(`papier:${it.day}:${nrm(p.last)}|${nrm(p.first)}|${p.birth || ""}`), course_id: it.course.id,
+          first_name: String(r ? r.first_name : p.first).trim().slice(0, 80), last_name: String(r ? r.last_name : p.last).trim().slice(0, 80),
+          birth_date: (r && r.birth_date) || p.birth || null, email: (r && r.email) || null, phone: (r && r.phone) || null,
+          street: p.street || (r && r.street) || null, zip: p.zip || (r && r.zip) || null, city: p.city || (r && r.city) || null,
+          ...base, payment_method: p.pay, message: "Aus Papierliste übernommen", created_at: it.course.starts_at
+        });
+      }
+    }
+    return { courses: plan.courses, regs, updates };
+  }
+
+  root.EHFYImport = { plan, planWordpress, planPaper, buildPaper, parseCsv, UNKNOWN };
 })(typeof window !== "undefined" ? window : globalThis);
