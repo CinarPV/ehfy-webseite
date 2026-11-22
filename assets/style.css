@@ -931,3 +931,14 @@ dialog.sign-big::backdrop { background: #fff; }
 @media (max-width: 640px) {
   .st-read-opt { flex-direction: column; justify-content: center; text-align: center; gap: 4px; min-height: 72px; padding: 8px 4px; font-size: .85rem; }
 }
+
+/* ---------- Drucken in echtem A4: PDF-Seiten als Bilder, nur während des Druckens sichtbar ---------- */
+#print-a4 { display: none; }
+@media print {
+  body.printing-a4 > *:not(#print-a4) { display: none !important; }
+  body.printing-a4 { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  body.printing-a4 #print-a4 { display: block !important; }
+  .a4-page { width: 210mm; height: 296.5mm; overflow: hidden; break-after: page; page-break-after: always; }
+  .a4-page:last-child { break-after: auto; page-break-after: auto; }
+  .a4-page img { display: block; width: 210mm; height: 297mm; }
+}

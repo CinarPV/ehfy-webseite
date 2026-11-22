@@ -549,7 +549,7 @@
     await loadCourses();
   };
 
-  $("p-print").onclick = () => window.print();
+  $("p-print").onclick = () => { a4Done(); window.print(); };
 
   $("p-csv").onclick = () => {
     const head = ["Nachname", "Vorname", "Geburtsdatum", "Straße", "PLZ", "Ort", "Paket", "E-Mail", "Telefon", "Status", "Nachricht", "Angemeldet am"];
@@ -3380,8 +3380,59 @@
     if (win) win.document.write("<p style='font:16px system-ui,sans-serif;padding:24px'>PDF wird erstellt …</p>");
     return win;
   }
+  // ---------- Drucken immer in echtem A4 (Handy, Windows, Mac) ----------
+  // Druckt man eine PDF aus der Vorschau, verkleinern manche Browser sie (Safari druckt das ganze Fenster mit,
+  // Android zeigt PDFs im Fenster gar nicht). Darum werden A4-PDFs vorab Seite für Seite als Bild (ca. 220 dpi)
+  // in die Seite gelegt und mit @page A4 ohne Rand gedruckt: 1 PDF-Seite = 1 A4-Blatt, ohne Verkleinern.
+  // PDFs in anderen Formaten drucken wie bisher.
+  const isA4Size = p => { const { width, height } = p.getSize(); return Math.abs(width - 595.28) < 3 && Math.abs(height - 841.89) < 3; };
+  let a4Urls = [];
+  async function prepareA4(bytes) {
+    try {
+      if (!window.PDFLib || !(await window.PDFLib.PDFDocument.load(bytes)).getPages().every(isA4Size)) return null;
+      if (!window.pdfjsLib) await loadScript("assets/vendor/pdfjs.min.js");
+      const lib = window.pdfjsLib;
+      lib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs.worker.min.js";
+      const doc = await lib.getDocument({ data: new Uint8Array(bytes).slice() }).promise, urls = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i), vp = page.getViewport({ scale: 3 });
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+        const ctx = cv.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        urls.push(await new Promise((ok, fail) => cv.toBlob(b => (b ? ok(URL.createObjectURL(b)) : fail(new Error("Bild"))), "image/png")));
+        cv.width = cv.height = 0; page.cleanup();
+      }
+      doc.destroy();
+      // Bilder gleich in die Seite legen (am Bildschirm unsichtbar), damit sie beim Drucken schon geladen sind
+      a4Urls.forEach(u => URL.revokeObjectURL(u)); a4Urls = urls;
+      let box = $("print-a4");
+      if (!box) { box = document.createElement("div"); box.id = "print-a4"; box.setAttribute("aria-hidden", "true"); document.body.appendChild(box); }
+      box.innerHTML = urls.map(u => `<div class="a4-page"><img src="${u}" alt=""></div>`).join("");
+      await Promise.all([...box.querySelectorAll("img")].map(im => (im.complete ? null : new Promise(ok => { im.onload = im.onerror = ok; }))));
+      return urls;
+    } catch (e) { console.warn("A4-Druck nicht möglich, normaler Druck", e); return null; }
+  }
+  function a4Done() {
+    document.body.classList.remove("printing-a4");
+    const st = $("print-a4-page");
+    if (st) st.remove();
+  }
+  window.addEventListener("afterprint", a4Done);
+  // prep = Ergebnis von prepareA4; fallback = bisheriger Druckweg, falls keine A4-PDF
+  async function printA4(prep, fallback) {
+    const urls = await prep;
+    if (!urls || !$("print-a4")) return fallback();
+    let st = $("print-a4-page");
+    if (!st) { st = document.createElement("style"); st.id = "print-a4-page"; st.textContent = "@page { size: A4 portrait; margin: 0; }"; document.head.appendChild(st); }
+    document.body.classList.add("printing-a4");
+    window.print();
+    // Manche Handys melden „afterprint“ nicht: spätestens beim nächsten Klick aufräumen
+    setTimeout(() => document.addEventListener("pointerdown", a4Done, { once: true }), 1500);
+  }
   // Vorschau: PDF ansehen, dann erst drucken oder speichern
-  let pvUrl = null;
+  let pvUrl = null, pvA4 = null;
   function previewDlg() {
     let d = $("pv-dialog");
     if (d) return d;
@@ -3394,7 +3445,7 @@
       <iframe id="pv-frame" title="Vorschau"></iframe>`;
     document.body.appendChild(d);
     $("pv-close").onclick = () => d.close();
-    $("pv-print").onclick = () => { try { $("pv-frame").contentWindow.focus(); $("pv-frame").contentWindow.print(); } catch (e) { window.open(pvUrl, "_blank"); } };
+    $("pv-print").onclick = () => printA4(pvA4, () => { try { $("pv-frame").contentWindow.focus(); $("pv-frame").contentWindow.print(); } catch (e) { window.open(pvUrl, "_blank"); } });
     d.addEventListener("close", () => { $("pv-frame").src = "about:blank"; if (pvUrl) { URL.revokeObjectURL(pvUrl); pvUrl = null; } });
     return d;
   }
@@ -3402,6 +3453,7 @@
     const d = previewDlg();
     if (pvUrl) URL.revokeObjectURL(pvUrl);
     pvUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    pvA4 = prepareA4(bytes);
     $("pv-name").textContent = name;
     $("pv-frame").src = pvUrl;
     $("pv-dl").href = pvUrl; $("pv-dl").download = name;
@@ -3429,7 +3481,11 @@
     } : null;
     if (pd) URL.revokeObjectURL(pd.url);
     const file = new File([bytes], name, { type: "application/pdf" });
-    pd = { file, url: URL.createObjectURL(file), mail };
+    pd = { file, url: URL.createObjectURL(file), mail, a4: prepareA4(bytes) };
+    // Drucken in A4: erst zeigen, wenn die Seiten vorbereitet sind (nur bei A4-PDFs)
+    $("pd-print").classList.add("hidden");
+    const mine = pd;
+    pd.a4.then(u => { if (u && pd === mine) $("pd-print").classList.remove("hidden"); });
     const canShare = Boolean(navigator.canShare && navigator.canShare({ files: [file] }));
     $("pd-title").textContent = mail ? "Per E-Mail senden" : "PDF ist fertig";
     $("pd-name").textContent = name;
@@ -3490,6 +3546,7 @@
       $("pd-send").textContent = "Erneut senden";
     }
   });
+  $("pd-print").onclick = () => printA4(pd.a4, () => window.open(pd.url, "_blank"));
   $("pd-share").onclick = async () => {
     const { file, mail } = pd;
     const m = mail && mailFields();
