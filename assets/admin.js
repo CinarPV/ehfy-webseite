@@ -3250,6 +3250,14 @@
           ${p.check.length ? `<p><strong>Werden übernommen, bitte prüfen (${p.check.length}):</strong></p>${nameList(p.check.slice(0, 30))}` : ""}`;
       } else {
         const rows = JSON.parse(await file.text());
+        if (rows && rows.format === "ehfy-papierlisten") {
+          const prices = Object.fromEntries(cfg.packages.map(x => [x.key, Number(x.price)]));
+          importPlan = await EHFYImport.planPaper(rows, { existing: await db.listAllRegistrations(), courses: await db.listCourses(), siegenAddress: cfg.defaultAddress, prices });
+          importPlan.paper = true;
+          paperPreview();
+          $("im-start").classList.remove("hidden");
+          return;
+        }
         if (!Array.isArray(rows)) throw new Error("Das ist nicht die erwartete Datei.");
         importPlan = await EHFYImport.plan(rows, { siegenAddress: cfg.defaultAddress });
         const p = importPlan;
@@ -3261,8 +3269,57 @@
       $("im-start").classList.remove("hidden");
     } catch (e) { $("im-error").textContent = e instanceof SyntaxError ? "Die Datei konnte nicht gelesen werden." : e.message; }
   });
+  // Papierlisten: Vorschau mit Abgleich gegen die Schüler im System
+  function paperPreview() {
+    const p = importPlan, its = p.items;
+    const who = (l, f, b) => `${esc(l)}, ${esc(f)}${b ? ` · ${birthText(b)}` : ""}`;
+    const sure = its.filter(i => i.level === "sicher"), unsure = its.filter(i => i.level === "pruefen"), fresh = its.filter(i => !i.match);
+    const days = [...new Set(its.map(i => i.day))];
+    const row = (i, n) => {
+      const r = i.match, same = r && r.last_name === i.p.last && r.first_name === i.p.first && r.birth_date === i.p.birth;
+      return `<tr><td><input type="checkbox" data-pi="${n}" ${i.take ? "checked" : ""} aria-label="Zuordnen"></td><td>${birthText(i.day)}</td>
+        <td>${who(i.p.last, i.p.first, i.p.birth)}</td><td>${same ? "gleich" : `<strong>${who(r.last_name, r.first_name, r.birth_date)}</strong>`}</td></tr>`;
+    };
+    const table = (list, title, hint) => list.length ? `<p style="margin:14px 0 4px"><strong>${title} (${list.length})</strong> <span class="muted">${hint}</span></p>
+      <div class="table-wrap"><table class="pp-table"><thead><tr><th>✓</th><th>Kurs</th><th>Papierliste</th><th>Im System</th></tr></thead><tbody>
+      ${list.map(i => row(i, its.indexOf(i))).join("")}</tbody></table></div>` : "";
+    const perDay = days.map(d => { const l = its.filter(i => i.day === d); return `${birthText(d)}: ${l.length} · ${eur(l.reduce((s, i) => s + i.amount, 0))}`; });
+    $("im-preview").innerHTML = `<p><strong>${days.length} Kurse, ${its.length} Personen.</strong> ${p.courses.length} Kurse werden neu angelegt, ${days.length - p.courses.length} gibt es schon.
+        Alle kommen auf die Teilnehmerliste (mit Sehtest, Zahlart und Betrag).</p>
+      <p>Im System erkannt: <strong>${sure.length}</strong> sicher, <strong>${unsure.length}</strong> unsicher · neu: <strong>${fresh.length}</strong></p>
+      ${table(sure, "Sicher erkannt", "– Geburtsdatum gleich, Name sehr ähnlich. Häkchen = zuordnen, Schreibweise aus dem System.")}
+      ${table(unsure, "Bitte prüfen", "– nur ankreuzen, wenn es dieselbe Person ist.")}
+      ${fresh.length ? `<details style="margin-top:12px"><summary><strong>Neu angelegt (${fresh.length})</strong> – nicht im System gefunden</summary><p>${fresh.map(i => `${birthText(i.day)}: ${who(i.p.last, i.p.first, i.p.birth)}`).join("<br>")}</p></details>` : ""}
+      <details style="margin-top:8px"><summary>Summen je Kurs</summary><p>${perDay.join("<br>")}</p></details>
+      ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped)}` : ""}`;
+    $("im-preview").querySelectorAll("[data-pi]").forEach(cb => { cb.onchange = () => { its[Number(cb.dataset.pi)].take = cb.checked; }; });
+  }
+  async function runPaperImport() {
+    const p = importPlan, w = await EHFYImport.buildPaper(p);
+    if (!confirm(`${p.items.length} Personen in ${new Set(p.items.map(i => i.day)).size} Kursen übernehmen?\n\n${w.updates.length} vorhandene Schüler werden zugeordnet, ${w.regs.length} neu angelegt.`)) return;
+    $("im-start").disabled = true;
+    $("im-error").textContent = "";
+    const note = document.createElement("p");
+    $("im-preview").prepend(note);
+    try {
+      note.textContent = "Kurse und neue Teilnehmer werden übertragen …";
+      await db.importLegacy(w.courses, w.regs, n => { note.textContent = `${n} von ${w.regs.length} neuen Teilnehmern übertragen …`; });
+      let n = 0;
+      for (const u of w.updates) { await db.updateRegistration(u.id, u.patch); note.textContent = `${++n} von ${w.updates.length} vorhandenen Schülern zugeordnet …`; }
+      note.innerHTML = "<strong>Import fertig ✓</strong> Die Kurse stehen unter Termine (vergangene), die Teilnehmerliste fürs Finanzamt kannst du dort drucken. Ein zweiter Import derselben Datei verdoppelt nichts.";
+      $("im-start").classList.add("hidden");
+      $("im-file").value = "";
+      importPlan = null;
+      await loadCourses();
+    } catch (e) {
+      note.remove();
+      $("im-error").textContent = `Import nicht abgeschlossen: ${e.message} Du kannst ihn gefahrlos wiederholen.`;
+    }
+    $("im-start").disabled = false;
+  }
   $("im-start").onclick = async () => {
     const p = importPlan;
+    if (p && p.paper) return runPaperImport();
     if (!p || !confirm(`${p.regs.length} Teilnehmer jetzt übernehmen?`)) return;
     $("im-start").disabled = true;
     $("im-error").textContent = "";
