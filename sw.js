@@ -1,6 +1,6 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v152";
+const CACHE = "ehfy-app-v153";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/admin-hell.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
@@ -21,18 +21,29 @@ self.addEventListener("activate", e => {
     .then(() => self.clients.claim()));
 });
 
+// Gespeicherte oder geholte Antwort ohne Umleitungs-Kennzeichen (sonst lehnt Safari sie ab)
+function clean(res) {
+  if (!res || !res.redirected) return res;
+  return res.blob().then(body => new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers }));
+}
+
 self.addEventListener("fetch", e => {
   const req = e.request;
   // Nur eigene Dateien – Datenbank-Anfragen (Supabase) laufen immer direkt übers Netz
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  const nav = req.mode === "navigate";
   e.respondWith(
     // no-cache: den 10-Minuten-Zwischenspeicher des Browsers umgehen, damit nie eine alte Version startet
     fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
       .then(res => {
+        // Umgeleitete Antwort (z. B. ehfy.de → www.ehfy.de): Safari verweigert sie beim Öffnen der Seite
+        // („Response served by service worker has redirections“). Seiten: Browser selbst weiterleiten lassen,
+        // Dateien: als saubere Antwort ohne Umleitung zurückgeben. Umgeleitetes wird nie gespeichert.
+        if (res.redirected) return nav ? Response.redirect(res.url, 302) : clean(res);
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
         return res;
       })
-      .catch(() => caches.match(req, { ignoreSearch: true }))
+      .catch(() => caches.match(req, { ignoreSearch: true }).then(clean))
   );
 });
 
