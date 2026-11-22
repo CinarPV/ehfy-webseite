@@ -3294,6 +3294,20 @@
       ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped)}` : ""}`;
     $("im-preview").querySelectorAll("[data-pi]").forEach(cb => { cb.onchange = () => { its[Number(cb.dataset.pi)].take = cb.checked; }; });
   }
+  // Teilnehmerdatenblätter mehrerer Kurse in einer PDF (je Kurs vorne die Dokumentation § 68 FeV)
+  async function bulkDatasheets(courseIds, progress) {
+    await ensurePdf();
+    const all = await db.listCourses();
+    const list = courseIds.map(id => all.find(c => c.id === id)).filter(Boolean).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+    const parts = [];
+    for (const [i, c] of list.entries()) {
+      progress(`Datenblätter werden erstellt: Kurs ${i + 1} von ${list.length} …`);
+      const people = (await db.listRegistrations(c.id)).filter(r => r.status !== "storniert").sort(byName);
+      if (people.length) parts.push(await docBytes("datenblatt", people, c, false, false));
+    }
+    if (!parts.length) throw new Error("Keine Teilnehmer gefunden.");
+    showPdf(await joinPdfs(parts), `Datenblaetter_${list.length}_Kurse.pdf`);
+  }
   async function runPaperImport() {
     const p = importPlan, w = await EHFYImport.buildPaper(p);
     if (!confirm(`${p.items.length} Personen in ${new Set(p.items.map(i => i.day)).size} Kursen übernehmen?\n\n${w.updates.length} vorhandene Schüler werden zugeordnet, ${w.regs.length} neu angelegt.`)) return;
@@ -3306,7 +3320,10 @@
       await db.importLegacy(w.courses, w.regs, n => { note.textContent = `${n} von ${w.regs.length} neuen Teilnehmern übertragen …`; });
       let n = 0;
       for (const u of w.updates) { await db.updateRegistration(u.id, u.patch); note.textContent = `${++n} von ${w.updates.length} vorhandenen Schülern zugeordnet …`; }
-      note.innerHTML = "<strong>Import fertig ✓</strong> Die Kurse stehen unter Termine (vergangene), die Teilnehmerliste fürs Finanzamt kannst du dort drucken. Ein zweiter Import derselben Datei verdoppelt nichts.";
+      const ids = [...new Set(p.items.map(i => i.course.id))];
+      note.innerHTML = `<strong>Import fertig ✓</strong> Die Kurse stehen unter Termine (vergangene), die Teilnehmerliste fürs Finanzamt kannst du dort drucken. Ein zweiter Import derselben Datei verdoppelt nichts.
+        <br><button class="btn btn-sm" type="button" id="im-sheets" style="margin-top:8px">📄 Teilnehmerdatenblätter aller ${ids.length} Kurse (eine PDF)</button>`;
+      $("im-sheets").onclick = () => bulkDatasheets(ids, t => { $("im-error").textContent = t; }).then(() => { $("im-error").textContent = ""; }).catch(e => { $("im-error").textContent = e.message; });
       $("im-start").classList.add("hidden");
       $("im-file").value = "";
       importPlan = null;

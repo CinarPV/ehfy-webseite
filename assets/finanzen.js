@@ -23,7 +23,7 @@
   const picked = new Set();
   const pickedTrips = new Set();
 
-  const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], fees: [], other: [], expenses: [], trips: [], routes: [], tripsDone: {} });
+  const blank = () => ({ rate: 0.3, home: "", km: {}, incomes: {}, aed: [], firm: [], fees: [], other: [], expenses: [], trips: [], routes: [], tripsDone: {} });
   // Neuanfang: Kurstage vor dem 14.11.2026 zählen nicht und werden nicht angezeigt
   const START = "2026-11-14";
   const HOME_KM = 6.5; // einfache Strecke von zu Hause zum Kursort
@@ -65,7 +65,7 @@
   function incomeOfYear(y) {
     const of = list => list.filter(x => String(x.date).slice(0, 4) === String(y));
     return sum(Object.values(fin.incomes).filter(x => String(x.date).slice(0, 4) === String(y)), x => x.amount)
-      + sum(of(fin.aed), x => x.amount) + sum(of(fin.fees), x => x.amount) + sum(of(fin.other), x => x.amount);
+      + sum(of(fin.aed), x => x.amount) + sum(of(fin.firm), x => x.amount) + sum(of(fin.fees), x => x.amount) + sum(of(fin.other), x => x.amount);
   }
   function limitCard(totalIncome, totalOut) {
     const profit = round2(totalIncome - totalOut);
@@ -104,12 +104,13 @@
   function draw() {
     const incomes = Object.entries(fin.incomes).map(([id, x]) => ({ id, ...x })).filter(x => inYear(x.date));
     const aed = fin.aed.filter(x => inYear(x.date));
+    const firm = fin.firm.filter(x => inYear(x.date));
     const fees = fin.fees.filter(x => inYear(x.date));
     const other = fin.other.filter(x => inYear(x.date));
     const expenses = fin.expenses.filter(x => inYear(x.date));
     const trips = fin.trips.filter(x => inYear(x.date)).sort((a, b) => a.date.localeCompare(b.date));
     const list = coursesOfYear();
-    const totalIn = sum(incomes, x => x.amount), totalAed = sum(aed, x => x.amount), totalFees = sum(fees, x => x.amount), totalOther = sum(other, x => x.amount), totalOut = sum(expenses, x => x.amount);
+    const totalIn = sum(incomes, x => x.amount), totalAed = sum(aed, x => x.amount), totalFirm = sum(firm, x => x.amount), totalFees = sum(fees, x => x.amount), totalOther = sum(other, x => x.amount), totalOut = sum(expenses, x => x.amount);
     const kmTotal = round2(trips.reduce((s, t) => s + num(t.km), 0));
 
     const years = [...new Set([new Date().getFullYear(), year, ...courses.map(c => new Date(c.starts_at).getFullYear())])].sort((a, b) => b - a);
@@ -123,7 +124,7 @@
 
       <div class="card fin-card">
         <h3>Ergebnis ${year}</h3>
-        ${resultTable(incomes, aed, fees, other, expenses)}
+        ${resultTable(incomes, aed, firm, fees, other, expenses)}
         <div class="btn-row" style="margin-top:12px">
           <button class="btn" type="button" id="fin-print">Drucken</button>
           <button class="btn btn-ghost" type="button" id="fin-download">Als PDF herunterladen</button>
@@ -158,6 +159,7 @@
           : '<p class="muted small">Noch keine Kurstage übernommen.</p>'}
       </div>
 
+      ${entryCard("firm", "Firmenkurse (Erste Hilfe bei Firmen)", totalFirm, firm, { hint: "Firma, Rechnungs-Nr., Teilnehmer – z. B. Care57 GmbH, Rechnung 24-9, 18 TN", sub: "Datum = Tag, an dem das Geld eingegangen ist." })}
       ${entryCard("aed", "AED-Einweisung und Inbetriebnahme", totalAed, aed, { hint: "z. B. Einweisung bei Firma Muster" })}
       ${entryCard("fees", "Ausfallgebühren", totalFees, fees, { text: "Ausfallgebühr wegen Erste-Hilfe-Kurs", amount: "50,00" })}
       ${entryCard("other", "Sonstige Einnahmen", totalOther, other, { choices: ["Passbilder", "Ersatzbescheinigung", "Sonstiges"], hint: "Ergänzung, optional" })}
@@ -207,9 +209,9 @@
       ${limitCard(incomeOfYear(year), totalOut)}`;
   }
 
-  function entryCard(kind, title, total, rows, { hint = "", text = "", amount = "", choices = null }) {
+  function entryCard(kind, title, total, rows, { hint = "", text = "", amount = "", choices = null, sub = "" }) {
     return `<div class="card fin-card">
-        <h3>${title}: ${eur(total)}</h3>
+        <h3>${title}: ${eur(total)}</h3>${sub ? `<p class="small muted" style="margin:-4px 0 8px">${sub}</p>` : ""}
         <form class="fin-form" data-entry-form="${kind}">
           <label>Datum<input type="date" name="date" value="${today()}" required></label>
           ${choices ? `<label>Art<select name="choice" data-choice>${choices.map(c => `<option>${c}</option>`).join("")}</select></label>` : ""}
@@ -221,21 +223,21 @@
       </div>`;
   }
 
-  function monthlyResult(incomes, aed, fees, other, expenses) {
+  function monthlyResult(incomes, aed, firm, fees, other, expenses) {
     const rows = MONTHS.map((name, i) => {
       const m = pad(i + 1), of = list => sum(list.filter(x => x.date.slice(5, 7) === m), x => x.amount);
-      const a = of(incomes), b = of(aed), f = of(fees), o = of(other), c = of(expenses);
-      return { name, a, b, f, o, c, r: round2(a + b + f + o - c) };
-    }).filter(x => x.a || x.b || x.f || x.o || x.c);
+      const a = of(incomes), k = of(firm), b = of(aed), f = of(fees), o = of(other), c = of(expenses);
+      return { name, a, k, b, f, o, c, r: round2(a + k + b + f + o - c) };
+    }).filter(x => x.a || x.k || x.b || x.f || x.o || x.c);
     const add = key => round2(rows.reduce((s, x) => s + x[key], 0));
-    return { rows, total: { a: add("a"), b: add("b"), f: add("f"), o: add("o"), c: add("c"), r: add("r") } };
+    return { rows, total: { a: add("a"), k: add("k"), b: add("b"), f: add("f"), o: add("o"), c: add("c"), r: add("r") } };
   }
-  function resultTable(incomes, aed, fees, other, expenses) {
-    const { rows, total } = monthlyResult(incomes, aed, fees, other, expenses);
+  function resultTable(incomes, aed, firm, fees, other, expenses) {
+    const { rows, total } = monthlyResult(incomes, aed, firm, fees, other, expenses);
     if (!rows.length) return '<p class="muted small">Noch keine Einträge in diesem Jahr.</p>';
-    return table(["Monat", "Kurse", "AED", "Ausfall", "Sonstige", "Ausgaben", "Überschuss"], rows.map(x =>
-      `<tr><td>${x.name}</td>${[x.a, x.b, x.f, x.o, x.c, x.r].map(v => `<td class="fin-num">${eur(v)}</td>`).join("")}</tr>`).join("") +
-      `<tr class="fin-total"><td>Gesamt</td>${[total.a, total.b, total.f, total.o, total.c, total.r].map(v => `<td class="fin-num">${eur(v)}</td>`).join("")}</tr>`);
+    return table(["Monat", "Kurse", "Firmen", "AED", "Ausfall", "Sonstige", "Ausgaben", "Überschuss"], rows.map(x =>
+      `<tr><td>${x.name}</td>${[x.a, x.k, x.b, x.f, x.o, x.c, x.r].map(v => `<td class="fin-num">${eur(v)}</td>`).join("")}</tr>`).join("") +
+      `<tr class="fin-total"><td>Gesamt</td>${[total.a, total.k, total.b, total.f, total.o, total.c, total.r].map(v => `<td class="fin-num">${eur(v)}</td>`).join("")}</tr>`);
   }
 
   // ---------- Übernehmen ----------
@@ -370,15 +372,16 @@
 
     const incomes = Object.values(fin.incomes).filter(x => inYear(x.date));
     const aed = fin.aed.filter(x => inYear(x.date));
+    const firm = fin.firm.filter(x => inYear(x.date));
     const fees = fin.fees.filter(x => inYear(x.date));
     const other = fin.other.filter(x => inYear(x.date));
     const expenses = fin.expenses.filter(x => inYear(x.date));
-    const { rows, total } = monthlyResult(incomes, aed, fees, other, expenses);
+    const { rows, total } = monthlyResult(incomes, aed, firm, fees, other, expenses);
     heading("Ergebnis");
-    const res = (cells, f = regular) => { room(18); text(cells[0], M, f, 9); [190, 250, 310, 370, 435, W - M].forEach((x, i) => right(cells[i + 1], x, f, 9)); y -= 16; };
-    res(["Monat", "Kurse", "AED", "Ausfall", "Sonstige", "Ausgaben", "Überschuss"], bold); line(); y -= 4;
-    rows.forEach(x => res([x.name, eur(x.a), eur(x.b), eur(x.f), eur(x.o), eur(x.c), eur(x.r)]));
-    line(); y -= 4; res(["Gesamt", eur(total.a), eur(total.b), eur(total.f), eur(total.o), eur(total.c), eur(total.r)], bold);
+    const res = (cells, f = regular) => { room(18); text(cells[0], M, f, 9); [175, 232, 284, 336, 390, 444, W - M].forEach((x, i) => right(cells[i + 1], x, f, 9)); y -= 16; };
+    res(["Monat", "Kurse", "Firmen", "AED", "Ausfall", "Sonstige", "Ausgaben", "Überschuss"], bold); line(); y -= 4;
+    rows.forEach(x => res([x.name, eur(x.a), eur(x.k), eur(x.b), eur(x.f), eur(x.o), eur(x.c), eur(x.r)]));
+    line(); y -= 4; res(["Gesamt", eur(total.a), eur(total.k), eur(total.b), eur(total.f), eur(total.o), eur(total.c), eur(total.r)], bold);
 
     const block = (title, list, label) => {
       if (!list.length) return;
@@ -408,6 +411,7 @@
       }
       row("Gesamt", "", String(incomes.reduce((s, x) => s + num(x.count), 0)), "", eur(sum(incomes, x => x.amount)), bold); y -= 4;
     }
+    block("Firmenkurse (Erste Hilfe bei Firmen)", firm, x => x.text);
     block("AED-Einweisung und Inbetriebnahme", aed, x => x.text);
     block("Ausfallgebühren", fees, x => x.text);
     block("Sonstige Einnahmen", other, x => x.text);
@@ -457,7 +461,7 @@
       if (del) {
         const id = del.dataset.id, kind = del.dataset.finDel;
         if (kind === "income") delete fin.incomes[id];
-        if (["aed", "fees", "other"].includes(kind)) fin[kind] = fin[kind].filter(x => x.id !== id);
+        if (["aed", "firm", "fees", "other"].includes(kind)) fin[kind] = fin[kind].filter(x => x.id !== id);
         if (kind === "expense") fin.expenses = fin.expenses.filter(x => x.id !== id);
         if (kind === "trip") fin.trips = fin.trips.filter(x => x.id !== id);
         await save();
