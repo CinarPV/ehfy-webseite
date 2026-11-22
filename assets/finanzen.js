@@ -157,6 +157,7 @@
             <td class="small">${done ? (num(done.amount) !== a.amount || num(done.count) !== a.count || num(done.fees) !== a.fees ? "weicht ab, neu übernehmen?" : "✓ übernommen") : "–"}${fin.trips.some(t => t.courseId === c.id) ? " · Fahrten ✓" : ""}</td>
             <td><button class="btn btn-sm ${done ? "btn-ghost" : ""}" type="button" data-take-one="${c.id}">${done ? "Neu übernehmen" : "Übernehmen"}</button></td></tr>`;
         }).join(""))}</div>` : '<p class="muted small">In diesem Jahr gibt es noch keine vergangenen Kurstage.</p>'}
+        ${hiddenCourses(list)}
       </div>
 
       <div class="card fin-card">
@@ -217,6 +218,23 @@
             <td>${removeBtn("trip", t.id)}</td></tr>`).join(""))}</div>` : ""}
       </div>
       ${limitCard(incomeOfYear(year), totalOut)}`;
+  }
+
+  // Prüfliste: vergangene Kurse des Jahres, die oben fehlen – mit Grund
+  function hiddenCourses(shown) {
+    const ids = new Set(shown.map(c => c.id));
+    const rows = courses.filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k <= today() && !ids.has(c.id); })
+      .sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map(c => {
+        const all = regs.filter(r => r.course_id === c.id), listed = all.filter(r => r.on_list && r.status !== "storniert" && r.payment_method !== "paypal_privat");
+        const why = c.status === "abgesagt" ? "Kurs ist als abgesagt markiert"
+          : !all.length ? "keine Teilnehmer eingetragen"
+          : !listed.length ? "niemand mit Häkchen „Auf Teilnehmerliste“" : "–";
+        return `<tr><td>${dateText(dayKey(new Date(c.starts_at)))}</td><td>${esc(c.location || "")}</td><td class="fin-num">${all.length}</td><td class="fin-num">${listed.length}</td><td class="small">${why}</td></tr>`;
+      });
+    if (!rows.length) return "";
+    return `<details style="margin-top:12px"><summary class="small"><strong>Prüfliste: ${rows.length} vergangene Kurse ${year} erscheinen hier nicht</strong> – warum?</summary>
+      <p class="small muted">Gezählt werden nur Teilnehmer mit Häkchen „Auf Teilnehmerliste“. Abgesagte Kurse und Kurse ohne Häkchen erscheinen oben nicht.</p>
+      ${table(["Kurstag", "Ort", "Teilnehmer", "auf Liste", "Grund"], rows.join(""))}</details>`;
   }
 
   function entryCard(kind, title, total, rows, { hint = "", text = "", amount = "", choices = null, sub = "" }) {
