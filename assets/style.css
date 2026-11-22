@@ -911,3 +911,23 @@ dialog.sign-big::backdrop { background: #fff; }
 .id-hint strong { font-weight: 700; }
 #id-hint-more:not([hidden]) { animation: idHintIn .25s ease-out; }
 @keyframes idHintIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- Sehtest: Lesen je Test (flüssig / zögerlich / nichts erkannt) + Notiz – nur intern ---------- */
+.st-read { margin-top: 10px; padding: 10px; border-radius: 12px; background: var(--soft); display: grid; gap: 8px; }
+.st-read.is-todo { background: var(--warn-light); }
+.st-read-head .st-label small { font-size: .78rem; }
+.st-read-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.st-read-opt { display: flex; align-items: center; gap: 8px; min-height: 54px; padding: 8px 10px; border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); font: inherit; font-weight: 700; font-size: .95rem; line-height: 1.2; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.st-box { flex: none; width: 26px; height: 26px; border: 2px solid var(--muted); border-radius: 7px; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1rem; }
+.st-read-opt.on { border-color: var(--ink); background: var(--aid-light); }
+.st-read-opt.on .st-box { background: var(--ink); border-color: var(--ink); color: #fff; }
+.st-read-opt.opt-nichts.on { border-color: var(--danger); background: var(--danger-light); }
+.st-read-opt.opt-nichts.on .st-box { background: var(--danger); border-color: var(--danger); }
+.st-read-opt:focus-visible { outline: 3px solid var(--aid); outline-offset: 2px; }
+.st-note { width: 100%; box-sizing: border-box; min-height: 52px; padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 10px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: var(--ink); }
+.st-read-tag { display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 800; vertical-align: middle; white-space: nowrap; }
+.st-read-tag.todo { background: var(--warn-light); color: #8a4b00; border: 1px dashed #d08a1e; }
+.st-read-tag.done { background: var(--aid-light); color: var(--aid-dark); }
+@media (max-width: 640px) {
+  .st-read-opt { flex-direction: column; justify-content: center; text-align: center; gap: 4px; min-height: 72px; padding: 8px 4px; font-size: .85rem; }
+}

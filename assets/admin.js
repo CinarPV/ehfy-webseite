@@ -1582,6 +1582,13 @@
       }
       const clear = ev.target.closest("[data-clear]");
       if (clear) { delete stRun.marks[clear.dataset.clear]; return stRender(); }
+      const read = ev.target.closest("[data-read]");
+      if (read) {
+        const n = read.dataset.read, cur = stReadOf(stRun.marks, n).v;
+        stSetRead(n, { v: cur === read.dataset.val ? null : read.dataset.val });
+        stRender();
+        return stReadSave(0);
+      }
       const pick = ev.target.closest("[data-pick]");
       if (pick) { const k = pick.dataset.pick; stRun[k] = stRun[k] === pick.dataset.val ? null : pick.dataset.val; return stRender(); }
     });
@@ -1597,11 +1604,59 @@
         + (!r.birth_date && res.birth ? " · Geburtsdatum wird übernommen" : "");
     });
     $("sd-idno").addEventListener("input", () => stRun && stRender());
+    // Notiz je Test: speichert kurz nach dem Tippen von selbst (ohne die Ansicht neu aufzubauen)
+    d.addEventListener("input", ev => {
+      const note = ev.target.closest("[data-note]");
+      if (!note || !stRun) return;
+      stSetRead(note.dataset.note, { t: note.value });
+      stReadSave(700);
+    });
+    d.addEventListener("close", () => { if (stReadTimer) stReadSave(0); });
     $("sd-close").onclick = () => d.close();
     $("sd-keep").onclick = () => stSave(false);
     $("sd-save").onclick = () => stSave(true);
     return d;
   }
+  // ---------- Lesen je Test (flüssig / zögerlich / nichts erkannt) und Notiz – nur intern, nicht aufs Protokoll ----------
+  // Steht in sehtest_marks unter „lesen“: { "1": { v: "fluessig", t: "Notiz" }, … }. Kein Datenbank-Update nötig;
+  // Bewertung und Protokoll lesen dort nur die Schlüssel 1–6.
+  const READ_OPTS = [["fluessig", "flüssig gelesen"], ["zoegerlich", "zögerlich gelesen"], ["nichts", "nichts erkannt"]];
+  const stReadOf = (marks, n) => (marks && marks.lesen && marks.lesen[n]) || {};
+  function stSetRead(n, change) {
+    const lesen = { ...(stRun.marks.lesen || {}) }, cur = { ...(lesen[n] || {}), ...change };
+    if (!cur.v) delete cur.v;
+    if (!cur.t || !String(cur.t).trim()) delete cur.t;
+    if (Object.keys(cur).length) lesen[n] = cur; else delete lesen[n];
+    if (Object.keys(lesen).length) stRun.marks.lesen = lesen; else delete stRun.marks.lesen;
+  }
+  // Sofort speichern: nur „lesen“ zum zuletzt gespeicherten Stand dazu (Ring-Kreuze bleiben bis „Zwischenspeichern“ unberührt)
+  let stReadTimer = null, stReadBusy = Promise.resolve();
+  function stReadSave(delay) {
+    clearTimeout(stReadTimer);
+    const run = stRun;
+    stReadTimer = setTimeout(() => {
+      stReadTimer = null;
+      const next = { ...(run.saved || {}) };
+      if (run.marks.lesen) next.lesen = JSON.parse(JSON.stringify(run.marks.lesen)); else delete next.lesen;
+      run.saved = next; run.r.sehtest_marks = next;
+      stReadBusy = stReadBusy.then(() => db.updateRegistration(run.r.id, { sehtest_marks: next }))
+        .then(() => { if (stRun === run) $("sd-error").textContent = ""; })
+        .catch(e => { if (stRun === run) $("sd-error").textContent = `Lesen/Notiz nicht gespeichert: ${e.message}`; });
+    }, delay);
+  }
+  function stReadBlock(n) {
+    const rd = stReadOf(stRun.marks, n);
+    return `<div class="st-read ${rd.v ? "is-done" : "is-todo"}">
+      <div class="st-read-head"><span class="st-label">Lesen <small>(nur intern)</small></span></div>
+      <div class="st-read-opts" role="radiogroup" aria-label="Test ${n}: wie gelesen">${READ_OPTS.map(([k, l]) =>
+        `<button type="button" role="radio" class="st-read-opt ${rd.v === k ? "on" : ""} opt-${k}" data-read="${n}" data-val="${k}" aria-checked="${rd.v === k}"><span class="st-box" aria-hidden="true">${rd.v === k ? "✓" : ""}</span><span>${l}</span></button>`).join("")}</div>
+      <textarea class="st-note" rows="2" maxlength="300" data-note="${n}" placeholder="Notiz zu Test ${n} (freiwillig)" aria-label="Notiz zu Test ${n}">${esc(rd.t || "")}</textarea>
+    </div>`;
+  }
+  const stReadTag = n => {
+    const v = stReadOf(stRun.marks, n).v;
+    return v ? `<span class="st-read-tag done">${(READ_OPTS.find(o => o[0] === v) || [, v])[1]}</span>` : '<span class="st-read-tag todo">noch nicht gemacht</span>';
+  };
   // Ein Test als Block: Überschrift mit Stand, darunter die Ringzeilen
   function stBlock(n) {
     const t = S.test(n), m = S.marksOf(stRun.marks, n), ev = S.evaluate(stRun.marks, n);
@@ -1615,11 +1670,12 @@
     const info = ev.used.length ? ev.used.map(rowText).join(" · ") + (ev.used.length >= 2 ? ` · zusammen ${ev.wrong} von höchstens 4 Fehlern` : "")
       : "Zwei Zeilen abfragen: 2× 0,7, 0,7 + 1,0 oder 2× 1,0.";
     const warn = ev.warn ? '<p class="small st-warn">Achtung: Schon 4 Fehler – noch ein Fehler und der Test ist nicht bestanden.</p>' : "";
-    return `<section class="st-block is-${ev.state}">
-      <div class="st-block-head"><h4>${t.title}</h4><span class="st-badge">${STATE_TEXT[ev.state]}</span></div>
+    return `<section class="st-block is-${ev.state} ${stReadOf(stRun.marks, n).v ? "read-done" : "read-todo"}">
+      <div class="st-block-head"><h4>${t.title} ${stReadTag(n)}</h4><span class="st-badge">${STATE_TEXT[ev.state]}</span></div>
       <p class="small muted" style="margin:0 0 6px">${info}</p>
       <div class="st-grid">${rows}</div>${warn}
       <div class="btn-row" style="margin-top:6px"><button class="btn btn-sm btn-ghost" type="button" data-rest="${n}">Übrige der abgefragten Zeilen richtig</button><button class="btn btn-sm btn-ghost" type="button" data-clear="${n}">Leeren</button></div>
+      ${stReadBlock(n)}
     </section>`;
   }
   function stRender() {
@@ -1642,7 +1698,8 @@
     const others = r.sehtest_nr || r.sehtest_passed != null ? [] : await openDrafts(r.id);
     if (others.length && !confirm(`Achtung: Diese Sehtests sind angefangen, aber noch nicht bestätigt:\n${draftList(others)}\n\nDie Nummer wird erst bei „Ergebnis übernehmen“ vergeben. Am besten zuerst diese abschließen (oder als Ausschuss markieren).\n\nTrotzdem diesen Sehtest öffnen? Er zeigt dann noch keine Nummer an.`)) return;
     const d = stDialog();
-    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr || others.length ? "" : await draftNr() };
+    clearTimeout(stReadTimer); stReadTimer = null;
+    stRun = { r, c, done, marks: { ...(r.sehtest_marks || {}) }, saved: { ...(r.sehtest_marks || {}) }, set: 0, flow: r.sehtest_flow || null, aid: aidKind(r), idDoc: r.sehtest_id_doc || null, signed: r.sehtest_signed_at ? "ja" : null, draft: r.sehtest_nr || others.length ? "" : await draftNr() };
     const noSig = !(await signatureBytes());
     $("sd-signinfo").textContent = noSig ? "Noch keine Unterschrift hinterlegt – bitte unter Mehr → Einstellungen → Unterschrift erfassen." : "✍ Deine hinterlegte Unterschrift und das Datum kommen automatisch aufs Protokoll.";
     $("sd-signinfo").style.color = noSig ? "var(--danger)" : "var(--muted)";
@@ -1773,6 +1830,9 @@
       if (others.length && !confirm(`Hinweis: Diese Sehtests sind noch offen und müssen noch abgeschlossen werden:\n${draftList(others)}\n\nDieser Sehtest bekommt jetzt die nächste Nummer. Die offenen bekommen ihre Nummer erst, wenn du sie bestätigst – steht auf deren Papier-Protokoll schon eine Nummer, bitte durchstreichen.\n\nJetzt bestätigen?`)) return;
     }
     btn.disabled = true;
+    // Ausstehende Lesen/Notiz-Speicherung: steckt in „marks“ ohnehin mit drin
+    clearTimeout(stReadTimer); stReadTimer = null;
+    await stReadBusy;
     try {
       if (own && r.sehtest_nr) {
         if (!(await changeNr(r, own))) return;
@@ -1782,6 +1842,7 @@
         try { await db.updateRegistrationOnline(r.id, { ...patch, sehtest_nr: own }); } catch (e) { throw nrError(e, own); }
       } else if (withResult && !r.sehtest_nr) await db.updateRegistrationNow(r.id, patch);
       else await db.updateRegistration(r.id, patch);
+      stRun.saved = { ...marks };
       $("st-dialog").close();
       const fresh = (await db.listAllRegistrations()).find(x => x.id === r.id) || { ...r, ...patch };
       if (stRun.done) await stRun.done();
