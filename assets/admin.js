@@ -3313,7 +3313,7 @@
     const p = importPlan, w = await EHFYImport.buildPaper(p);
     const firmText = p.firm && p.firm.length ? `\n${p.firm.length} Firmenkurs(e) kommen in Finanzen.` : "";
     const ask = p.items.length ? `${p.items.length} Personen in ${new Set(p.items.map(i => i.day)).size} Kursen übernehmen?\n\n${w.updates.length} vorhandene Schüler werden zugeordnet, ${w.regs.length} neu angelegt.${firmText}`
-      : `Übernehmen?${firmText}${w.courseNotes.length ? `\n${w.courseNotes.length} Tagessumme(n) werden eingetragen.` : ""}`;
+      : `Übernehmen?${firmText}${w.courseNotes.length ? `\n${w.courseNotes.length} Kurs(e) werden ergänzt (Ort / Tagessumme).` : ""}`;
     if (!confirm(ask)) return;
     $("im-start").disabled = true;
     $("im-error").textContent = "";
@@ -3334,7 +3334,7 @@
       }
       if (w.courseNotes.length) {
         const all = await db.listCourses();
-        for (const x of w.courseNotes) { const c = all.find(k => k.id === x.id); if (c) await db.saveCourse({ ...c, note: x.note }); }
+        for (const x of w.courseNotes) { const c = all.find(k => k.id === x.id); if (c) await db.saveCourse({ ...c, ...x.patch }); }
       }
       const ids = [...new Set(p.items.map(i => i.course.id))];
       note.innerHTML = `<strong>Import fertig ✓</strong> Die Kurse stehen unter Termine (vergangene), die Teilnehmerliste fürs Finanzamt kannst du dort drucken. Ein zweiter Import derselben Datei verdoppelt nichts.

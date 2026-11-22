@@ -186,7 +186,7 @@
     const courseDay = new Map(opts.courses.map(c => [c.id, dayOf(c.starts_at)]));
     const existing = opts.existing.filter(r => r.first_name && r.last_name);
     const used = new Set();
-    const courses = [], items = [], skipped = [], totals = [];
+    const courses = [], items = [], skipped = [], totals = [], fixes = [];
     for (const k of data.courses) {
       const day = k.day;
       if (!validDay(day)) { skipped.push({ who: `Kurs ${day}`, why: "Datum unklar" }); continue; }
@@ -197,6 +197,8 @@
           online_booking: false, status: "offen", note: ["Aus Papierliste übernommen", k.note].filter(Boolean).join(" · ") };
         courses.push(c); byDay.set(day, c); isNew = true;
       }
+      // Vorhandener Kurs ohne Ort (z. B. aus der alten App): Ort der Papierliste eintragen
+      if (!isNew && (c.location === UNKNOWN || !c.address || c.address === "–")) fixes.push({ course: c, patch: { location: "Siegen", address: opts.siegenAddress || "Siegen" } });
       // Tagessumme laut Papierliste (z. B. wenn eine Seite mit Namen fehlt): gilt für die Jahresrechnung
       if (Number(k.total) > 0) totals.push({ course: c, total: Number(k.total) });
       for (const p of k.people || []) {
@@ -226,7 +228,7 @@
     // Firmenkurse (Rechnungen an Firmen) für Finanzen → „Firmenkurse“
     const firm = (Array.isArray(data.firm) ? data.firm : []).filter(f => validDay(f.date) && Number(f.amount) > 0)
       .map(f => ({ id: `papier-firma-${nrm(f.text).replace(/ /g, "-").slice(0, 60)}`, date: f.date, text: String(f.text || "").slice(0, 120), amount: Math.round(Number(f.amount) * 100) / 100 }));
-    return { courses, items, skipped, totals, firm, total: items.length };
+    return { courses, items, skipped, totals, fixes, firm, total: items.length };
   }
   // Aus dem Plan (mit den Häkchen der Vorschau) die Schreibvorgänge machen
   async function buildPaper(plan) {
@@ -259,12 +261,15 @@
     }
     // Tagessumme in die Kursnotiz (neue Kurse direkt, vorhandene per Änderung)
     const MARK = /\s*·?\s*Summe laut Papierliste: [\d.,]+ €/;
-    const courseNotes = [];
+    const patches = new Map(); // Kurs-ID → Änderungen an vorhandenen Kursen
+    const add = (id, patch) => patches.set(id, { ...(patches.get(id) || {}), ...patch });
+    for (const { course, patch } of plan.fixes || []) add(course.id, patch);
     for (const { course, total } of plan.totals || []) {
       const rest = String(course.note || "").replace(MARK, "").trim();
       const note = `${rest ? rest + " · " : ""}Summe laut Papierliste: ${total} €`;
-      if (plan.courses.includes(course)) course.note = note; else courseNotes.push({ id: course.id, note });
+      if (plan.courses.includes(course)) course.note = note; else add(course.id, { note });
     }
+    const courseNotes = [...patches].map(([id, patch]) => ({ id, patch }));
     return { courses: plan.courses, regs, updates, courseNotes };
   }
 
