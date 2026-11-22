@@ -1273,7 +1273,7 @@
         <div class="btn-row" style="margin-top:10px"><button class="btn" type="button" data-day-tab="anwesenheit" data-day-course="${c.id}">Kurstag öffnen</button>
           <button class="btn btn-ghost" type="button" data-cap-open>📷 Schüler erfassen</button><button class="btn btn-ghost" type="button" data-qr-general>▦ QR-Code (immer gültig)</button></div>`;
     }).join("") : `<p class="start-big">Heute ist kein Kurs.</p>${upcoming[0] ? `<p class="small muted">Nächster Kurs: ${dayText(upcoming[0].starts_at)} in ${esc(upcoming[0].location)}</p>` : ""}`);
-    const st = db.status(), unwritten = attRegs.filter(r => r.sehtest_nr && !r.sehtest_issued_at && !r.sehtest_void_at).length;
+    const st = db.status(), unwritten = attRegs.filter(needsCert).length;
     const todo = [
       [unwritten, unwritten === 1 ? "Sehtest-Bescheinigung noch nicht geschrieben" : "Sehtest-Bescheinigungen noch nicht geschrieben", 'data-go="sehtests"'],
       [uncheckedCount, uncheckedCount === 1 ? "Schüler noch nicht abgehakt" : "Schüler noch nicht abgehakt", 'data-unchecked'],
@@ -1403,8 +1403,8 @@
   // „Bescheinigung geschrieben“: auf Anhieb erkennbar, ob die Bescheinigung schon geschrieben ist
   const issuedOk = r => Boolean(r.sehtest_issued_at);
   const issuedTag = r => r.sehtest_void_at ? ` <span class="st-void">Ausschuss${r.sehtest_void_nr ? ` (Nr. ${esc(r.sehtest_void_nr)})` : ""}${r.sehtest_void_reason ? ` · ${esc(r.sehtest_void_reason)}` : ""}</span>`
-    : !r.sehtest_nr ? "" : r.sehtest_issued_at ? ' <span class="st-fix">✓ Bescheinigung geschrieben</span>' : ' <span class="st-reissue">✗ Bescheinigung noch nicht geschrieben</span>';
-  const issuedBtn = r => r.sehtest_nr && !r.sehtest_void_at ? `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${issuedOk(r) ? "✓ Bescheinigung geschrieben" : "📄 Sehtest-Bescheinigung schreiben ›"}</button>`
+    : !r.sehtest_nr ? "" : r.sehtest_passed === false ? ' <span class="small muted">· keine Bescheinigung nötig</span>' : r.sehtest_issued_at ? ' <span class="st-fix">✓ Bescheinigung geschrieben</span>' : ' <span class="st-reissue">✗ Bescheinigung noch nicht geschrieben</span>';
+  const issuedBtn = r => r.sehtest_nr && !r.sehtest_void_at ? (r.sehtest_passed === false ? "" : `<button class="btn btn-sm btn-ghost att-btn ${issuedOk(r) ? "on-yes" : ""}" type="button" data-st-issued aria-pressed="${issuedOk(r)}">${issuedOk(r) ? "✓ Bescheinigung geschrieben" : "📄 Sehtest-Bescheinigung schreiben ›"}</button>`)
     + '<button class="btn btn-sm btn-ghost" type="button" data-st-void style="color:var(--danger)">Ausschuss</button>' : "";
   async function toggleIssued(r) {
     if (r.sehtest_issued_at) {
@@ -1415,7 +1415,9 @@
     return certSheet(r, null);
   }
   // ---------- Nachfragen: Sehtest-Bescheinigung schon geschrieben? (bis „Ja“ kommt) ----------
-  const openCerts = async () => (await db.listAllRegistrations()).filter(r => r.sehtest_nr && !r.sehtest_issued_at && !r.sehtest_void_at);
+  // Nur bestandene Sehtests bekommen eine Bescheinigung – bei „nicht bestanden“ nicht nachfragen
+  function needsCert(r) { return r.sehtest_passed === true && Boolean(r.sehtest_nr) && !r.sehtest_issued_at && !r.sehtest_void_at; }
+  const openCerts = async () => (await db.listAllRegistrations()).filter(needsCert);
   function certDialog() {
     let d = $("cert-dialog");
     if (d) return d;
@@ -3386,11 +3388,13 @@
   // Druckt man eine PDF aus der Vorschau, verkleinern manche Browser sie (Safari druckt das ganze Fenster mit,
   // Android zeigt PDFs im Fenster gar nicht). Darum werden A4-PDFs vorab Seite für Seite als Bild (ca. 220 dpi)
   // in die Seite gelegt und mit @page A4 ohne Rand gedruckt: 1 PDF-Seite = 1 A4-Blatt, ohne Verkleinern.
-  // Gilt für alle PDFs: Seiten in anderer Größe (z. B. aus hochgeladenen Vorlagen) werden ganzseitig auf A4 eingepasst,
-  // Querformat wird dafür gedreht.
+  // Nur für PDFs, deren Seiten alle A4 sind. Andere Formate – z. B. die Erste-Hilfe-Bescheinigung in A5 –
+  // drucken unverändert wie bisher (nicht vergrößern!).
+  const isA4Size = p => { const { width, height } = p.getSize(); return Math.abs(width - 595.28) < 3 && Math.abs(height - 841.89) < 3; };
   let a4Urls = [];
   async function prepareA4(bytes) {
     try {
+      if (!window.PDFLib || !(await window.PDFLib.PDFDocument.load(bytes)).getPages().every(isA4Size)) return null;
       if (!window.pdfjsLib) await loadScript("assets/vendor/pdfjs.min.js");
       const lib = window.pdfjsLib;
       lib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs.worker.min.js";
@@ -3402,13 +3406,7 @@
         const ctx = cv.getContext("2d");
         ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
         await page.render({ canvasContext: ctx, viewport: vp }).promise;
-        let out = cv;
-        if (cv.width > cv.height * 1.05) { // Querformat → hochkant drehen, damit es das A4-Blatt füllt
-          out = document.createElement("canvas");
-          out.width = cv.height; out.height = cv.width;
-          const o = out.getContext("2d");
-          o.translate(out.width, 0); o.rotate(Math.PI / 2); o.drawImage(cv, 0, 0);
-        }
+        const out = cv;
         urls.push(await new Promise((ok, fail) => out.toBlob(b => (b ? ok(URL.createObjectURL(b)) : fail(new Error("Bild"))), "image/png")));
         cv.width = cv.height = 0; out.width = out.height = 0; page.cleanup();
       }
@@ -3447,7 +3445,7 @@
     d = document.createElement("dialog");
     d.id = "pv-dialog"; d.className = "pv-dlg";
     d.innerHTML = `<div class="pv-bar"><strong id="pv-name"></strong>
-        <div class="btn-row"><button class="btn" type="button" id="pv-print">🖨 Drucken (A4)</button>
+        <div class="btn-row"><button class="btn" type="button" id="pv-print">🖨 Drucken</button>
         <a class="btn btn-ghost" id="pv-dl" href="#">Speichern</a>
         <button class="btn btn-ghost" type="button" id="pv-close">Schließen</button></div></div>
       <iframe id="pv-frame" title="Vorschau"></iframe>`;
@@ -3490,7 +3488,7 @@
     if (pd) URL.revokeObjectURL(pd.url);
     const file = new File([bytes], name, { type: "application/pdf" });
     pd = { file, url: URL.createObjectURL(file), mail, a4: prepareA4(bytes) };
-    // Drucken in A4: erst zeigen, wenn die Seiten vorbereitet sind (alle PDFs, ganzseitig auf A4)
+    // Drucken in A4: erst zeigen, wenn die Seiten vorbereitet sind (nur A4-PDFs; A5 wie die Bescheinigung druckt wie bisher)
     const pb = $("pd-print"), mine = pd;
     pb.classList.remove("hidden"); pb.disabled = true; pb.textContent = "🖨 Drucken (A4) – wird vorbereitet …";
     pd.a4.then(u => {
