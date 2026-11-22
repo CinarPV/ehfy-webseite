@@ -223,7 +223,10 @@
         items.push(it);
       }
     }
-    return { courses, items, skipped, totals, total: items.length };
+    // Firmenkurse (Rechnungen an Firmen) für Finanzen → „Firmenkurse“
+    const firm = (Array.isArray(data.firm) ? data.firm : []).filter(f => validDay(f.date) && Number(f.amount) > 0)
+      .map(f => ({ id: `papier-firma-${nrm(f.text).replace(/ /g, "-").slice(0, 60)}`, date: f.date, text: String(f.text || "").slice(0, 120), amount: Math.round(Number(f.amount) * 100) / 100 }));
+    return { courses, items, skipped, totals, firm, total: items.length };
   }
   // Aus dem Plan (mit den Häkchen der Vorschau) die Schreibvorgänge machen
   async function buildPaper(plan) {

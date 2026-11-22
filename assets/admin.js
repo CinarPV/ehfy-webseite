@@ -3290,6 +3290,7 @@
       ${table(sure, "Sicher erkannt", "– Geburtsdatum gleich, Name sehr ähnlich. Häkchen = zuordnen, Schreibweise aus dem System.")}
       ${table(unsure, "Bitte prüfen", "– nur ankreuzen, wenn es dieselbe Person ist.")}
       ${fresh.length ? `<details style="margin-top:12px"><summary><strong>Neu angelegt (${fresh.length})</strong> – nicht im System gefunden</summary><p>${fresh.map(i => `${birthText(i.day)}: ${who(i.p.last, i.p.first, i.p.birth)}`).join("<br>")}</p></details>` : ""}
+      ${p.firm && p.firm.length ? `<p style="margin-top:10px"><strong>Firmenkurse für Finanzen (${p.firm.length}):</strong><br>${p.firm.map(f => `${birthText(f.date)} · ${esc(f.text)} · ${eur(f.amount)}`).join("<br>")}</p>` : ""}
       <details style="margin-top:8px"><summary>Summen je Kurs</summary><p>${perDay.join("<br>")}</p></details>
       ${p.skipped.length ? `<p><strong>Nicht übernommen:</strong></p>${nameList(p.skipped)}` : ""}`;
     $("im-preview").querySelectorAll("[data-pi]").forEach(cb => { cb.onchange = () => { its[Number(cb.dataset.pi)].take = cb.checked; }; });
@@ -3310,7 +3311,10 @@
   }
   async function runPaperImport() {
     const p = importPlan, w = await EHFYImport.buildPaper(p);
-    if (!confirm(`${p.items.length} Personen in ${new Set(p.items.map(i => i.day)).size} Kursen übernehmen?\n\n${w.updates.length} vorhandene Schüler werden zugeordnet, ${w.regs.length} neu angelegt.`)) return;
+    const firmText = p.firm && p.firm.length ? `\n${p.firm.length} Firmenkurs(e) kommen in Finanzen.` : "";
+    const ask = p.items.length ? `${p.items.length} Personen in ${new Set(p.items.map(i => i.day)).size} Kursen übernehmen?\n\n${w.updates.length} vorhandene Schüler werden zugeordnet, ${w.regs.length} neu angelegt.${firmText}`
+      : `Übernehmen?${firmText}${w.courseNotes.length ? `\n${w.courseNotes.length} Tagessumme(n) werden eingetragen.` : ""}`;
+    if (!confirm(ask)) return;
     $("im-start").disabled = true;
     $("im-error").textContent = "";
     const note = document.createElement("p");
@@ -3320,6 +3324,14 @@
       await db.importLegacy(w.courses, w.regs, n => { note.textContent = `${n} von ${w.regs.length} neuen Teilnehmern übertragen …`; });
       let n = 0;
       for (const u of w.updates) { await db.updateRegistration(u.id, u.patch); note.textContent = `${++n} von ${w.updates.length} vorhandenen Schülern zugeordnet …`; }
+      // Firmenkurse in Finanzen eintragen (vorhandene mit gleicher Kennung werden ersetzt, nichts doppelt)
+      if (p.firm && p.firm.length) {
+        const st = await db.getSettings().catch(() => ({}));
+        const finance = { ...(st.finance || {}) };
+        const ids = new Set(p.firm.map(f => f.id));
+        finance.firm = [...(finance.firm || []).filter(f => !ids.has(f.id)), ...p.firm];
+        await db.saveSettings({ ...st, finance });
+      }
       if (w.courseNotes.length) {
         const all = await db.listCourses();
         for (const x of w.courseNotes) { const c = all.find(k => k.id === x.id); if (c) await db.saveCourse({ ...c, note: x.note }); }
