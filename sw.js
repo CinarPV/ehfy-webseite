@@ -1,6 +1,6 @@
 // Service Worker: Die Verwaltung lässt sich als App installieren und startet auch bei schwachem Netz.
 // Immer zuerst das Netz (damit Änderungen sofort ankommen), sonst die gespeicherte Kopie.
-const CACHE = "ehfy-app-v160";
+const CACHE = "ehfy-app-v161";
 const SHELL = [
   "admin.html", "admin.webmanifest",
   "assets/style.css", "assets/admin-hell.css", "assets/config.js", "assets/layout.js", "assets/brand.js", "assets/db.js",
@@ -31,7 +31,14 @@ self.addEventListener("fetch", e => {
   const req = e.request;
   // Nur eigene Dateien – Datenbank-Anfragen (Supabase) laufen immer direkt übers Netz
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
-  const nav = req.mode === "navigate";
+  // Seitenaufruf (App öffnen): direkt mit der Original-Anfrage laden. So folgt der Browser Umleitungen selbst
+  // (Safari/Mac-App: sonst „Response served by service worker has redirections“). Nur ohne Internet die gespeicherte Seite.
+  if (req.mode === "navigate") {
+    e.respondWith(fetch(req).catch(() => caches.match(req, { ignoreSearch: true })
+      .then(r => r || caches.match("admin.html", { ignoreSearch: true })).then(clean)));
+    return;
+  }
+  const nav = false;
   e.respondWith(
     // no-cache: den 10-Minuten-Zwischenspeicher des Browsers umgehen, damit nie eine alte Version startet
     fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
