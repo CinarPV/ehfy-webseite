@@ -3374,8 +3374,10 @@
   // Am Mac/PC zeigt die App PDFs zuerst in einer Vorschau (mit „Drucken“-Knopf). iPhone/iPad wie bisher.
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const usePreview = !isIOS;
+  // iPhone/iPad: kein neuer Tab mehr – Safari druckt eine PDF im Tab wie eine Webseite (mit Rand, verkleinert).
+  // Stattdessen das PDF-Fenster mit „🖨 Drucken (A4)“, „Teilen“ und „PDF öffnen“.
   function openTab() {
-    if (appMode || usePreview) return null;
+    if (appMode || usePreview || isIOS) return null;
     const win = window.open("", "_blank");
     if (win) win.document.write("<p style='font:16px system-ui,sans-serif;padding:24px'>PDF wird erstellt …</p>");
     return win;
@@ -3439,7 +3441,7 @@
     d = document.createElement("dialog");
     d.id = "pv-dialog"; d.className = "pv-dlg";
     d.innerHTML = `<div class="pv-bar"><strong id="pv-name"></strong>
-        <div class="btn-row"><button class="btn" type="button" id="pv-print">🖨 Drucken</button>
+        <div class="btn-row"><button class="btn" type="button" id="pv-print">🖨 Drucken (A4)</button>
         <a class="btn btn-ghost" id="pv-dl" href="#">Speichern</a>
         <button class="btn btn-ghost" type="button" id="pv-close">Schließen</button></div></div>
       <iframe id="pv-frame" title="Vorschau"></iframe>`;
@@ -3483,9 +3485,12 @@
     const file = new File([bytes], name, { type: "application/pdf" });
     pd = { file, url: URL.createObjectURL(file), mail, a4: prepareA4(bytes) };
     // Drucken in A4: erst zeigen, wenn die Seiten vorbereitet sind (nur bei A4-PDFs)
-    $("pd-print").classList.add("hidden");
-    const mine = pd;
-    pd.a4.then(u => { if (u && pd === mine) $("pd-print").classList.remove("hidden"); });
+    const pb = $("pd-print"), mine = pd;
+    pb.classList.remove("hidden"); pb.disabled = true; pb.textContent = "🖨 Drucken (A4) – wird vorbereitet …";
+    pd.a4.then(u => {
+      if (pd !== mine) return;
+      if (u) { pb.disabled = false; pb.textContent = "🖨 Drucken (A4)"; } else pb.classList.add("hidden");
+    });
     const canShare = Boolean(navigator.canShare && navigator.canShare({ files: [file] }));
     $("pd-title").textContent = mail ? "Per E-Mail senden" : "PDF ist fertig";
     $("pd-name").textContent = name;
