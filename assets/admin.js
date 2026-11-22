@@ -3040,7 +3040,7 @@
       const now = new Date();
       const file = JSON.stringify({ app: "ehfy", version: 1, created_at: now.toISOString(), ...data });
       bkReady = new File([file], "EHfy-Sicherung-Daten.json", { type: "application/json" });
-      $("bk-done").textContent = "✓ Daten-Sicherung ist fertig. Jetzt speichern und die alte ersetzen:";
+      $("bk-done").textContent = "✓ Daten-Sicherung ist fertig. Jetzt speichern:";
       $("bk-store").classList.remove("hidden");
     } catch (e) { $("bk-error").textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = label; }
@@ -3136,17 +3136,24 @@
   }
   // Speichern mit festem Namen, damit die alte Sicherung ersetzt wird:
   // Computer: Speichern-Fenster (gleiche Datei wählen → ersetzen); iPhone: Teilen → „In Dateien sichern“ → „Ersetzen“
-  let bkReady = null;
+  let bkReady = null, lastSavedName = "";
   async function storeBackup(file) {
+    lastSavedName = "";
+    // Computer mit Chrome/Edge: Speichern-Fenster mit freier Ordnerwahl (z. B. Schreibtisch)
     if (window.showSaveFilePicker) {
       const h = await window.showSaveFilePicker({ suggestedName: file.name, types: [{ description: file.type === "application/zip" ? "ZIP-Datei" : "Sicherung", accept: { [file.type]: [file.name.slice(file.name.lastIndexOf("."))] } }] });
       const w = await h.createWritable(); await w.write(file); await w.close();
-    } else if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    } else if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // iPhone/iPad: Teilen → „In Dateien sichern“
       await navigator.share({ files: [file], title: file.name });
     } else {
+      // Mac (Safari, auch die Dock-App) und andere: als Datei speichern – mit Datum im Namen, damit nichts überschrieben wird.
+      // Landet im Ordner „Downloads“ (oder dort, wo Safari fragt, siehe Hinweis bei der Sicherung).
+      const dot = file.name.lastIndexOf("."), name = `${file.name.slice(0, dot)}_${localDate(new Date())}${file.name.slice(dot)}`;
       const url = URL.createObjectURL(file), a = document.createElement("a");
-      a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 120000);
+      lastSavedName = name;
     }
     try { localStorage.setItem(BK_KEY, new Date().toISOString()); } catch (e) { /* ohne Speicher */ }
     showLastBackup();
@@ -3156,7 +3163,7 @@
     $("bk-error").textContent = "";
     try {
       await storeBackup(bkReady);
-      $("bk-done").textContent = `✓ ${bkReady.name} gespeichert.`;
+      $("bk-done").textContent = lastSavedName ? `✓ Gespeichert als „${lastSavedName}“ – im Finder unter „Downloads“ (oder im gewählten Ordner).` : `✓ ${bkReady.name} gespeichert.`;
       $("bk-store").classList.add("hidden");
     } catch (e) { if (e.name !== "AbortError") $("bk-error").textContent = e.message; }
   };
@@ -3169,7 +3176,7 @@
       if (pending && !confirm(`${pending} Änderung(en) sind noch nicht synchronisiert. Trotzdem sichern?`)) return;
       const res = await backupZip((i, n) => { btn.textContent = `Dokumente ${i} von ${n} …`; });
       bkReady = new File([res.blob], res.name, { type: "application/zip" });
-      $("bk-done").innerHTML = `✓ Sicherung mit ${res.count} Dokumenten ist fertig. Jetzt speichern und die alte ersetzen:`;
+      $("bk-done").innerHTML = `✓ Sicherung mit ${res.count} Dokumenten ist fertig. Jetzt speichern:`;
       $("bk-store").classList.remove("hidden");
     } catch (e) { $("bk-error").textContent = e.message; }
     finally { btn.disabled = false; btn.textContent = label; }
