@@ -50,8 +50,11 @@
     const off = r => Math.min(num(r.discount), price(r));
     return { count: here.length, discount: round2(here.reduce((s, r) => s + off(r), 0)), amount: round2(here.reduce((s, r) => s + price(r) - off(r), 0)) };
   }
+  // Kurse aus den Papierlisten (vor dem Neuanfang) dürfen trotzdem in die Jahresrechnung übernommen werden
+  const PAPER = "Aus Papierliste übernommen";
+  const fromPaper = c => String(c.note || "").startsWith(PAPER) || regs.some(r => r.course_id === c.id && r.on_list && r.message === PAPER);
   const coursesOfYear = () => courses
-    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k >= START && k <= today() && c.status !== "abgesagt" && (attendance(c).count > 0 || fin.incomes[c.id]); })
+    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && (k >= START || fromPaper(c)) && k <= today() && c.status !== "abgesagt" && (attendance(c).count > 0 || fin.incomes[c.id]); })
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
 
   function locationNames() {
@@ -133,7 +136,7 @@
 
       <div class="card fin-card">
         <h3>Kurstage übernehmen</h3>
-        <p class="small muted">Kurstage ab 14.11.2026. Tage anhaken und übernehmen: Gezählt werden die Teilnehmer auf der Teilnehmerliste (PayPal privat nicht). Beim Übernehmen kommen Vortag, Kurstag und Folgetag (je ${HOME_KM.toLocaleString("de-DE")} km hin und zurück) automatisch ins Fahrtenbuch. Erneutes Übernehmen überschreibt den Tag.</p>
+        <p class="small muted">Kurstage ab 14.11.2026 und die Kurse aus den Papierlisten. Tage anhaken und übernehmen: Gezählt werden die Teilnehmer auf der Teilnehmerliste (PayPal privat nicht). Beim Übernehmen kommen Vortag, Kurstag und Folgetag (je ${HOME_KM.toLocaleString("de-DE")} km hin und zurück) automatisch ins Fahrtenbuch. Erneutes Übernehmen überschreibt den Tag.</p>
         <div class="btn-row" style="margin-bottom:10px">
           <button class="btn btn-sm btn-ghost" type="button" id="fin-pick-all">Alle auswählen</button>
           <button class="btn btn-sm btn-ghost" type="button" id="fin-pick-none">Auswahl leeren</button>
