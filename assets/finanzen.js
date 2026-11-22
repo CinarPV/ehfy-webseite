@@ -41,11 +41,11 @@
   // Betrag: alter Preis aus der Notiz, sonst das gebuchte Paket, minus Gutschein.
   function attendance(course) {
     const here = regs.filter(r => r.course_id === course.id && r.on_list && r.status !== "storniert" && r.payment_method !== "paypal_privat");
+    // Preis genau wie auf der Teilnehmerliste fürs Finanzamt: mit Sehtest (gebucht oder gemacht) oder ohne, minus Gutschein
     const price = r => {
-      const old = /Preis:\s*([\d.,]+)\s*€/.exec(r.message || "");
-      if (old) return num(old[1]);
-      const p = cfg.packages.find(x => x.key === r.package);
-      return p ? p.price : 0;
+      const st = r.package === "komplett" || (r.sehtest_passed != null && !r.sehtest_void_at);
+      const p = cfg.packages.find(x => x.key === (st ? "komplett" : "kurs")) || cfg.packages[0];
+      return p ? num(p.price) : 0;
     };
     const off = r => Math.min(num(r.discount), price(r));
     // Bezahlte Ausfallgebühren dieses Kurses (Betrag aus der Notiz, sonst die übliche Gebühr)
@@ -57,11 +57,10 @@
     return { count: here.length, discount: round2(here.reduce((s, r) => s + Math.max(0, off(r)), 0)), amount: fixed ? num(fixed[1]) : computed,
       fees: round2(paidFees.reduce((s, r) => s + feeOf(r), 0)), feeCount: paidFees.length };
   }
-  // Kurse aus den Papierlisten (vor dem Neuanfang) dürfen trotzdem in die Jahresrechnung übernommen werden
-  const PAPER = "Aus Papierliste übernommen";
-  const fromPaper = c => String(c.note || "").startsWith(PAPER) || regs.some(r => r.course_id === c.id && r.on_list && r.message === PAPER);
+  // Alle vergangenen Kurse des Jahres mit Teilnehmern auf der Teilnehmerliste – auch ältere (z. B. aus den Papierlisten,
+  // auch wenn der Kurs schon aus der alten App da war). Ohne Häkchen „Auf Teilnehmerliste“ erscheint ein Kurs nicht.
   const coursesOfYear = () => courses
-    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && (k >= START || fromPaper(c)) && k <= today() && c.status !== "abgesagt" && (attendance(c).count > 0 || fin.incomes[c.id]); })
+    .filter(c => { const k = dayKey(new Date(c.starts_at)); return inYear(k) && k <= today() && c.status !== "abgesagt" && (attendance(c).count > 0 || fin.incomes[c.id]); })
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at));
 
   function locationNames() {
@@ -144,7 +143,7 @@
 
       <div class="card fin-card">
         <h3>Kurstage übernehmen</h3>
-        <p class="small muted">Kurstage ab 14.11.2026 und die Kurse aus den Papierlisten. Tage anhaken und übernehmen: Gezählt werden die Teilnehmer auf der Teilnehmerliste (PayPal privat nicht). Beim Übernehmen kommen Vortag, Kurstag und Folgetag (je ${HOME_KM.toLocaleString("de-DE")} km hin und zurück) automatisch ins Fahrtenbuch. Erneutes Übernehmen überschreibt den Tag.</p>
+        <p class="small muted">Alle vergangenen Kurstage des Jahres mit Teilnehmern auf der Teilnehmerliste. Tage anhaken und übernehmen: Gezählt werden die Teilnehmer auf der Teilnehmerliste (PayPal privat nicht). Beim Übernehmen kommen Vortag, Kurstag und Folgetag (je ${HOME_KM.toLocaleString("de-DE")} km hin und zurück) automatisch ins Fahrtenbuch. Erneutes Übernehmen überschreibt den Tag.</p>
         <div class="btn-row" style="margin-bottom:10px">
           <button class="btn btn-sm btn-ghost" type="button" id="fin-pick-all">Alle auswählen</button>
           <button class="btn btn-sm btn-ghost" type="button" id="fin-pick-none">Auswahl leeren</button>
