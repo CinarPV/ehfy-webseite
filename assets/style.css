@@ -938,7 +938,13 @@ dialog.sign-big::backdrop { background: #fff; }
   body.printing-a4 > *:not(#print-a4) { display: none !important; }
   body.printing-a4 { margin: 0 !important; padding: 0 !important; background: #fff !important; }
   body.printing-a4 #print-a4 { display: block !important; }
-  .a4-page { width: 210mm; height: 296.5mm; overflow: hidden; break-after: page; page-break-after: always; }
+  .a4-page { overflow: hidden; break-after: page; page-break-after: always; }
   .a4-page:last-child { break-after: auto; page-break-after: auto; }
-  .a4-page img { display: block; width: 210mm; height: 297mm; }
+  .a4-page img { display: block; }
 }
+/* Vorschau aus Seitenbildern (A4-PDFs) – ohne die PDF-Leiste des Browsers */
+.pv-pages { flex: 1 1 auto; overflow: auto; background: #525659; padding: 16px; }
+.pv-pages img { display: block; width: 100%; max-width: 820px; margin: 0 auto 16px; background: #fff; box-shadow: 0 2px 12px rgba(0, 0, 0, .45); }
+.pv-wait { color: #fff; text-align: center; margin-top: 40px; font-weight: 700; }
+.pv-hint { flex-basis: 100%; }
+.pv-hint:empty { display: none; }

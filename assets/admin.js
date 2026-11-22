@@ -3377,48 +3377,60 @@
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const usePreview = !isIOS;
   // iPhone/iPad: kein neuer Tab mehr – Safari druckt eine PDF im Tab wie eine Webseite (mit Rand, verkleinert).
-  // Stattdessen das PDF-Fenster mit „🖨 Drucken (A4)“, „Teilen“ und „PDF öffnen“.
+  // Stattdessen das PDF-Fenster mit „🖨 Drucken“ in Originalgröße, „Teilen“ und „PDF öffnen“.
   function openTab() {
     if (appMode || usePreview || isIOS) return null;
     const win = window.open("", "_blank");
     if (win) win.document.write("<p style='font:16px system-ui,sans-serif;padding:24px'>PDF wird erstellt …</p>");
     return win;
   }
-  // ---------- Drucken immer in echtem A4 (Handy, Windows, Mac) ----------
-  // Druckt man eine PDF aus der Vorschau, verkleinern manche Browser sie (Safari druckt das ganze Fenster mit,
-  // Android zeigt PDFs im Fenster gar nicht). Darum werden A4-PDFs vorab Seite für Seite als Bild (ca. 220 dpi)
-  // in die Seite gelegt und mit @page A4 ohne Rand gedruckt: 1 PDF-Seite = 1 A4-Blatt, ohne Verkleinern.
-  // Nur für PDFs, deren Seiten alle A4 sind. Andere Formate – z. B. die Erste-Hilfe-Bescheinigung in A5 –
-  // drucken unverändert wie bisher (nicht vergrößern!).
-  const isA4Size = p => { const { width, height } = p.getSize(); return Math.abs(width - 595.28) < 3 && Math.abs(height - 841.89) < 3; };
-  let a4Urls = [];
+  // ---------- Drucken immer in der vorgesehenen Größe (Handy, Windows, Mac – alle Browser) ----------
+  // Druckt man eine PDF aus der Browser-Anzeige, verkleinern viele Browser sie (Chrome „An Seite anpassen“,
+  // Safari druckt das Fenster mit, Android zeigt PDFs im Fenster gar nicht). Darum werden die Seiten vorab als
+  // Bild (ca. 220 dpi) in die Seite gelegt und mit @page in genau ihrer Größe ohne Rand gedruckt:
+  // A4 bleibt A4, die A5-Bescheinigung bleibt A5 – nichts wird verkleinert oder vergrößert.
+  const PT_MM = 25.4 / 72;
+  const fmtName = (w, h) => {
+    const near = (a, b) => Math.abs(a - b) < 1.5, lo = Math.min(w, h), hi = Math.max(w, h), quer = w > h ? " quer" : "";
+    if (near(lo, 210) && near(hi, 297)) return "A4" + quer;
+    if (near(lo, 148) && near(hi, 210)) return "A5" + quer;
+    if (near(lo, 105) && near(hi, 148)) return "A6" + quer;
+    return `${Math.round(w)} × ${Math.round(h)} mm`;
+  };
+  let a4Urls = [], a4Css = "";
   async function prepareA4(bytes) {
     try {
-      if (!window.PDFLib || !(await window.PDFLib.PDFDocument.load(bytes)).getPages().every(isA4Size)) return null;
       if (!window.pdfjsLib) await loadScript("assets/vendor/pdfjs.min.js");
       const lib = window.pdfjsLib;
       lib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs.worker.min.js";
-      const doc = await lib.getDocument({ data: new Uint8Array(bytes).slice() }).promise, urls = [];
+      const doc = await lib.getDocument({ data: new Uint8Array(bytes).slice() }).promise, urls = [], sizes = [];
       for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i), vp = page.getViewport({ scale: 3 });
+        const page = await doc.getPage(i), base = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: 3 });
+        sizes.push([+(base.width * PT_MM).toFixed(2), +(base.height * PT_MM).toFixed(2)]);
         const cv = document.createElement("canvas");
         cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
         const ctx = cv.getContext("2d");
         ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
         await page.render({ canvasContext: ctx, viewport: vp }).promise;
-        const out = cv;
-        urls.push(await new Promise((ok, fail) => out.toBlob(b => (b ? ok(URL.createObjectURL(b)) : fail(new Error("Bild"))), "image/png")));
-        cv.width = cv.height = 0; out.width = out.height = 0; page.cleanup();
+        urls.push(await new Promise((ok, fail) => cv.toBlob(b => (b ? ok(URL.createObjectURL(b)) : fail(new Error("Bild"))), "image/png")));
+        cv.width = cv.height = 0; page.cleanup();
       }
       doc.destroy();
+      // Seitengröße fürs Drucken: eine Größe → @page; gemischt (z. B. Kursmappe A4 + A5) → benannte Seiten
+      const key = ([w, h]) => `pg${Math.round(w * 10)}x${Math.round(h * 10)}`;
+      const kinds = [...new Map(sizes.map(z => [key(z), z])).entries()];
+      a4Css = `@page { size: ${sizes[0][0]}mm ${sizes[0][1]}mm; margin: 0; }`
+        + (kinds.length > 1 ? kinds.map(([k, [w, h]]) => `@page ${k} { size: ${w}mm ${h}mm; margin: 0; } .${k} { page: ${k}; }`).join(" ") : "");
       // Bilder gleich in die Seite legen (am Bildschirm unsichtbar), damit sie beim Drucken schon geladen sind
       a4Urls.forEach(u => URL.revokeObjectURL(u)); a4Urls = urls;
       let box = $("print-a4");
       if (!box) { box = document.createElement("div"); box.id = "print-a4"; box.setAttribute("aria-hidden", "true"); document.body.appendChild(box); }
-      box.innerHTML = urls.map(u => `<div class="a4-page"><img src="${u}" alt=""></div>`).join("");
+      box.innerHTML = urls.map((u, i) => { const [w, h] = sizes[i];
+        return `<div class="a4-page ${key(sizes[i])}" style="width:${w}mm;height:${(h - 0.5).toFixed(2)}mm"><img src="${u}" alt="" style="width:${w}mm;height:${h}mm"></div>`; }).join("");
       await Promise.all([...box.querySelectorAll("img")].map(im => (im.complete ? null : new Promise(ok => { im.onload = im.onerror = ok; }))));
-      return urls;
-    } catch (e) { console.warn("A4-Druck nicht möglich, normaler Druck", e); return null; }
+      const names = [...new Set(sizes.map(([w, h]) => fmtName(w, h)))];
+      return { urls, css: a4Css, format: names.join(" + ") };
+    } catch (e) { console.warn("Druck in Originalgröße nicht möglich, normaler Druck", e); return null; }
   }
   function a4Done() {
     document.body.classList.remove("printing-a4");
@@ -3426,12 +3438,13 @@
     if (st) st.remove();
   }
   window.addEventListener("afterprint", a4Done);
-  // prep = Ergebnis von prepareA4; fallback = bisheriger Druckweg, falls keine A4-PDF
+  // prep = Ergebnis von prepareA4; fallback = bisheriger Druckweg, falls die Vorbereitung nicht geklappt hat
   async function printA4(prep, fallback) {
-    const urls = await prep;
-    if (!urls || !$("print-a4")) return fallback();
+    const res = await prep;
+    if (!res || !$("print-a4")) return fallback();
     let st = $("print-a4-page");
-    if (!st) { st = document.createElement("style"); st.id = "print-a4-page"; st.textContent = "@page { size: A4 portrait; margin: 0; }"; document.head.appendChild(st); }
+    if (!st) { st = document.createElement("style"); st.id = "print-a4-page"; document.head.appendChild(st); }
+    st.textContent = res.css;
     document.body.classList.add("printing-a4");
     window.print();
     // Manche Handys melden „afterprint“ nicht: spätestens beim nächsten Klick aufräumen
@@ -3447,23 +3460,37 @@
     d.innerHTML = `<div class="pv-bar"><strong id="pv-name"></strong>
         <div class="btn-row"><button class="btn" type="button" id="pv-print">🖨 Drucken</button>
         <a class="btn btn-ghost" id="pv-dl" href="#">Speichern</a>
-        <button class="btn btn-ghost" type="button" id="pv-close">Schließen</button></div></div>
+        <button class="btn btn-ghost" type="button" id="pv-close">Schließen</button></div>
+        <span class="small muted pv-hint" id="pv-hint"></span></div>
+      <div id="pv-pages" class="pv-pages hidden"></div>
       <iframe id="pv-frame" title="Vorschau"></iframe>`;
     document.body.appendChild(d);
     $("pv-close").onclick = () => d.close();
     $("pv-print").onclick = () => printA4(pvA4, () => { try { $("pv-frame").contentWindow.focus(); $("pv-frame").contentWindow.print(); } catch (e) { window.open(pvUrl, "_blank"); } });
-    d.addEventListener("close", () => { $("pv-frame").src = "about:blank"; if (pvUrl) { URL.revokeObjectURL(pvUrl); pvUrl = null; } });
+    d.addEventListener("close", () => { $("pv-frame").src = "about:blank"; $("pv-pages").innerHTML = ""; if (pvUrl) { URL.revokeObjectURL(pvUrl); pvUrl = null; } });
     return d;
   }
   function previewPdf(bytes, name) {
     const d = previewDlg();
     if (pvUrl) URL.revokeObjectURL(pvUrl);
     pvUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
-    pvA4 = prepareA4(bytes);
+    // Vorschau aus den vorbereiteten Seiten statt der PDF-Anzeige des Browsers. Deren eigenes Drucker-Symbol
+    // druckt verkleinert – so gibt es nur „🖨 Drucken“ in Originalgröße. Klappt die Vorbereitung nicht: wie bisher.
+    const url = pvUrl, mine = pvA4 = prepareA4(bytes), frame = $("pv-frame"), pages = $("pv-pages");
     $("pv-name").textContent = name;
-    $("pv-frame").src = pvUrl;
+    frame.src = "about:blank"; frame.classList.add("hidden");
+    pages.classList.remove("hidden"); pages.innerHTML = '<p class="pv-wait">Vorschau wird vorbereitet …</p>';
+    $("pv-print").textContent = "🖨 Drucken"; $("pv-hint").textContent = "";
     $("pv-dl").href = pvUrl; $("pv-dl").download = name;
     if (!d.open) d.showModal();
+    mine.then(res => {
+      if (pvA4 !== mine || pvUrl !== url) return;
+      if (res) {
+        pages.innerHTML = res.urls.map((u, i) => `<img src="${u}" alt="Seite ${i + 1}">`).join("");
+        $("pv-print").textContent = `🖨 Drucken (${res.format})`;
+        $("pv-hint").textContent = `Im Druckfenster: Papierformat ${res.format}, Skalierung Standard bzw. 100 %.`;
+      } else { pages.classList.add("hidden"); pages.innerHTML = ""; frame.classList.remove("hidden"); frame.src = url; }
+    });
   }
   function showPdf(bytes, name, win) {
     if (!win && usePreview) return previewPdf(bytes, name);
@@ -3488,12 +3515,12 @@
     if (pd) URL.revokeObjectURL(pd.url);
     const file = new File([bytes], name, { type: "application/pdf" });
     pd = { file, url: URL.createObjectURL(file), mail, a4: prepareA4(bytes) };
-    // Drucken in A4: erst zeigen, wenn die Seiten vorbereitet sind (nur A4-PDFs; A5 wie die Bescheinigung druckt wie bisher)
+    // Drucken in A4: erst zeigen, wenn die Seiten vorbereitet sind (in Originalgröße)
     const pb = $("pd-print"), mine = pd;
-    pb.classList.remove("hidden"); pb.disabled = true; pb.textContent = "🖨 Drucken (A4) – wird vorbereitet …";
-    pd.a4.then(u => {
+    pb.classList.remove("hidden"); pb.disabled = true; pb.textContent = "🖨 Drucken – wird vorbereitet …";
+    pd.a4.then(res => {
       if (pd !== mine) return;
-      if (u) { pb.disabled = false; pb.textContent = "🖨 Drucken (A4)"; } else pb.classList.add("hidden");
+      if (res) { pb.disabled = false; pb.textContent = `🖨 Drucken (${res.format})`; } else pb.classList.add("hidden");
     });
     const canShare = Boolean(navigator.canShare && navigator.canShare({ files: [file] }));
     $("pd-title").textContent = mail ? "Per E-Mail senden" : "PDF ist fertig";
