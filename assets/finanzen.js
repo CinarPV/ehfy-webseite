@@ -132,6 +132,7 @@
       <p class="form-error" id="fin-error" role="alert"></p>
       ${notice ? `<p class="notice notice-ok" role="status" style="margin-bottom:12px">${notice}</p>` : ""}
 
+      ${pendingNotice(list)}
       <div class="card fin-card">
         <h3>Ergebnis ${year}</h3>
         ${resultTable(incomes, aed, firm, fees, other, expenses)}
@@ -220,6 +221,16 @@
       ${limitCard(incomeOfYear(year), totalOut)}`;
   }
 
+  // Kurstage, die noch nicht (oder mit altem Stand) in der Rechnung sind
+  const pendingOf = list => list.filter(c => { const d = fin.incomes[c.id], a = attendance(c); return !d || num(d.amount) !== a.amount || num(d.count) !== a.count || num(d.fees) !== a.fees; });
+  function pendingNotice(list) {
+    const open = pendingOf(list);
+    if (!open.length) return "";
+    const total = round2(open.reduce((s, c) => s + attendance(c).amount + attendance(c).fees, 0));
+    const days = open.slice().sort((a, b) => a.starts_at.localeCompare(b.starts_at)).map(c => dateText(dayKey(new Date(c.starts_at))).replace(/^\w+\.,\s*/, "").slice(0, 6)).join(", ");
+    return `<div class="notice notice-warn" style="margin-bottom:12px"><strong>${open.length} ${open.length === 1 ? "Kurstag ist" : "Kurstage sind"} noch nicht (oder nicht aktuell) in der Rechnung</strong> – zusammen ${eur(total)}.<br><span class="small">${days}</span>
+      <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="fin-take-pending">Jetzt alle ${open.length} übernehmen</button></div></div>`;
+  }
   // Prüfliste: vergangene Kurse des Jahres, die oben fehlen – mit Grund
   function hiddenCourses(shown) {
     const ids = new Set(shown.map(c => c.id));
@@ -514,6 +525,7 @@
       const one = t.closest("[data-take-one]");
       if (one) await takeIncomes(one.dataset.takeOne);
       if (t.id === "fin-take") await takeIncomes();
+      if (t.id === "fin-take-pending") { picked.clear(); pendingOf(coursesOfYear()).forEach(c => picked.add(c.id)); await takeIncomes(); }
       if (t.id === "fin-trips") await takeTrips();
       if (t.id === "fin-trips-transfer") await transferTrips();
       if (t.id === "fin-print") {
