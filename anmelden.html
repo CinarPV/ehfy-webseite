@@ -61,9 +61,10 @@
               <button type="button" id="change">ändern</button>
             </div>
 
-            <div class="field" style="margin-bottom:18px">
-              <label>Was möchtest du buchen? *</label>
-              <div class="pkg-toggle pkg-list" id="pkg-options"></div>
+            <div class="field pkg-field" id="pkg-field">
+              <label class="pkg-question">Mit oder ohne Sehtest? *</label>
+              <p class="pkg-hint">Für den Führerschein brauchst du meist auch einen Sehtest. Bitte wähle eine Option aus.</p>
+              <div class="pkg-toggle pkg-list" id="pkg-options" role="radiogroup" aria-label="Mit oder ohne Sehtest"></div>
             </div>
 
             <div class="form-grid">
@@ -128,10 +129,14 @@
     ["first_name", "last_name", "birth_date"].forEach(id => $(id).addEventListener("focus", () => { $("id-hint-more").hidden = false; }, { once: true }));
     // Buchungsoptionen aus config.js
     const wanted = new URLSearchParams(location.search).get("paket");
-    $("pkg-options").innerHTML = cfg.packages.map((p, i) => `
-      <label><input type="radio" name="package" value="${p.key}" ${(wanted ? p.key === wanted : i === 0) ? "checked" : ""}>
+    // Deutlich sichtbar: „Ohne Sehtest“ / „Mit Sehtest“. Nichts ist vorausgewählt (außer über ?paket=…), damit niemand die Wahl übersieht.
+    const pkgTag = key => key === "komplett" ? "Mit Sehtest" : key === "kurs" ? "Ohne Sehtest" : "";
+    $("pkg-options").innerHTML = cfg.packages.map(p => `
+      <label class="pkg-${p.key}"><input type="radio" name="package" value="${p.key}" ${wanted && p.key === wanted ? "checked" : ""}>
+        <span class="pkg-dot" aria-hidden="true"></span>
+        ${pkgTag(p.key) ? `<span class="pkg-tag">${pkgTag(p.key)}</span>` : ""}
         <b>${p.price != null ? p.price + " €" : "&nbsp;"}</b>${EHFY.esc(p.label)}<small>${EHFY.esc(p.detail)}</small></label>`).join("");
-    if (!form.querySelector('input[name="package"]:checked')) form.querySelector('input[name="package"]').checked = true;
+    $("pkg-options").addEventListener("change", () => $("pkg-field").classList.remove("pkg-missing"));
     const pkgText = key => { const p = cfg.packages.find(x => x.key === key); return p ? p.label + (p.price != null ? ` (${p.price} €)` : "") : key; };
 
     let courses = [], filter = "Alle", selectedId = null, cal;
@@ -231,6 +236,12 @@
       const f = form.elements;
       if (f.website.value) return; // Spam-Schutz
       if (!selectedId) { err.textContent = "Bitte wähle zuerst einen Termin im Kalender aus."; $("booking").scrollIntoView({ behavior: "smooth" }); return; }
+      if (!form.querySelector('input[name="package"]:checked')) {
+        err.textContent = "Bitte wähle aus, ob du den Kurs mit oder ohne Sehtest buchen möchtest.";
+        $("pkg-field").classList.add("pkg-missing");
+        $("pkg-field").scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       const birth = EHFY.parseBirth(f.birth_date.value);
       if (!birth) { err.textContent = "Bitte gib dein Geburtsdatum so ein: TT.MM.JJJJ, zum Beispiel 01.02.2008."; f.birth_date.focus(); return; }
       for (const name of ["first_name", "last_name", "email"]) {
